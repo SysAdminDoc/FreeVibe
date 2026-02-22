@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FreeVibe</string>
+    <string name="video_wallpaper_label">FreeVibe Video Wallpaper</string>
+    <string name="widget_description">Quick wallpaper changer - shuffle, set home, or set lock screen</string>
+</resources>

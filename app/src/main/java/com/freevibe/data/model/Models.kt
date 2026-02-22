@@ -1,0 +1,147 @@
+package com.freevibe.data.model
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+// -- Unified content types --
+
+enum class ContentSource { WALLHAVEN, PICSUM, BING, WIKIMEDIA, INTERNET_ARCHIVE, REDDIT, NASA, LOCAL }
+enum class ContentType { WALLPAPER, LIVE_WALLPAPER, RINGTONE, NOTIFICATION, ALARM }
+enum class WallpaperTarget { HOME, LOCK, BOTH }
+
+// -- Wallpaper --
+
+data class Wallpaper(
+    val id: String,
+    val source: ContentSource,
+    val thumbnailUrl: String,
+    val fullUrl: String,
+    val width: Int,
+    val height: Int,
+    val category: String = "",
+    val tags: List<String> = emptyList(),
+    val colors: List<String> = emptyList(),
+    val fileSize: Long = 0,
+    val fileType: String = "",
+    val sourcePageUrl: String = "",
+    val uploaderName: String = "",
+)
+
+// -- Sound --
+
+data class Sound(
+    val id: String,
+    val source: ContentSource,
+    val name: String,
+    val description: String = "",
+    val previewUrl: String,
+    val downloadUrl: String,
+    val duration: Double = 0.0,
+    val sampleRate: Int = 0,
+    val fileType: String = "",
+    val fileSize: Long = 0,
+    val tags: List<String> = emptyList(),
+    val license: String = "",
+    val uploaderName: String = "",
+    val sourcePageUrl: String = "",
+)
+
+// -- Favorites (Room entity) --
+
+@Entity(tableName = "favorites")
+data class FavoriteEntity(
+    @PrimaryKey val id: String,
+    val source: String,
+    val type: String,           // WALLPAPER or SOUND
+    val thumbnailUrl: String,
+    val fullUrl: String,
+    val name: String = "",
+    val width: Int = 0,
+    val height: Int = 0,
+    val duration: Double = 0.0,
+    val addedAt: Long = System.currentTimeMillis(),
+    val offlinePath: String = "",   // #3: local file path for offline access
+)
+
+// -- Download history (Room entity) --
+
+@Entity(tableName = "downloads")
+data class DownloadEntity(
+    @PrimaryKey val id: String,
+    val source: String,
+    val type: String,
+    val localPath: String,
+    val name: String = "",
+    val downloadedAt: Long = System.currentTimeMillis(),
+)
+
+// -- Search results wrapper --
+
+data class SearchResult<T>(
+    val items: List<T>,
+    val totalCount: Int,
+    val currentPage: Int,
+    val hasMore: Boolean,
+)
+
+// -- Search history (Room entity) --
+
+@Entity(tableName = "search_history")
+data class SearchHistoryEntity(
+    @PrimaryKey val query: String,
+    val type: String,           // WALLPAPER or SOUND
+    val timestamp: Long = System.currentTimeMillis(),
+)
+
+// -- Cached content (Room entity) --
+
+@Entity(tableName = "wallpaper_cache")
+data class WallpaperCacheEntity(
+    @PrimaryKey val id: String,
+    val source: String,
+    val thumbnailUrl: String,
+    val fullUrl: String,
+    val width: Int,
+    val height: Int,
+    val category: String = "",
+    val tags: String = "",
+    val fileSize: Long = 0,
+    val fileType: String = "",
+    val uploaderName: String = "",
+    val cacheKey: String = "",       // e.g. "wallhaven_1", "search_nature_1"
+    val cachedAt: Long = System.currentTimeMillis(),
+)
+
+// -- Wallpaper history (#11) --
+
+@Entity(tableName = "wallpaper_history")
+data class WallpaperHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val historyId: Long = 0,
+    val wallpaperId: String,
+    val source: String,
+    val thumbnailUrl: String,
+    val fullUrl: String,
+    val width: Int = 0,
+    val height: Int = 0,
+    val target: String = "BOTH",       // HOME, LOCK, BOTH
+    val appliedAt: Long = System.currentTimeMillis(),
+)
+
+// -- Internet Archive audio URL cache (#7) --
+
+@Entity(tableName = "ia_audio_cache")
+data class IAAudioCacheEntity(
+    @PrimaryKey val identifier: String,
+    val audioUrl: String,
+    val duration: Double = 0.0,
+    val fileSize: Long = 0,
+    val cachedAt: Long = System.currentTimeMillis(),
+)
+
+// -- Dual wallpaper pair --
+
+data class WallpaperPair(
+    val home: Wallpaper,
+    val lock: Wallpaper,
+    val name: String = "",
+)

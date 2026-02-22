@@ -1,0 +1,10 @@
+- Home screen widget for quick wallpaper rotation (Glance API)
+- Onboarding flow for first-run setup and feature tour
+- Wallpaper crop/position screen with pinch-zoom gesture
+- Audio trim export via MediaExtractor + MediaMuxer
+- Dual wallpaper service for coordinated home + lock pairs
+- Content caching layer with source-specific TTL
+- Paging 3 integration for infinite scroll
+- Search history with autocomplete suggestions
+- F-Droid metadata and Fastlane structure
+- Room database v2 with search history and wallpaper cache tables

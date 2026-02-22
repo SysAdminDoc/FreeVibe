@@ -1,0 +1,338 @@
+package com.freevibe.ui.screens.editor
+
+import android.graphics.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.service.SelectedContentHolder
+import com.freevibe.service.WallpaperApplier
+import dagger.hilt.android.lifecycle.HiltViewModel
+import okhttp3.OkHttpClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+
+data class EditorState(
+    val originalBitmap: Bitmap? = null,
+    val editedBitmap: Bitmap? = null,
+    val brightness: Float = 0f,       // -100 to 100
+    val contrast: Float = 1f,         // 0.5 to 2.0
+    val saturation: Float = 1f,       // 0 to 2.0
+    val blurRadius: Float = 0f,       // 0 to 25
+    val isProcessing: Boolean = false,
+    val isApplying: Boolean = false,
+    val success: String? = null,
+)
+
+@HiltViewModel
+class WallpaperEditorViewModel @Inject constructor(
+    private val wallpaperApplier: WallpaperApplier,
+    private val okHttpClient: OkHttpClient,
+    selectedContent: SelectedContentHolder,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(EditorState())
+    val state = _state.asStateFlow()
+
+    init {
+        selectedContent.selectedWallpaper.value?.let { wp ->
+            viewModelScope.launch {
+                try {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        val request = okhttp3.Request.Builder().url(wp.fullUrl).build()
+                        val response = okHttpClient.newCall(request).execute()
+                        val bytes = response.body?.bytes() ?: throw Exception("Empty body")
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                    if (bitmap != null) setSourceBitmap(bitmap)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun setSourceBitmap(bitmap: Bitmap) {
+        _state.update { it.copy(originalBitmap = bitmap, editedBitmap = bitmap) }
+    }
+
+    fun updateBrightness(value: Float) {
+        _state.update { it.copy(brightness = value) }
+        applyFilters()
+    }
+
+    fun updateContrast(value: Float) {
+        _state.update { it.copy(contrast = value) }
+        applyFilters()
+    }
+
+    fun updateSaturation(value: Float) {
+        _state.update { it.copy(saturation = value) }
+        applyFilters()
+    }
+
+    fun updateBlur(value: Float) {
+        _state.update { it.copy(blurRadius = value) }
+        applyFilters()
+    }
+
+    fun resetAll() {
+        _state.update {
+            it.copy(
+                editedBitmap = it.originalBitmap,
+                brightness = 0f,
+                contrast = 1f,
+                saturation = 1f,
+                blurRadius = 0f,
+            )
+        }
+    }
+
+    fun apply(target: WallpaperTarget) {
+        val bitmap = _state.value.editedBitmap ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(isApplying = true) }
+            wallpaperApplier.applyFromBitmap(bitmap, target)
+                .onSuccess { _state.update { it.copy(isApplying = false, success = "Applied") } }
+                .onFailure { _state.update { it.copy(isApplying = false) } }
+        }
+    }
+
+    fun clearSuccess() = _state.update { it.copy(success = null) }
+
+    private fun applyFilters() {
+        val original = _state.value.originalBitmap ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(isProcessing = true) }
+            val s = _state.value
+            val result = withContext(Dispatchers.Default) {
+                applyColorMatrix(original, s.brightness, s.contrast, s.saturation)
+            }
+            _state.update { it.copy(editedBitmap = result, isProcessing = false) }
+        }
+    }
+
+    /** Apply brightness, contrast, and saturation via ColorMatrix */
+    private fun applyColorMatrix(
+        src: Bitmap,
+        brightness: Float,
+        contrast: Float,
+        saturation: Float,
+    ): Bitmap {
+        val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        val paint = Paint()
+
+        // Brightness
+        val brightnessMatrix = ColorMatrix().apply {
+            set(floatArrayOf(
+                1f, 0f, 0f, 0f, brightness,
+                0f, 1f, 0f, 0f, brightness,
+                0f, 0f, 1f, 0f, brightness,
+                0f, 0f, 0f, 1f, 0f,
+            ))
+        }
+
+        // Contrast
+        val t = (1f - contrast) / 2f * 255f
+        val contrastMatrix = ColorMatrix().apply {
+            set(floatArrayOf(
+                contrast, 0f, 0f, 0f, t,
+                0f, contrast, 0f, 0f, t,
+                0f, 0f, contrast, 0f, t,
+                0f, 0f, 0f, 1f, 0f,
+            ))
+        }
+
+        // Saturation
+        val saturationMatrix = ColorMatrix().apply {
+            setSaturation(saturation)
+        }
+
+        // Combine all matrices
+        val combined = ColorMatrix()
+        combined.postConcat(brightnessMatrix)
+        combined.postConcat(contrastMatrix)
+        combined.postConcat(saturationMatrix)
+
+        paint.colorFilter = ColorMatrixColorFilter(combined)
+        canvas.drawBitmap(src, 0f, 0f, paint)
+
+        return result
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WallpaperEditorScreen(
+    onBack: () -> Unit,
+    viewModel: WallpaperEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    var selectedFilter by remember { mutableStateOf("Brightness") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.success) {
+        state.success?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
+    }
+
+    val filters = listOf(
+        FilterControl("Brightness", Icons.Default.BrightnessHigh, state.brightness, -100f..100f) {
+            viewModel.updateBrightness(it)
+        },
+        FilterControl("Contrast", Icons.Default.Contrast, state.contrast, 0.5f..2f) {
+            viewModel.updateContrast(it)
+        },
+        FilterControl("Saturation", Icons.Default.ColorLens, state.saturation, 0f..2f) {
+            viewModel.updateSaturation(it)
+        },
+        FilterControl("Blur", Icons.Default.BlurOn, state.blurRadius, 0f..25f) {
+            viewModel.updateBlur(it)
+        },
+    )
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Edit Wallpaper") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                },
+                actions = {
+                    TextButton(onClick = { viewModel.resetAll() }) {
+                        Text("Reset", color = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            // Preview
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center,
+            ) {
+                state.editedBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Edited wallpaper",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                if (state.isProcessing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            // Filter selector
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(filters) { filter ->
+                    FilterChip(
+                        selected = selectedFilter == filter.name,
+                        onClick = { selectedFilter = filter.name },
+                        label = { Text(filter.name) },
+                        leadingIcon = {
+                            Icon(filter.icon, null, modifier = Modifier.size(16.dp))
+                        },
+                    )
+                }
+            }
+
+            // Active slider
+            filters.find { it.name == selectedFilter }?.let { active ->
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(active.name, style = MaterialTheme.typography.labelMedium)
+                        Text("%.1f".format(active.value), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Slider(
+                        value = active.value,
+                        onValueChange = active.onChange,
+                        valueRange = active.range,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
+            }
+
+            // Apply buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { viewModel.apply(WallpaperTarget.HOME) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.isApplying,
+                ) { Text("Home") }
+                OutlinedButton(
+                    onClick = { viewModel.apply(WallpaperTarget.LOCK) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.isApplying,
+                ) { Text("Lock") }
+                Button(
+                    onClick = { viewModel.apply(WallpaperTarget.BOTH) },
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.isApplying,
+                ) {
+                    if (state.isApplying) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("Both")
+                }
+            }
+        }
+    }
+}
+
+private data class FilterControl(
+    val name: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val value: Float,
+    val range: ClosedFloatingPointRange<Float>,
+    val onChange: (Float) -> Unit,
+)

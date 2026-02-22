@@ -1,0 +1,10 @@
+v0.5.0 - Zero Config Release
+
+- All content sources now work without API keys
+- Added Unsplash photos via Lorem Picsum (no auth)
+- Added Internet Archive for sounds (millions of clips, no auth)
+- Removed Pixabay, Freesound, and Stability AI (required API keys)
+- Removed AI Generation screen
+- Replaced Latest tab with Unsplash tab
+- Simplified onboarding (no API key entry page)
+- Numerous bug fixes and stability improvements

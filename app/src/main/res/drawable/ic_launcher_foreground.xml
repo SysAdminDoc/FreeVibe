@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Wave shape 1 -->
+    <path
+        android:fillColor="#7C5CFC"
+        android:pathData="M20,54 C20,35 35,28 54,28 C73,28 88,35 88,54 C88,73 73,80 54,80 C35,80 20,73 20,54Z" />
+
+    <!-- Wave shape 2 (inner glow) -->
+    <path
+        android:fillColor="#9B7DFF"
+        android:pathData="M30,54 C30,41 41,34 54,34 C67,34 78,41 78,54 C78,67 67,74 54,74 C41,74 30,67 30,54Z" />
+
+    <!-- Sound wave bars -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,48 L42,60 M48,44 L48,64 M54,40 L54,68 M60,44 L60,64 M66,48 L66,60"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+</vector>
