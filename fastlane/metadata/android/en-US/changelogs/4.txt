@@ -1,0 +1,8 @@
+- Downloads screen with history, filters, and file management
+- 16 wallpaper categories with gradient card grid (Nature, Space, Anime, Dark, Neon...)
+- Batch download service with configurable concurrency
+- Favorites export/import via JSON using Android SAF
+- Search history dropdown with recent queries and clear all
+- Open source licenses screen covering all libraries and content sources
+- Adaptive vector app icon with dark background and sound wave motif
+- Settings now links to downloads, categories, and licenses screens

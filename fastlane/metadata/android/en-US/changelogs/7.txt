@@ -1,0 +1,8 @@
+v0.6.0 - Source Tabs Refactor
+
+- Added Bing Daily wallpapers (curated UHD photos, 10 markets)
+- Added Wikimedia Commons Featured Pictures (64M+ images)
+- Wallpaper tabs now show sources directly: Wallhaven, Unsplash, Bing, Wikimedia, Reddit, NASA
+- Removed Trending/Latest/Random sorting modes
+- Widget and auto-wallpaper now use Wallhaven toplist
+- 7 total content sources, all zero-config

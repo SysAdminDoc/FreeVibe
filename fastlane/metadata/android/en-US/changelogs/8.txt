@@ -1,0 +1,15 @@
+v0.7.0 - Quality of Life & UX Improvements
+
+- NEW: Discover tab - mixed feed from all wallpaper sources
+- NEW: Phone frame preview - see wallpapers on a device mockup before applying
+- NEW: Pull-to-refresh on wallpaper and sound screens
+- NEW: Color-based wallpaper search via Wallhaven color palette
+- NEW: Wallpaper history - track previously applied wallpapers
+- NEW: Auto-wallpaper source selection (Settings > Wallpaper source)
+- NEW: Mini waveform visualization on sound cards
+- IMPROVED: Offline favorites - favorited content cached locally
+- IMPROVED: Source-specific error handling with retry buttons
+- IMPROVED: Wikimedia filtering (1920x1080 minimum resolution)
+- IMPROVED: Internet Archive audio URL caching (faster subsequent loads)
+- IMPROVED: Bing Daily pagination (proper idx cycling for deeper content)
+- Database version 3 (auto-migrates)
