@@ -1,0 +1,21 @@
+FreeVibe is a free, open-source Android app for personalizing your device with wallpapers, ringtones, notification sounds, and alarm tones from multiple free content sources.
+
+Features:
+- Browse millions of HD/4K wallpapers from Wallhaven, Pixabay, Reddit, and NASA APOD
+- Search and apply 430K+ sound clips from Freesound as ringtones, notifications, or alarms
+- Generate unique wallpapers from text prompts using Stability AI
+- Built-in wallpaper editor with brightness, contrast, saturation, and blur adjustments
+- Sound editor with waveform visualization and trim handles
+- Crop and position wallpapers with pinch-zoom before applying
+- Set different wallpapers for home and lock screen simultaneously
+- Assign custom ringtones to individual contacts
+- Home screen widget for quick wallpaper rotation
+- Auto-change wallpaper on a configurable schedule
+- Video live wallpaper support
+- OLED-friendly deep dark theme with zero burn-in
+- All preferences and API keys stored locally with DataStore
+- No ads, no tracking, no account required
+
+FreeVibe uses free APIs from Wallhaven, Pixabay, Freesound, Reddit, and NASA. Some features require free API keys which can be configured during setup or in Settings. Content licenses vary by source.
+
+Built with Kotlin, Jetpack Compose, Material 3, Hilt, Room, Retrofit, Coil, and ExoPlayer.

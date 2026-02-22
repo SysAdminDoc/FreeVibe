@@ -1,0 +1,10 @@
+# FreeVibe - All content sources work without API keys!
+# These optional keys unlock higher rate limits or extra features.
+
+# Wallhaven: Optional - unlocks NSFW content + higher rate limits
+# Get from: https://wallhaven.cc/settings/account
+WALLHAVEN_API_KEY=
+
+# NASA: Optional - DEMO_KEY is built-in (30 req/hr)
+# Get from: https://api.nasa.gov/
+NASA_API_KEY=DEMO_KEY

@@ -1,0 +1,84 @@
+package com.freevibe.service
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.freevibe.data.model.Wallpaper
+import com.freevibe.data.model.WallpaperPair
+import com.freevibe.data.model.WallpaperTarget
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class DualWallpaperService @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val wallpaperApplier: WallpaperApplier,
+    private val okHttpClient: OkHttpClient,
+) {
+    /** Apply a wallpaper pair: home wallpaper + lock wallpaper simultaneously */
+    suspend fun applyPair(pair: WallpaperPair): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            // Download both concurrently
+            val homeBitmap = async { downloadBitmap(pair.home.fullUrl) }
+            val lockBitmap = async { downloadBitmap(pair.lock.fullUrl) }
+
+            val home = homeBitmap.await()
+            val lock = lockBitmap.await()
+
+            // Apply each to respective screen
+            wallpaperApplier.applyFromBitmap(home, WallpaperTarget.HOME)
+                .getOrThrow()
+            wallpaperApplier.applyFromBitmap(lock, WallpaperTarget.LOCK)
+                .getOrThrow()
+        }
+    }
+
+    /** Apply same wallpaper with different crops to home and lock */
+    suspend fun applySplitCrop(
+        wallpaper: Wallpaper,
+        homeCropTop: Float = 0f,       // 0.0 - 0.5 range
+        lockCropTop: Float = 0.3f,     // Offset for lock screen
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val bitmap = downloadBitmap(wallpaper.fullUrl)
+            val height = bitmap.height
+            val cropHeight = (height * 0.7f).toInt()
+
+            val homeCrop = Bitmap.createBitmap(
+                bitmap,
+                0,
+                (height * homeCropTop).toInt().coerceIn(0, height - cropHeight),
+                bitmap.width,
+                cropHeight,
+            )
+            val lockCrop = Bitmap.createBitmap(
+                bitmap,
+                0,
+                (height * lockCropTop).toInt().coerceIn(0, height - cropHeight),
+                bitmap.width,
+                cropHeight,
+            )
+
+            wallpaperApplier.applyFromBitmap(homeCrop, WallpaperTarget.HOME).getOrThrow()
+            wallpaperApplier.applyFromBitmap(lockCrop, WallpaperTarget.LOCK).getOrThrow()
+
+            homeCrop.recycle()
+            lockCrop.recycle()
+            bitmap.recycle()
+        }
+    }
+
+    private fun downloadBitmap(url: String): Bitmap {
+        val request = Request.Builder().url(url).build()
+        val response = okHttpClient.newCall(request).execute()
+        val bytes = response.body?.bytes() ?: throw IllegalStateException("Empty body")
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: throw IllegalStateException("Failed to decode image")
+    }
+}
