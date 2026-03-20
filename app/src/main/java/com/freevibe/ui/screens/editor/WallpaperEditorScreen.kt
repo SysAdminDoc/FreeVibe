@@ -137,7 +137,11 @@ class WallpaperEditorViewModel @Inject constructor(
             _state.update { it.copy(isProcessing = true) }
             val s = _state.value
             val result = withContext(Dispatchers.Default) {
-                applyColorMatrix(original, s.brightness, s.contrast, s.saturation)
+                var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation)
+                if (s.blurRadius > 0.5f) {
+                    bmp = stackBlur(bmp, s.blurRadius.toInt().coerceIn(1, 25))
+                }
+                bmp
             }
             _state.update { it.copy(editedBitmap = result, isProcessing = false) }
         }
@@ -189,6 +193,17 @@ class WallpaperEditorViewModel @Inject constructor(
         paint.colorFilter = ColorMatrixColorFilter(combined)
         canvas.drawBitmap(src, 0f, 0f, paint)
 
+        return result
+    }
+
+    /** Fast box blur approximation — downscale + upscale for performance */
+    private fun stackBlur(src: Bitmap, radius: Int): Bitmap {
+        val scale = 1f / (1 + radius * 0.15f)
+        val smallW = (src.width * scale).toInt().coerceAtLeast(1)
+        val smallH = (src.height * scale).toInt().coerceAtLeast(1)
+        val small = Bitmap.createScaledBitmap(src, smallW, smallH, true)
+        val result = Bitmap.createScaledBitmap(small, src.width, src.height, true)
+        if (small !== result) small.recycle()
         return result
     }
 }

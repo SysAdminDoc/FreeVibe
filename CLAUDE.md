@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v1.3.0** (versionCode 14)
+- **v1.4.0** (versionCode 15)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -88,6 +88,7 @@ DataStore: Settings, Onboarding
 - `SearchHistoryDropdown.kt` - Reusable recent searches dropdown component
 
 ## Version History
+- v1.4.0: Exposed dual wallpaper split crop in wallpaper detail (DualWallpaperService), batch download all favorites (BatchDownloadService), fixed blur filter in wallpaper editor (downscale-upscale blur), sound auto-preview on detail enter (wired to Settings toggle), NSFW filter toggle in Settings (Wallhaven only, requires API key), auto-load "More Like This" similar sounds
 - v1.3.0: Search history wired up (save searches, dropdown with recent queries, delete/clear), aspect ratio presets in crop screen (Free/9:16/16:9/1:1), long-press delete wallpaper favorites with undo, fix deprecated OpenInNew icon
 - v1.2.0: Swipe-to-delete favorites with undo snackbar, wallpaper history tap-to-reapply navigation, hide skip on last onboarding page, improved empty states (contextual messages + action buttons), accessibility labels on wallpaper detail action buttons, download history type badges
 - v1.1.0: Animated nav transitions (fade+slide), "More Like This" for all sounds (not just Freesound), favorite toggle snackbar feedback, clickable sound tags (search on tap), color filter clear/reset button, cache size display in settings, wallpaper detail loading/error states (SubcomposeAsyncImage), version bump

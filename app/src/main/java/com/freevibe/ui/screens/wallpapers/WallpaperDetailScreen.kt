@@ -47,6 +47,7 @@ fun WallpaperDetailScreen(
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     var showApplyOptions by remember { mutableStateOf(false) }
     var showPhonePreview by remember { mutableStateOf(false) }
+    var showDualOptions by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -245,6 +246,11 @@ fun WallpaperDetailScreen(
                     })
                     ActionCircle(icon = Icons.Default.Edit, label = "Edit", onClick = onEdit)
                     ActionCircle(icon = Icons.Default.Crop, label = "Crop", onClick = onCrop)
+                    ActionCircle(
+                        icon = Icons.Default.Splitscreen,
+                        label = "Split crop for home & lock",
+                        onClick = { showDualOptions = true },
+                    )
 
                     Button(
                         onClick = { showApplyOptions = true },
@@ -279,6 +285,18 @@ fun WallpaperDetailScreen(
                     onApply = { target ->
                         showApplyOptions = false
                         viewModel.applyWallpaper(wp, target)
+                    },
+                )
+            }
+
+            // Dual wallpaper (split crop) bottom sheet
+            if (showDualOptions) {
+                DualWallpaperSheet(
+                    onDismiss = { showDualOptions = false },
+                    isApplying = state.isApplying,
+                    onApplySplitCrop = {
+                        showDualOptions = false
+                        viewModel.applySplitCrop(wp)
                     },
                 )
             }
@@ -401,6 +419,40 @@ private fun ActionCircle(
             .background(Color.White.copy(alpha = 0.15f)),
     ) {
         Icon(icon, contentDescription = label.ifEmpty { null }, tint = tint, modifier = Modifier.size(22.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DualWallpaperSheet(
+    onDismiss: () -> Unit,
+    isApplying: Boolean,
+    onApplySplitCrop: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Dual Wallpaper",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Text(
+                "Apply this wallpaper with different crops to home and lock screens",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            ApplyOption(Icons.Default.Splitscreen, "Split Crop") { onApplySplitCrop() }
+        }
     }
 }
 

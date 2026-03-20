@@ -8,6 +8,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.SoundRepository
@@ -68,12 +69,15 @@ class SoundsViewModel @Inject constructor(
     private val downloadManager: DownloadManager,
     private val selectedContent: SelectedContentHolder,
     private val searchHistoryRepo: SearchHistoryRepository,
+    prefs: PreferencesManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
     val state = _state.asStateFlow()
 
     val selectedSound = selectedContent.selectedSound
+
+    val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     val recentSearches = searchHistoryRepo.getRecentSoundSearches(8)
         .map { list -> list.map { it.query } }

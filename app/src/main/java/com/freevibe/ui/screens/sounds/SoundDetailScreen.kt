@@ -42,9 +42,18 @@ fun SoundDetailScreen(
     val isFavorite by viewModel.isFavorite(s.id).collectAsState(initial = false)
     val context = LocalContext.current
 
+    val autoPreview by viewModel.autoPreview.collectAsState()
+
     // Similar sounds
     val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
     val similarLoading = remember { mutableStateOf(false) }
+
+    // Auto-preview: play sound when entering detail screen
+    LaunchedEffect(s.id) {
+        if (autoPreview && state.playingId != s.id) {
+            viewModel.togglePlayback(s)
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.applySuccess) {
@@ -323,6 +332,19 @@ private fun SimilarSoundsSection(
 ) {
     var loaded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Auto-load similar sounds on first render
+    LaunchedEffect(soundId) {
+        if (!loaded && !isLoading.value) {
+            isLoading.value = true
+            try {
+                val result = viewModel.loadSimilar(soundId)
+                similarSounds.value = result
+            } catch (_: Exception) {}
+            isLoading.value = false
+            loaded = true
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
