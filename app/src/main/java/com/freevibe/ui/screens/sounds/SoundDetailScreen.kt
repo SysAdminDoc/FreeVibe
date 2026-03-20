@@ -1,5 +1,6 @@
 package com.freevibe.ui.screens.sounds
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -229,6 +230,39 @@ fun SoundDetailScreen(
                         Icon(Icons.Default.Contacts, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Contact")
+                    }
+                }
+
+                // #3: Download + #1: Share row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.downloadSound(s) },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Download")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val shareUrl = s.sourcePageUrl.ifEmpty { s.downloadUrl }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareUrl)
+                                putExtra(Intent.EXTRA_SUBJECT, s.name)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share sound"))
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Share")
                     }
                 }
             }

@@ -17,12 +17,12 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v0.8.0** (versionCode 9)
+- **v0.9.0** (versionCode 10)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
 ```
-Compose UI (13 screens, 4 bottom nav tabs)
+Compose UI (14 screens, 4 bottom nav tabs)
   ViewModels (Hilt) + SelectedContentHolder singleton
     Repositories: Wallhaven, Picsum, Bing, Wikimedia, IA, Reddit, NASA
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
@@ -38,8 +38,9 @@ DataStore: Settings, Onboarding
 - `FreeVibeRoot.kt` - NavHost with all routes, bottom nav, Hilt EntryPoint for SelectedContentHolder
 - `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services, Room DB with migrations
 - `SelectedContentHolder.kt` - Singleton state bridge between screens + pendingCategoryQuery
-- `WallpapersViewModel.kt` - Main wallpaper state, search, category query consumption
+- `WallpapersViewModel.kt` - Main wallpaper state, search, category query consumption, gridColumns from PreferencesManager
 - `ContactPickerScreen.kt` - Downloads sound + sets as contact ringtone via SoundApplier
+- `WallpaperHistoryScreen.kt` - Browsable grid of previously applied wallpapers
 
 ## Database Migrations
 - v1->2: Added wallpaper_cache + wallpaper_history tables
@@ -52,7 +53,10 @@ DataStore: Settings, Onboarding
 - FreeVibeRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder from Composable
 - Unicode box-drawing chars in section comments - use caution with string matching
 - Crash log at `filesDir/crash.log`, auto-trimmed to 500KB
+- WallpapersViewModel now takes PreferencesManager for grid columns
+- SoundsViewModel now takes DownloadManager for standalone sound download
 
 ## Version History
+- v0.9.0: Share wallpaper/sound (Intent.ACTION_SEND), wallpaper history browsable grid screen, sound download button, phone preview real time, source code link opens browser, licenses open URLs in browser, sounds shimmer loading, grid columns setting wired to UI, editor error handling with loading/error states
 - v0.8.0: ContactPicker ringtone wiring, cache eviction scheduling, crash logging, confirmation dialogs, category->search flow, database migrations, version sync
 - v0.7.0: Initial full-featured release (7 sources, editors, widget, auto-wallpaper, dual wallpaper, video wallpaper, batch download, offline favorites, export/import)

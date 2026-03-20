@@ -10,6 +10,7 @@ import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.SoundRepository
+import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,6 +42,7 @@ class SoundsViewModel @Inject constructor(
     private val soundRepo: SoundRepository,
     private val favoritesRepo: FavoritesRepository,
     private val soundApplier: SoundApplier,
+    private val downloadManager: DownloadManager,
     private val selectedContent: SelectedContentHolder,
 ) : ViewModel() {
 
@@ -117,6 +119,20 @@ class SoundsViewModel @Inject constructor(
                 .onFailure { e ->
                     _state.update { it.copy(isApplying = false, error = e.message) }
                 }
+        }
+    }
+
+    // #3: Standalone sound download
+    fun downloadSound(sound: Sound) {
+        viewModelScope.launch {
+            val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3")
+            downloadManager.downloadSound(
+                id = sound.id,
+                url = sound.downloadUrl,
+                fileName = "FreeVibe_${sound.name.take(40)}.$ext",
+                type = ContentType.RINGTONE,
+            )
+            _state.update { it.copy(applySuccess = "Download started") }
         }
     }
 

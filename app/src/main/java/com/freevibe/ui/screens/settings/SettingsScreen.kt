@@ -1,5 +1,7 @@
 package com.freevibe.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,6 +86,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setAutoPreview(enabled)
     }
 
+    fun setGridColumns(columns: Int) = viewModelScope.launch {
+        prefs.setGridColumns(columns)
+    }
+
     fun clearCache() = viewModelScope.launch {
         // Clear only image/http caches, not trimmed audio or other app state
         val cacheDir = context.cacheDir
@@ -104,21 +110,24 @@ fun SettingsScreen(
     onDownloadsClick: () -> Unit = {},
     onLicensesClick: () -> Unit = {},
     onCategoriesClick: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val wallhavenKey by viewModel.wallhavenKey.collectAsState()
     val autoWpEnabled by viewModel.autoWpEnabled.collectAsState()
     val autoWpInterval by viewModel.autoWpInterval.collectAsState()
     val autoWpSource by viewModel.autoWpSource.collectAsState()
     val autoPreview by viewModel.autoPreview.collectAsState()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
 
     // Dialog state
     var editingKey by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showIntervalPicker by remember { mutableStateOf(false) }
     var showSourcePicker by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
-    var showClearHistoryConfirm by remember { mutableStateOf(false) }
+    var showColumnsPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -164,19 +173,26 @@ fun SettingsScreen(
                     onClick = { showSourcePicker = true },
                 )
             }
+            // #9: Grid columns
+            SettingsItem(
+                icon = Icons.Default.GridView,
+                title = "Grid columns",
+                subtitle = "$gridColumns columns",
+                onClick = { showColumnsPicker = true },
+            )
             SettingsItem(
                 icon = Icons.Default.Category,
                 title = "Browse categories",
                 subtitle = "Nature, Space, Anime, Dark, Neon + 12 more",
                 onClick = onCategoriesClick,
             )
-            // #11: Wallpaper history
+            // #2: Wallpaper history — opens browsable grid
             if (wallpaperHistory.isNotEmpty()) {
                 SettingsItem(
                     icon = Icons.Default.History,
                     title = "Wallpaper history",
                     subtitle = "${wallpaperHistory.size} recently applied",
-                    onClick = { showClearHistoryConfirm = true },
+                    onClick = onHistoryClick,
                 )
             }
         }
@@ -213,14 +229,16 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v0.8.0 - Open source device personalization",
+                subtitle = "v0.9.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
                 icon = Icons.Default.Code,
                 title = "Source code",
                 subtitle = "github.com/SysAdminDoc/FreeVibe",
-                onClick = {},
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/FreeVibe")))
+                },
             )
             SettingsItem(
                 icon = Icons.Default.Description,
@@ -270,6 +288,39 @@ fun SettingsScreen(
         )
     }
 
+    // #9: Grid columns picker
+    if (showColumnsPicker) {
+        AlertDialog(
+            onDismissRequest = { showColumnsPicker = false },
+            title = { Text("Grid columns") },
+            text = {
+                Column {
+                    listOf(1 to "1 column", 2 to "2 columns", 3 to "3 columns", 4 to "4 columns").forEach { (count, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = gridColumns == count,
+                                onClick = {
+                                    viewModel.setGridColumns(count)
+                                    showColumnsPicker = false
+                                },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showColumnsPicker = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     // Confirm clear cache
     if (showClearCacheConfirm) {
         AlertDialog(
@@ -288,23 +339,6 @@ fun SettingsScreen(
         )
     }
 
-    // Confirm clear wallpaper history
-    if (showClearHistoryConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearHistoryConfirm = false },
-            title = { Text("Clear wallpaper history?") },
-            text = { Text("This will remove all records of previously applied wallpapers.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.clearWallpaperHistory()
-                    showClearHistoryConfirm = false
-                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearHistoryConfirm = false }) { Text("Cancel") }
-            },
-        )
-    }
 }
 
 @Composable

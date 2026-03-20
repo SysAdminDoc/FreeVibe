@@ -43,7 +43,9 @@ data class EditorState(
     val blurRadius: Float = 0f,       // 0 to 25
     val isProcessing: Boolean = false,
     val isApplying: Boolean = false,
+    val isLoadingImage: Boolean = false,
     val success: String? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -59,18 +61,27 @@ class WallpaperEditorViewModel @Inject constructor(
     init {
         selectedContent.selectedWallpaper.value?.let { wp ->
             viewModelScope.launch {
+                _state.update { it.copy(isLoadingImage = true) }
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
                         val request = okhttp3.Request.Builder().url(wp.fullUrl).build()
                         val response = okHttpClient.newCall(request).execute()
-                        val bytes = response.body?.bytes() ?: throw Exception("Empty body")
+                        val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            ?: throw Exception("Failed to decode image")
                     }
-                    if (bitmap != null) setSourceBitmap(bitmap)
-                } catch (_: Exception) {}
+                    setSourceBitmap(bitmap)
+                    _state.update { it.copy(isLoadingImage = false) }
+                } catch (e: Exception) {
+                    _state.update { it.copy(isLoadingImage = false, error = e.message ?: "Failed to load image") }
+                }
             }
+        } ?: run {
+            _state.update { it.copy(error = "No wallpaper selected") }
         }
     }
+
+    fun clearError() = _state.update { it.copy(error = null) }
 
     fun setSourceBitmap(bitmap: Bitmap) {
         _state.update { it.copy(originalBitmap = bitmap, editedBitmap = bitmap) }
@@ -195,6 +206,9 @@ fun WallpaperEditorScreen(
     LaunchedEffect(state.success) {
         state.success?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
     }
+    LaunchedEffect(state.error) {
+        state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearError() }
+    }
 
     val filters = listOf(
         FilterControl("Brightness", Icons.Default.BrightnessHigh, state.brightness, -100f..100f) {
@@ -241,13 +255,36 @@ fun WallpaperEditorScreen(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center,
             ) {
-                state.editedBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Edited wallpaper",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                when {
+                    state.isLoadingImage -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Loading image...", color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    state.editedBitmap != null -> {
+                        Image(
+                            bitmap = state.editedBitmap!!.asImageBitmap(),
+                            contentDescription = "Edited wallpaper",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    state.error != null && state.originalBitmap == null -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.BrokenImage, null, Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                            Spacer(Modifier.height(8.dp))
+                            Text("Failed to load wallpaper", color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
                 if (state.isProcessing) {
                     CircularProgressIndicator(

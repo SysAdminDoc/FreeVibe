@@ -59,6 +59,7 @@ fun WallpapersScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val downloads by viewModel.activeDownloads.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     var showColorPicker by remember { mutableStateOf(false) }
@@ -224,6 +225,7 @@ fun WallpapersScreen(
                             WallpaperGrid(
                                 wallpapers = state.wallpapers,
                                 isLoadingMore = state.isLoadingMore,
+                                columns = gridColumns,
                                 onWallpaperClick = { wp ->
                                     viewModel.selectWallpaper(wp)
                                     onWallpaperClick(wp)
@@ -271,6 +273,7 @@ private fun ColorPickerRow(
 private fun WallpaperGrid(
     wallpapers: List<Wallpaper>,
     isLoadingMore: Boolean,
+    columns: Int = 2,
     onWallpaperClick: (Wallpaper) -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -289,7 +292,7 @@ private fun WallpaperGrid(
     }
 
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
+        columns = StaggeredGridCells.Fixed(columns.coerceIn(1, 4)),
         state = gridState,
         contentPadding = PaddingValues(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
