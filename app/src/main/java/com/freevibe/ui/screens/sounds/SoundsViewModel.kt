@@ -23,18 +23,40 @@ data class SoundsUiState(
     val sounds: List<Sound> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val isRefreshing: Boolean = false,       // #4: Pull-to-refresh
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val query: String = "",
     val currentPage: Int = 1,
     val hasMore: Boolean = true,
-    val selectedTab: SoundTab = SoundTab.RINGTONES,
+    val selectedTab: SoundTab = SoundTab.TRENDING,
+    val durationFilter: DurationFilter = DurationFilter.ALL,
+    val selectedCategory: SoundCategory? = null,
     val playingId: String? = null,
     val isApplying: Boolean = false,
     val applySuccess: String? = null,
 )
 
-enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, TRENDING, SEARCH }
+enum class SoundTab { TRENDING, RINGTONES, NOTIFICATIONS, ALARMS, SEARCH }
+
+enum class DurationFilter(val label: String, val minSec: Int, val maxSec: Int) {
+    ALL("All", 0, 300),
+    SHORT("< 5s", 0, 5),
+    MEDIUM("5-15s", 5, 15),
+    LONG("15-60s", 15, 60),
+}
+
+enum class SoundCategory(val label: String, val emoji: String, val query: String) {
+    NATURE("Nature", "\uD83C\uDF3F", "nature rain water ocean birds wind thunder forest"),
+    ELECTRONIC("Electronic", "\uD83C\uDFB9", "electronic synth beep digital glitch circuit"),
+    FUNNY("Funny", "\uD83D\uDE02", "funny comedy cartoon humor laugh silly"),
+    SCARY("Scary", "\uD83D\uDC7B", "horror scary dark creepy suspense ghost"),
+    SCIFI("Sci-Fi", "\uD83D\uDE80", "sci-fi space laser futuristic robot alien"),
+    MUSICAL("Musical", "\uD83C\uDFB5", "musical instrument piano guitar drum trumpet"),
+    AMBIENT("Ambient", "\uD83C\uDF19", "ambient drone pad atmospheric texture calm"),
+    VOICE("Voice", "\uD83D\uDDE3\uFE0F", "voice speech human vocal talk"),
+    GAMING("Gaming", "\uD83C\uDFAE", "game 8bit retro arcade pixel chiptune"),
+    MECHANICAL("Mechanical", "\u2699\uFE0F", "mechanical click switch button industrial metal"),
+}
 
 @HiltViewModel
 class SoundsViewModel @Inject constructor(
@@ -59,7 +81,16 @@ class SoundsViewModel @Inject constructor(
 
     fun selectTab(tab: SoundTab) {
         stopPlayback()
-        _state.update { it.copy(selectedTab = tab, sounds = emptyList(), currentPage = 1, hasMore = true) }
+        _state.update {
+            it.copy(
+                selectedTab = tab,
+                selectedCategory = null,
+                sounds = emptyList(),
+                currentPage = 1,
+                hasMore = true,
+                error = null,
+            )
+        }
         loadSounds()
     }
 
@@ -69,6 +100,28 @@ class SoundsViewModel @Inject constructor(
             it.copy(
                 query = query,
                 selectedTab = SoundTab.SEARCH,
+                selectedCategory = null,
+                sounds = emptyList(),
+                currentPage = 1,
+                hasMore = true,
+            )
+        }
+        loadSounds()
+    }
+
+    fun setDurationFilter(filter: DurationFilter) {
+        if (filter == _state.value.durationFilter) return
+        stopPlayback()
+        _state.update { it.copy(durationFilter = filter, sounds = emptyList(), currentPage = 1, hasMore = true) }
+        loadSounds()
+    }
+
+    fun selectCategory(category: SoundCategory) {
+        stopPlayback()
+        val isSame = _state.value.selectedCategory == category
+        _state.update {
+            it.copy(
+                selectedCategory = if (isSame) null else category,
                 sounds = emptyList(),
                 currentPage = 1,
                 hasMore = true,
@@ -84,7 +137,6 @@ class SoundsViewModel @Inject constructor(
         loadSounds(loadMore = true)
     }
 
-    // #4: Pull-to-refresh
     fun refresh() {
         stopPlayback()
         _state.update { it.copy(isRefreshing = true, currentPage = 1, sounds = emptyList(), error = null) }
@@ -122,7 +174,6 @@ class SoundsViewModel @Inject constructor(
         }
     }
 
-    // #3: Standalone sound download
     fun downloadSound(sound: Sound) {
         viewModelScope.launch {
             val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3")
@@ -148,6 +199,11 @@ class SoundsViewModel @Inject constructor(
     }
 
     fun isFavorite(id: String): Flow<Boolean> = favoritesRepo.isFavorite(id)
+
+    /** Load similar sounds from Freesound for "More Like This" */
+    suspend fun loadSimilar(freesoundId: Int): List<Sound> {
+        return soundRepo.getSimilar(freesoundId).items
+    }
 
     fun clearError() = _state.update { it.copy(error = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
@@ -189,12 +245,45 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isLoadingMore = true) }
             }
             try {
-                val result = when (s.selectedTab) {
-                    SoundTab.RINGTONES -> soundRepo.searchRingtones(page = s.currentPage)
-                    SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(page = s.currentPage)
-                    SoundTab.ALARMS -> soundRepo.searchAlarms(page = s.currentPage)
-                    SoundTab.TRENDING -> soundRepo.getTrending(page = s.currentPage)
-                    SoundTab.SEARCH -> soundRepo.search(query = s.query, page = s.currentPage)
+                val dur = s.durationFilter
+                val cat = s.selectedCategory
+
+                val result = when {
+                    // Category overrides tab behavior
+                    cat != null -> soundRepo.search(
+                        query = cat.query,
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec,
+                        minDuration = dur.minSec,
+                    )
+                    // Tab-specific
+                    s.selectedTab == SoundTab.TRENDING -> soundRepo.getTrending(
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec,
+                        minDuration = dur.minSec,
+                    )
+                    s.selectedTab == SoundTab.RINGTONES -> soundRepo.searchRingtones(
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec.coerceAtMost(30),
+                        minDuration = dur.minSec.coerceAtLeast(3),
+                    )
+                    s.selectedTab == SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec.coerceAtMost(8),
+                        minDuration = dur.minSec,
+                    )
+                    s.selectedTab == SoundTab.ALARMS -> soundRepo.searchAlarms(
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec.coerceAtMost(20),
+                        minDuration = dur.minSec.coerceAtLeast(2),
+                    )
+                    s.selectedTab == SoundTab.SEARCH -> soundRepo.search(
+                        query = s.query,
+                        page = s.currentPage,
+                        maxDuration = dur.maxSec,
+                        minDuration = dur.minSec,
+                    )
+                    else -> soundRepo.getTrending(page = s.currentPage)
                 }
                 _state.update {
                     it.copy(
