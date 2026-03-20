@@ -5,7 +5,6 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.WallpaperTarget
-import com.freevibe.data.repository.NasaRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
 import dagger.assisted.Assisted
@@ -19,7 +18,6 @@ class AutoWallpaperWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
-    private val nasaRepo: NasaRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val historyManager: WallpaperHistoryManager,
     private val prefs: PreferencesManager,
@@ -37,9 +35,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
                 "wallhaven" -> wallpaperRepo.getWallhaven(page = 1)
                 "unsplash" -> wallpaperRepo.getPicsum(page = 1)
                 "bing" -> wallpaperRepo.getBingDaily(page = 1)
-                "wikimedia" -> wallpaperRepo.getWikimedia(page = 1)
                 "reddit" -> redditRepo.getMultiSubreddit()
-                "nasa" -> nasaRepo.getRandom(count = 10)
                 "discover" -> wallpaperRepo.getDiscover(page = 1)
                 else -> wallpaperRepo.getWallhaven(page = 1)
             }

@@ -1,10 +1,14 @@
 package com.freevibe.ui.screens.settings
 
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -95,6 +99,20 @@ class SettingsViewModel @Inject constructor(
         prefs.setShowNsfw(show)
     }
 
+    fun setVideoWallpaperPath(uri: Uri) {
+        val path = try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
+            inputStream?.use { input ->
+                cacheFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            cacheFile.absolutePath
+        } catch (_: Exception) { null } ?: return
+
+        context.getSharedPreferences("freevibe_live_wp", android.content.Context.MODE_PRIVATE)
+            .edit().putString("video_path", path).apply()
+    }
+
     fun getCacheSize(): String {
         val cacheDir = context.cacheDir
         val bytes = cacheDir.walkTopDown().filter { it.isFile && it.parentFile?.name != "trimmed" }.sumOf { it.length() }
@@ -135,6 +153,23 @@ fun SettingsScreen(
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
     val showNsfw by viewModel.showNsfw.collectAsState()
+
+    // Video wallpaper picker
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.setVideoWallpaperPath(it)
+            // Launch live wallpaper picker
+            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                putExtra(
+                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                    ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
+                )
+            }
+            try { context.startActivity(intent) } catch (_: Exception) {}
+        }
+    }
 
     // Dialog state
     var editingKey by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -204,6 +239,12 @@ fun SettingsScreen(
                 onClick = { showColumnsPicker = true },
             )
             SettingsItem(
+                icon = Icons.Default.VideoFile,
+                title = "Video wallpaper",
+                subtitle = "Set a video as live wallpaper",
+                onClick = { videoPickerLauncher.launch("video/*") },
+            )
+            SettingsItem(
                 icon = Icons.Default.Category,
                 title = "Browse categories",
                 subtitle = "Nature, Space, Anime, Dark, Neon + 12 more",
@@ -252,7 +293,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.4.0 - Open source device personalization",
+                subtitle = "v1.5.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
