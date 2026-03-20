@@ -314,7 +314,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.8.0 - Open source device personalization",
+                subtitle = "v1.9.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(

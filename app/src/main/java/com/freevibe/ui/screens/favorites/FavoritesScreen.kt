@@ -110,9 +110,25 @@ fun FavoritesScreen(
     val message by viewModel.message.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
+    var sortBy by remember { mutableStateOf("recent") } // recent, name, oldest
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val tabs = listOf("Wallpapers (${wallpapers.size})", "Sounds (${sounds.size})")
+
+    val sortedWallpapers = remember(wallpapers, sortBy) {
+        when (sortBy) {
+            "name" -> wallpapers.sortedBy { it.name.lowercase() }
+            "oldest" -> wallpapers.sortedBy { it.addedAt }
+            else -> wallpapers.sortedByDescending { it.addedAt }
+        }
+    }
+    val sortedSounds = remember(sounds, sortBy) {
+        when (sortBy) {
+            "name" -> sounds.sortedBy { it.name.lowercase() }
+            "oldest" -> sounds.sortedBy { it.addedAt }
+            else -> sounds.sortedByDescending { it.addedAt }
+        }
+    }
 
     // Export launcher
     val exportLauncher = rememberLauncherForActivityResult(
@@ -164,6 +180,22 @@ fun FavoritesScreen(
                                     leadingIcon = { Icon(Icons.Default.CloudDownload, null) },
                                 )
                             }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Sort: Recent first") },
+                                onClick = { sortBy = "recent"; showMenu = false },
+                                leadingIcon = { Icon(Icons.Default.Schedule, null) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sort: Name A-Z") },
+                                onClick = { sortBy = "name"; showMenu = false },
+                                leadingIcon = { Icon(Icons.Default.SortByAlpha, null) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sort: Oldest first") },
+                                onClick = { sortBy = "oldest"; showMenu = false },
+                                leadingIcon = { Icon(Icons.Default.History, null) },
+                            )
                         }
                     }
                 },
@@ -182,7 +214,7 @@ fun FavoritesScreen(
 
             when (selectedTab) {
                 0 -> {
-                    if (wallpapers.isEmpty()) {
+                    if (sortedWallpapers.isEmpty()) {
                         EmptyState("No favorite wallpapers yet", Icons.Default.Wallpaper)
                     } else {
                         LazyVerticalGrid(
@@ -191,7 +223,7 @@ fun FavoritesScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(wallpapers, key = { it.id }) { fav ->
+                            items(sortedWallpapers, key = { it.id }) { fav ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -229,14 +261,14 @@ fun FavoritesScreen(
                     }
                 }
                 1 -> {
-                    if (sounds.isEmpty()) {
+                    if (sortedSounds.isEmpty()) {
                         EmptyState("No favorite sounds yet", Icons.Default.MusicNote)
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            items(sounds, key = { it.id }) { fav ->
+                            items(sortedSounds, key = { it.id }) { fav ->
                                 val dismissState = rememberSwipeToDismissBoxState(
                                     confirmValueChange = { value ->
                                         if (value != SwipeToDismissBoxValue.Settled) {
