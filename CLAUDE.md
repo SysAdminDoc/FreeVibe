@@ -75,6 +75,12 @@ DataStore: Settings, Onboarding
 - SoundEditorScreen local file picker uses ActivityResultContracts.GetContent("audio/*")
 - Wallpaper tabs: WIKIMEDIA and NASA removed from WallpaperTab enum entirely (not just hidden)
 - AutoWallpaperWorker still has string-based "wikimedia"/"nasa" branches for backwards compat with saved prefs
+- NavHost uses animated transitions (fade+slide) — enterTransition/exitTransition/popEnter/popExit in FreeVibeRoot
+- WallpaperDetailScreen uses SubcomposeAsyncImage (not AsyncImage) for loading/error state handling
+- SoundsViewModel.loadSimilar() accepts String soundId — dispatches to Freesound API for fs_ prefixed, keyword search for IA
+- FavoritesScreen sound list uses SwipeToDismissBox — swipe-to-delete with undo via snackbar + restoreFavorite()
+- WallpaperHistoryScreen.onWallpaperClick converts WallpaperHistoryEntity to Wallpaper domain model in FreeVibeRoot
+- ActionCircle composable has optional `label` param for accessibility contentDescription
 
 ## Version History
 - v1.2.0: Swipe-to-delete favorites with undo snackbar, wallpaper history tap-to-reapply navigation, hide skip on last onboarding page, improved empty states (contextual messages + action buttons), accessibility labels on wallpaper detail action buttons, download history type badges
