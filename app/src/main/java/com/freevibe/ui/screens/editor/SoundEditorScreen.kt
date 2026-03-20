@@ -162,8 +162,8 @@ class SoundEditorViewModel @Inject constructor(
         _state.update { it.copy(trimEndFraction = clamped) }
     }
 
-    fun setFadeIn(ms: Long) = _state.update { it.copy(fadeInMs = ms.coerceIn(0, it.trimDurationMs / 2)) }
-    fun setFadeOut(ms: Long) = _state.update { it.copy(fadeOutMs = ms.coerceIn(0, it.trimDurationMs / 2)) }
+    fun setFadeIn(ms: Long) = _state.update { it.copy(fadeInMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
+    fun setFadeOut(ms: Long) = _state.update { it.copy(fadeOutMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
 
     fun togglePlayback() {
         if (_state.value.isPlaying) stopPlayback() else startPlayback()
@@ -211,23 +211,29 @@ class SoundEditorViewModel @Inject constructor(
         val endMs = _state.value.trimEndMs.toInt()
 
         stopPlayback()
-        player = android.media.MediaPlayer().apply {
-            setDataSource(path)
-            prepare()
-            seekTo(startMs)
-            start()
-            _state.update { it.copy(isPlaying = true) }
+        try {
+            player = android.media.MediaPlayer().apply {
+                setDataSource(path)
+                prepare()
+                seekTo(startMs)
+                start()
+                _state.update { it.copy(isPlaying = true) }
 
-            viewModelScope.launch {
-                while (isPlaying && currentPosition < endMs) {
-                    val pos = currentPosition.toFloat() / duration
-                    _state.update { it.copy(playbackPosition = pos) }
-                    kotlinx.coroutines.delay(50)
+                viewModelScope.launch {
+                    try {
+                        while (isPlaying && currentPosition < endMs) {
+                            val pos = currentPosition.toFloat() / duration
+                            _state.update { it.copy(playbackPosition = pos) }
+                            kotlinx.coroutines.delay(50)
+                        }
+                    } catch (_: Exception) {}
+                    stopPlayback()
                 }
-                stopPlayback()
-            }
 
-            setOnCompletionListener { stopPlayback() }
+                setOnCompletionListener { stopPlayback() }
+            }
+        } catch (_: Exception) {
+            stopPlayback()
         }
     }
 
