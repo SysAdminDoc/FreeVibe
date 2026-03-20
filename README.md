@@ -6,7 +6,7 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4)
 
-> Open-source Android app for personalizing your device with wallpapers, ringtones, and sounds from 7 free sources. **No API keys required. Install and go.**
+> Open-source Android app for personalizing your device with wallpapers, ringtones, and sounds from free sources. **Zero configuration. Install and go.**
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 | Discover Feed | Mixed wallpapers from all sources in one shuffled stream |
 | Phone Preview | See wallpaper on device mockup with clock/status bar before applying |
 | Color Search | Find wallpapers by dominant color via Wallhaven palette |
-| Ringtones & Sounds | 600K+ sounds from Freesound + Internet Archive with duration filtering |
+| Ringtones & Sounds | Thousands of sounds from Internet Archive with duration filtering |
 | Sound Categories | Browse by Nature, Electronic, Funny, Scary, Sci-Fi, Musical, Ambient & more |
 | Duration Filters | Filter sounds by length: short (<5s), medium (5-15s), long (15-60s) |
 | More Like This | Discover acoustically similar sounds via Freesound |
@@ -53,11 +53,10 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 
 | Source | Content | Auth | License |
 |--------|---------|------|---------|
-| [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None (optional key for NSFW) | Various per image |
+| [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None | Various per image |
 | [Lorem Picsum](https://picsum.photos) | Curated Unsplash photos | None | Unsplash License |
 | [Bing Daily](https://www.bing.com) | Curated daily photos, UHD, 10 markets | None | Wallpaper use |
 | [Reddit](https://reddit.com) | 11 wallpaper subreddits | None | User-owned |
-| [Freesound](https://freesound.org) | 600K+ tagged sound effects | Free API key | CC0 / CC-BY / CC-BY-NC |
 | [Internet Archive](https://archive.org) | Millions of audio clips | None | CC / Public Domain |
 
 ## Architecture
@@ -67,7 +66,7 @@ Jetpack Compose UI
   Wallpapers | Sounds | Favorites | Settings | Editors
   Onboarding | Categories | Downloads | Glance Widget
 ViewModels (Hilt) + Cache Layer
-  Repositories: Wallhaven, Picsum, Bing, Reddit, Freesound, Internet Archive
+  Repositories: Wallhaven, Picsum, Bing, Reddit, Internet Archive
   Services: WallpaperApplier, SoundApplier, DownloadManager,
             AudioTrimmer, DualWallpaper, BatchDownload,
             ContactRingtone, FavoritesExporter,

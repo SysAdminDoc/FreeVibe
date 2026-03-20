@@ -1,6 +1,5 @@
 package com.freevibe.data.repository
 
-import com.freevibe.BuildConfig
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.data.model.ContentSource
@@ -26,10 +25,7 @@ class WallpaperRepository @Inject constructor(
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
 ) {
-    private suspend fun wallhavenPurity(): String {
-        val nsfw = prefs.showNsfwContent.first()
-        return if (nsfw && BuildConfig.WALLHAVEN_API_KEY.isNotBlank()) "111" else "100"
-    }
+    private fun wallhavenPurity(): String = "100" // SFW only — no API key
 
     private suspend fun wallhavenMinRes(): String {
         return prefs.preferredResolution.first()
@@ -50,7 +46,7 @@ class WallpaperRepository @Inject constructor(
                 purity = wallhavenPurity(),
                 minResolution = wallhavenMinRes(),
                 page = page,
-                apiKey = BuildConfig.WALLHAVEN_API_KEY,
+                apiKey = "",
             )
             SearchResult(
                 items = response.data.map { it.toWallpaper() },
@@ -74,7 +70,7 @@ class WallpaperRepository @Inject constructor(
                 categories = "111",
                 purity = wallhavenPurity(),
                 page = page,
-                apiKey = BuildConfig.WALLHAVEN_API_KEY,
+                apiKey = "",
                 colors = color,
             )
             SearchResult(

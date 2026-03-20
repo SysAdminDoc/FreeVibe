@@ -20,11 +20,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // API keys stored in local.properties (not committed)
-        // All content sources work without keys - Wallhaven key is optional for higher rate limits
-        buildConfigField("String", "WALLHAVEN_API_KEY", "\"${project.findProperty("WALLHAVEN_API_KEY") ?: ""}\"")
-        buildConfigField("String", "NASA_API_KEY", "\"${project.findProperty("NASA_API_KEY") ?: "DEMO_KEY"}\"")
-        buildConfigField("String", "FREESOUND_API_KEY", "\"${project.findProperty("FREESOUND_API_KEY") ?: ""}\"")
+        // No API keys required — all sources work out of the box
     }
 
     buildTypes {
