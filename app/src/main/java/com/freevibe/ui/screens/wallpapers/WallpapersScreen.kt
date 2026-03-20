@@ -129,6 +129,12 @@ fun WallpapersScreen(
                         viewModel.searchByColor(color)
                         showColorPicker = false
                     },
+                    onClear = if (state.selectedColor != null) {
+                        {
+                            viewModel.selectTab(WallpaperTab.DISCOVER)
+                            showColorPicker = false
+                        }
+                    } else null,
                 )
             }
 
@@ -245,6 +251,7 @@ fun WallpapersScreen(
 private fun ColorPickerRow(
     selectedColor: String?,
     onColorSelected: (String) -> Unit,
+    onClear: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -252,7 +259,25 @@ private fun ColorPickerRow(
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (onClear != null) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable { onClear() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Clear color filter",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
         WALLHAVEN_COLORS.forEach { (hex, color) ->
             Box(
                 modifier = Modifier

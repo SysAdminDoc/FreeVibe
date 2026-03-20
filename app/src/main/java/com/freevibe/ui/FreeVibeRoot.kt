@@ -1,6 +1,8 @@
 package com.freevibe.ui
 
 import android.content.Context
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -110,6 +112,10 @@ fun FreeVibeRoot() {
             navController = navController,
             startDestination = startRoute,
             modifier = Modifier.padding(padding),
+            enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(250)) { it / 6 } },
+            exitTransition = { fadeOut(tween(150)) },
+            popEnterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(250)) { -it / 6 } },
+            popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(250)) { it / 6 } },
         ) {
             // ── Onboarding ────────────────────────────────────────
             composable(Screen.Onboarding.route) {
@@ -171,6 +177,9 @@ fun FreeVibeRoot() {
                     onEdit = { navController.navigate(Screen.SoundEditor.route) },
                     onContactPicker = { soundId ->
                         navController.navigate(Screen.ContactPicker.createRoute(soundId))
+                    },
+                    onSearchTag = { tag ->
+                        navController.popBackStack()
                     },
                 )
             }

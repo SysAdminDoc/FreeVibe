@@ -33,6 +33,7 @@ fun SoundDetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit = {},
     onContactPicker: (String) -> Unit = {},
+    onSearchTag: (String) -> Unit = {},
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -142,7 +143,7 @@ fun SoundDetailScreen(
                 }
             }
 
-            // Tags
+            // Tags (clickable to search)
             if (s.tags.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -150,6 +151,10 @@ fun SoundDetailScreen(
                 ) {
                     s.tags.take(5).forEach { tag ->
                         Surface(
+                            onClick = {
+                                viewModel.search(tag)
+                                onBack()
+                            },
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shape = RoundedCornerShape(12.dp),
                         ) {
@@ -157,7 +162,7 @@ fun SoundDetailScreen(
                                 "#$tag",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
@@ -293,26 +298,24 @@ fun SoundDetailScreen(
                 }
             }
 
-            // "More Like This" section (Freesound only)
-            if (s.id.startsWith("fs_")) {
-                Spacer(Modifier.height(8.dp))
-                SimilarSoundsSection(
-                    soundId = s.id.removePrefix("fs_").toIntOrNull() ?: 0,
-                    similarSounds = similarSounds,
-                    isLoading = similarLoading,
-                    viewModel = viewModel,
-                    onSoundClick = { similar ->
-                        viewModel.selectSound(similar)
-                    },
-                )
-            }
+            // "More Like This" section (all sources)
+            Spacer(Modifier.height(8.dp))
+            SimilarSoundsSection(
+                soundId = s.id,
+                similarSounds = similarSounds,
+                isLoading = similarLoading,
+                viewModel = viewModel,
+                onSoundClick = { similar ->
+                    viewModel.selectSound(similar)
+                },
+            )
         }
     }
 }
 
 @Composable
 private fun SimilarSoundsSection(
-    soundId: Int,
+    soundId: String,
     similarSounds: MutableState<List<Sound>>,
     isLoading: MutableState<Boolean>,
     viewModel: SoundsViewModel,
