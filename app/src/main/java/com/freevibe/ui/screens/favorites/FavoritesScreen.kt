@@ -36,6 +36,7 @@ import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.repository.FavoritesRepository
+import com.freevibe.service.BatchDownloadService
 import com.freevibe.service.FavoritesExporter
 import com.freevibe.service.SelectedContentHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +49,7 @@ class FavoritesViewModel @Inject constructor(
     private val favoritesRepo: FavoritesRepository,
     private val exporter: FavoritesExporter,
     private val selectedContent: SelectedContentHolder,
+    private val batchDownloadService: BatchDownloadService,
 ) : ViewModel() {
     val wallpapers = favoritesRepo.getWallpapers().stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
@@ -82,6 +84,15 @@ class FavoritesViewModel @Inject constructor(
         exporter.import(uri)
             .onSuccess { count -> _message.value = "Imported $count favorites" }
             .onFailure { _message.value = "Import failed: ${it.message}" }
+    }
+
+    val batchState = batchDownloadService.state
+
+    fun downloadAllWallpapers() {
+        val wps = wallpapers.value.map { it.toWallpaper() }
+        if (wps.isEmpty()) return
+        batchDownloadService.downloadBatch(wps)
+        _message.value = "Downloading ${wps.size} wallpapers..."
     }
 
     fun clearMessage() { _message.value = null }
@@ -143,6 +154,16 @@ fun FavoritesScreen(
                                 },
                                 leadingIcon = { Icon(Icons.Default.Download, null) },
                             )
+                            if (wallpapers.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("Download all wallpapers") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.downloadAllWallpapers()
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.CloudDownload, null) },
+                                )
+                            }
                         }
                     }
                 },

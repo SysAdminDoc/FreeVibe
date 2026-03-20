@@ -45,6 +45,7 @@ class SettingsViewModel @Inject constructor(
     val autoWpSource = prefs.autoWallpaperSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallhaven")
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
+    val showNsfw = prefs.showNsfwContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     // #11: Wallpaper history
     val wallpaperHistory = historyManager.getRecent(20).stateIn(
@@ -90,6 +91,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setGridColumns(columns)
     }
 
+    fun setShowNsfw(show: Boolean) = viewModelScope.launch {
+        prefs.setShowNsfw(show)
+    }
+
     fun getCacheSize(): String {
         val cacheDir = context.cacheDir
         val bytes = cacheDir.walkTopDown().filter { it.isFile && it.parentFile?.name != "trimmed" }.sumOf { it.length() }
@@ -129,6 +134,7 @@ fun SettingsScreen(
     val autoPreview by viewModel.autoPreview.collectAsState()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
+    val showNsfw by viewModel.showNsfw.collectAsState()
 
     // Dialog state
     var editingKey by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -159,6 +165,15 @@ fun SettingsScreen(
 
         // Wallpapers
         SettingsSection("Wallpapers") {
+            if (wallhavenKey.isNotEmpty()) {
+                SettingsToggle(
+                    icon = Icons.Default.VisibilityOff,
+                    title = "Include NSFW content",
+                    subtitle = "Wallhaven only - requires API key",
+                    checked = showNsfw,
+                    onCheckedChange = { viewModel.setShowNsfw(it) },
+                )
+            }
             SettingsToggle(
                 icon = Icons.Default.AutoAwesome,
                 title = "Auto-change wallpaper",
@@ -237,7 +252,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.3.0 - Open source device personalization",
+                subtitle = "v1.4.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(

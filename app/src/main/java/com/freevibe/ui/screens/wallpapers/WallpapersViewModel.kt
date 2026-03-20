@@ -10,6 +10,7 @@ import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.WallpaperRepository
+import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.SelectedContentHolder
@@ -45,6 +46,7 @@ class WallpapersViewModel @Inject constructor(
     private val favoritesRepo: FavoritesRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val downloadManager: DownloadManager,
+    private val dualWallpaperService: DualWallpaperService,
     private val selectedContent: SelectedContentHolder,
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
@@ -160,6 +162,20 @@ class WallpapersViewModel @Inject constructor(
                         WallpaperTarget.BOTH -> "home & lock screen"
                     }
                     _state.update { it.copy(isApplying = false, applySuccess = "Set as $label wallpaper") }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isApplying = false, error = e.message) }
+                }
+        }
+    }
+
+    fun applySplitCrop(wallpaper: Wallpaper) {
+        viewModelScope.launch {
+            _state.update { it.copy(isApplying = true, applySuccess = null) }
+            dualWallpaperService.applySplitCrop(wallpaper)
+                .onSuccess {
+                    historyManager.record(wallpaper, WallpaperTarget.BOTH)
+                    _state.update { it.copy(isApplying = false, applySuccess = "Split crop applied to home & lock") }
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isApplying = false, error = e.message) }
