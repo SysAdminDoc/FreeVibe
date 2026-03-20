@@ -29,8 +29,11 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.freevibe.data.model.ContentType
 import com.freevibe.service.ContactInfo
 import com.freevibe.service.ContactRingtoneService
+import com.freevibe.service.SelectedContentHolder
+import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +46,7 @@ data class ContactPickerState(
     val isLoading: Boolean = false,
     val query: String = "",
     val hasPermission: Boolean = false,
+    val isApplying: Boolean = false,
     val success: String? = null,
     val error: String? = null,
 )
@@ -50,6 +54,8 @@ data class ContactPickerState(
 @HiltViewModel
 class ContactPickerViewModel @Inject constructor(
     private val contactService: ContactRingtoneService,
+    private val soundApplier: SoundApplier,
+    private val selectedContent: SelectedContentHolder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactPickerState())
@@ -72,11 +78,26 @@ class ContactPickerViewModel @Inject constructor(
         }
     }
 
-    fun setRingtone(contactId: Long, ringtoneUri: android.net.Uri) {
+    fun assignToContact(contactId: Long) {
+        val sound = selectedContent.selectedSound.value ?: run {
+            _state.update { it.copy(error = "No sound selected") }
+            return
+        }
+        _state.update { it.copy(isApplying = true) }
         viewModelScope.launch {
-            contactService.setContactRingtone(contactId, ringtoneUri)
-                .onSuccess { _state.update { it.copy(success = "Ringtone set for contact") } }
-                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+            soundApplier.downloadOnly(sound.downloadUrl, sound.name, ContentType.RINGTONE)
+                .onSuccess { uri ->
+                    contactService.setContactRingtone(contactId, uri)
+                        .onSuccess {
+                            _state.update { it.copy(isApplying = false, success = "Ringtone set for contact") }
+                        }
+                        .onFailure { e ->
+                            _state.update { it.copy(isApplying = false, error = e.message) }
+                        }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isApplying = false, error = "Download failed: ${e.message}") }
+                }
         }
     }
 
@@ -193,6 +214,23 @@ fun ContactPickerScreen(
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (state.contacts.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.PersonSearch,
+                            null,
+                            Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            if (state.query.isNotEmpty()) "No contacts found" else "No contacts on device",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -201,10 +239,8 @@ fun ContactPickerScreen(
                     items(state.contacts, key = { it.id }) { contact ->
                         ContactRow(
                             contact = contact,
-                            onClick = {
-                                // TODO: Pass actual ringtone URI from nav args
-                                // For now just demonstrate the flow
-                            },
+                            isApplying = state.isApplying,
+                            onClick = { viewModel.assignToContact(contact.id) },
                         )
                     }
                 }
@@ -216,10 +252,12 @@ fun ContactPickerScreen(
 @Composable
 private fun ContactRow(
     contact: ContactInfo,
+    isApplying: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        enabled = !isApplying,
         shape = RoundedCornerShape(12.dp),
         color = Color.Transparent,
     ) {

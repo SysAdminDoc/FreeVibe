@@ -10,8 +10,13 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.freevibe.service.SelectedContentHolder
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.screens.categories.CategoriesScreen
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import com.freevibe.ui.screens.downloads.DownloadsScreen
 import com.freevibe.ui.screens.editor.SoundEditorScreen
 import com.freevibe.ui.screens.editor.WallpaperCropScreen
@@ -29,10 +34,20 @@ import com.freevibe.ui.screens.wallpapers.WallpapersScreen
 private const val PREFS_KEY = "freevibe_app"
 private const val ONBOARDING_DONE = "onboarding_complete"
 
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface SelectedContentEntryPoint {
+    fun selectedContentHolder(): SelectedContentHolder
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FreeVibeRoot() {
     val context = LocalContext.current
+    val selectedContent = remember {
+        EntryPointAccessors.fromApplication(context, SelectedContentEntryPoint::class.java)
+            .selectedContentHolder()
+    }
     val prefs = remember { context.getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE) }
     val onboardingDone = remember { prefs.getBoolean(ONBOARDING_DONE, false) }
 
@@ -169,9 +184,6 @@ fun FreeVibeRoot() {
                 SoundEditorScreen(onBack = { navController.popBackStack() })
             }
 
-            // ── AI Generation ─────────────────────────────────────
-
-
             // ── Contact Picker ────────────────────────────────────
             composable(Screen.ContactPicker.route) {
                 ContactPickerScreen(onBack = { navController.popBackStack() })
@@ -187,10 +199,13 @@ fun FreeVibeRoot() {
                 CategoriesScreen(
                     onBack = { navController.popBackStack() },
                     onCategoryClick = { query ->
-                        navController.popBackStack()
-                        // Navigate to wallpapers and trigger search
+                        selectedContent.pendingCategoryQuery = query
                         navController.navigate(Screen.Wallpapers.route) {
-                            popUpTo(Screen.Wallpapers.route) { inclusive = true }
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
                         }
                     },
                 )

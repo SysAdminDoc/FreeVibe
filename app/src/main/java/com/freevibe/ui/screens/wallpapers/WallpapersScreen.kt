@@ -59,7 +59,7 @@ fun WallpapersScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val downloads by viewModel.activeDownloads.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     var showColorPicker by remember { mutableStateOf(false) }
 

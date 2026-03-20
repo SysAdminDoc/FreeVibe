@@ -58,7 +58,14 @@ class WallpapersViewModel @Inject constructor(
     val activeDownloads = downloadManager.activeDownloads
 
     init {
-        loadWallpapers()
+        // Check for pending category query from CategoriesScreen
+        val categoryQuery = selectedContent.pendingCategoryQuery
+        if (categoryQuery != null) {
+            selectedContent.pendingCategoryQuery = null
+            search(categoryQuery)
+        } else {
+            loadWallpapers()
+        }
     }
 
     fun selectTab(tab: WallpaperTab) {

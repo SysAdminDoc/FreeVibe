@@ -117,6 +117,8 @@ fun SettingsScreen(
     var editingKey by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showIntervalPicker by remember { mutableStateOf(false) }
     var showSourcePicker by remember { mutableStateOf(false) }
+    var showClearCacheConfirm by remember { mutableStateOf(false) }
+    var showClearHistoryConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -174,7 +176,7 @@ fun SettingsScreen(
                     icon = Icons.Default.History,
                     title = "Wallpaper history",
                     subtitle = "${wallpaperHistory.size} recently applied",
-                    onClick = {},
+                    onClick = { showClearHistoryConfirm = true },
                 )
             }
         }
@@ -202,7 +204,7 @@ fun SettingsScreen(
                 icon = Icons.Default.Folder,
                 title = "Clear cache",
                 subtitle = "Free up disk space used by cached content",
-                onClick = { viewModel.clearCache() },
+                onClick = { showClearCacheConfirm = true },
             )
         }
 
@@ -211,7 +213,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v0.7.0 - Open source device personalization",
+                subtitle = "v0.8.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -264,6 +266,42 @@ fun SettingsScreen(
             onSelect = { source ->
                 viewModel.setAutoWpSource(source)
                 showSourcePicker = false
+            },
+        )
+    }
+
+    // Confirm clear cache
+    if (showClearCacheConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirm = false },
+            title = { Text("Clear cache?") },
+            text = { Text("This will remove all cached images and offline favorites. Downloaded files are not affected.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearCache()
+                    showClearCacheConfirm = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Confirm clear wallpaper history
+    if (showClearHistoryConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryConfirm = false },
+            title = { Text("Clear wallpaper history?") },
+            text = { Text("This will remove all records of previously applied wallpapers.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearWallpaperHistory()
+                    showClearHistoryConfirm = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryConfirm = false }) { Text("Cancel") }
             },
         )
     }
