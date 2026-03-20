@@ -9,6 +9,7 @@ import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.repository.FavoritesRepository
+import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.SoundRepository
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
@@ -66,12 +67,17 @@ class SoundsViewModel @Inject constructor(
     private val soundApplier: SoundApplier,
     private val downloadManager: DownloadManager,
     private val selectedContent: SelectedContentHolder,
+    private val searchHistoryRepo: SearchHistoryRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
     val state = _state.asStateFlow()
 
     val selectedSound = selectedContent.selectedSound
+
+    val recentSearches = searchHistoryRepo.getRecentSoundSearches(8)
+        .map { list -> list.map { it.query } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var exoPlayer: ExoPlayer? = null
 
@@ -106,7 +112,16 @@ class SoundsViewModel @Inject constructor(
                 hasMore = true,
             )
         }
+        viewModelScope.launch { searchHistoryRepo.addSoundSearch(query) }
         loadSounds()
+    }
+
+    fun removeSearch(query: String) {
+        viewModelScope.launch { searchHistoryRepo.removeSearch(query, "SOUND") }
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch { searchHistoryRepo.clearSoundHistory() }
     }
 
     fun setDurationFilter(filter: DurationFilter) {

@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v1.2.0** (versionCode 13)
+- **v1.3.0** (versionCode 14)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -33,21 +33,6 @@ Room DB (v3): favorites, downloads, search_history, wallpaper_cache,
               wallpaper_history, ia_audio_cache
 DataStore: Settings, Onboarding
 ```
-
-## Key Files
-- `FreeVibeApp.kt` - Application class, crash logging, cache eviction on startup
-- `FreeVibeRoot.kt` - NavHost with all routes, bottom nav, Hilt EntryPoint for SelectedContentHolder
-- `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services (incl. FreesoundApi), Room DB with migrations
-- `FreesoundApi.kt` - Freesound.org API v2 interface, search/similar endpoints, preview URLs
-- `SoundRepository.kt` - Dual-source sound search (Freesound + IA), duration/category filtering, tab-specific queries
-- `SoundsViewModel.kt` - Sound browsing, ExoPlayer playback, tabs (Trending/Ringtones/Notifications/Alarms/Search), 10 categories, duration filters, similar sounds
-- `SoundsScreen.kt` - Category chips, duration filter chips, source badges (FS/IA), mini waveform
-- `SoundDetailScreen.kt` - Preview, apply buttons, tags, "More Like This" similar sounds section
-- `SoundEditorScreen.kt` - Waveform trim, fade in/out sliders, local file picker (ActivityResultContracts.GetContent)
-- `AudioTrimmer.kt` - Lossless MediaMuxer trim + MP3 fade in/out post-processing
-- `WallpapersViewModel.kt` - Wallpaper state, tabs (Discover/Reddit/Wallhaven/Bing/Unsplash), color search
-- `SelectedContentHolder.kt` - Singleton state bridge between screens + pendingCategoryQuery
-- `WallpaperHistoryScreen.kt` - Browsable grid of previously applied wallpapers
 
 ## API Keys
 - `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
@@ -82,7 +67,28 @@ DataStore: Settings, Onboarding
 - WallpaperHistoryScreen.onWallpaperClick converts WallpaperHistoryEntity to Wallpaper domain model in FreeVibeRoot
 - ActionCircle composable has optional `label` param for accessibility contentDescription
 
+## Key Files
+- `FreeVibeApp.kt` - Application class, crash logging, cache eviction on startup
+- `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint for SelectedContentHolder
+- `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services (incl. FreesoundApi), Room DB with migrations
+- `FreesoundApi.kt` - Freesound.org API v2 interface, search/similar endpoints, preview URLs
+- `SoundRepository.kt` - Dual-source sound search (Freesound + IA), duration/category filtering, tab-specific queries
+- `SoundsViewModel.kt` - Sound browsing, ExoPlayer playback, tabs, 10 categories, duration filters, similar sounds, search history
+- `SoundsScreen.kt` - Category chips, duration filter chips, source badges (FS/IA), mini waveform, search history dropdown
+- `SoundDetailScreen.kt` - Preview, apply buttons, clickable tags, "More Like This" (all sources)
+- `SoundEditorScreen.kt` - Waveform trim, fade in/out sliders, local file picker
+- `AudioTrimmer.kt` - Lossless MediaMuxer trim + MP3 fade in/out post-processing
+- `WallpapersViewModel.kt` - Wallpaper state, tabs, color search, search history
+- `WallpapersScreen.kt` - Search with history dropdown, color picker with clear button
+- `WallpaperDetailScreen.kt` - SubcomposeAsyncImage loading/error states, action circles with a11y labels
+- `WallpaperCropScreen.kt` - Pinch-zoom crop with aspect ratio presets
+- `FavoritesScreen.kt` - Swipe-to-delete sounds, long-press delete wallpapers, undo snackbar
+- `SelectedContentHolder.kt` - Singleton state bridge between screens + pendingCategoryQuery
+- `WallpaperHistoryScreen.kt` - Browsable grid, tap to re-apply (navigates to detail)
+- `SearchHistoryDropdown.kt` - Reusable recent searches dropdown component
+
 ## Version History
+- v1.3.0: Search history wired up (save searches, dropdown with recent queries, delete/clear), aspect ratio presets in crop screen (Free/9:16/16:9/1:1), long-press delete wallpaper favorites with undo, fix deprecated OpenInNew icon
 - v1.2.0: Swipe-to-delete favorites with undo snackbar, wallpaper history tap-to-reapply navigation, hide skip on last onboarding page, improved empty states (contextual messages + action buttons), accessibility labels on wallpaper detail action buttons, download history type badges
 - v1.1.0: Animated nav transitions (fade+slide), "More Like This" for all sounds (not just Freesound), favorite toggle snackbar feedback, clickable sound tags (search on tap), color filter clear/reset button, cache size display in settings, wallpaper detail loading/error states (SubcomposeAsyncImage), version bump
 - v1.0.0: Freesound.org integration (600K+ sounds), dual-source sound search, duration-filtered IA queries, fixed broken trending tab, 10 sound categories, duration filter chips, "More Like This" similar sounds, fade in/out in audio trimmer, local file picker for custom ringtones, removed Wikimedia/NASA wallpaper sources, reordered wallpaper/sound tabs, source badges, tags display, scrollable sound detail

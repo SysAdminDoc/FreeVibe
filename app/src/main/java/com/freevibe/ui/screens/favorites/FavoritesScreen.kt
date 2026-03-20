@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -86,7 +87,7 @@ class FavoritesViewModel @Inject constructor(
     fun clearMessage() { _message.value = null }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun FavoritesScreen(
     onWallpaperClick: (FavoriteEntity) -> Unit,
@@ -174,10 +175,25 @@ fun FavoritesScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            viewModel.selectWallpaper(fav)
-                                            onWallpaperClick(fav)
-                                        },
+                                        .combinedClickable(
+                                            onClick = {
+                                                viewModel.selectWallpaper(fav)
+                                                onWallpaperClick(fav)
+                                            },
+                                            onLongClick = {
+                                                viewModel.removeFavorite(fav.id)
+                                                scope.launch {
+                                                    val result = snackbarHostState.showSnackbar(
+                                                        message = "Removed from favorites",
+                                                        actionLabel = "Undo",
+                                                        duration = SnackbarDuration.Short,
+                                                    )
+                                                    if (result == SnackbarResult.ActionPerformed) {
+                                                        viewModel.restoreFavorite(fav)
+                                                    }
+                                                }
+                                            },
+                                        ),
                                     shape = RoundedCornerShape(12.dp),
                                 ) {
                                     AsyncImage(

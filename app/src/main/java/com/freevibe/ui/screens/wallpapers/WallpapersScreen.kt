@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.ui.components.DownloadProgressBar
+import com.freevibe.ui.components.SearchHistoryDropdown
 import com.freevibe.ui.components.ShimmerWallpaperGrid
 import com.freevibe.ui.components.SourceBadge
 
@@ -60,9 +61,11 @@ fun WallpapersScreen(
     val state by viewModel.state.collectAsState()
     val downloads by viewModel.activeDownloads.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
+    val recentSearches by viewModel.recentSearches.collectAsState()
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     var showColorPicker by remember { mutableStateOf(false) }
+    var showSearchHistory by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -74,35 +77,55 @@ fun WallpapersScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Search wallpapers...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = ""; focusManager.clearFocus() }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search wallpapers...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    showSearchHistory = false
+                                    focusManager.clearFocus()
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
                             }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            viewModel.search(searchQuery)
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                viewModel.search(searchQuery)
+                                showSearchHistory = false
+                                focusManager.clearFocus()
+                            },
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.Transparent,
+                        ),
+                    )
+                    SearchHistoryDropdown(
+                        recentQueries = recentSearches,
+                        isVisible = showSearchHistory && searchQuery.isEmpty(),
+                        onQueryClick = { query ->
+                            searchQuery = query
+                            viewModel.search(query)
+                            showSearchHistory = false
                             focusManager.clearFocus()
                         },
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = Color.Transparent,
-                    ),
-                )
+                        onDeleteQuery = { viewModel.removeSearch(it) },
+                        onClearAll = { viewModel.clearSearchHistory() },
+                        modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
+                    )
+                }
 
                 // #9: Color filter button
                 IconButton(

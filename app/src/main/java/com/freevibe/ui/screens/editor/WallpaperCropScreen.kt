@@ -266,12 +266,13 @@ fun WallpaperCropScreen(
                 }
             }
 
-            // Zoom info
+            // Zoom info + aspect ratio presets
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     "Pinch to zoom, drag to position",
@@ -283,6 +284,39 @@ fun WallpaperCropScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
+
+            // Aspect ratio quick presets
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val presets = listOf("Free" to null, "9:16" to (9f / 16f), "16:9" to (16f / 9f), "1:1" to 1f)
+                presets.forEach { (label, ratio) ->
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            if (ratio != null && state.bitmap != null && viewportSize != IntSize.Zero) {
+                                val bmpRatio = state.bitmap!!.width.toFloat() / state.bitmap!!.height
+                                val targetScale = if (ratio < bmpRatio) {
+                                    viewportSize.height.toFloat() / (state.bitmap!!.height * (viewportSize.width.toFloat() / (state.bitmap!!.width)))
+                                } else 1f
+                                scale = targetScale.coerceIn(0.5f, 5f)
+                                offsetX = 0f
+                                offsetY = 0f
+                                viewModel.updateTransform(scale, offsetX, offsetY)
+                            } else {
+                                scale = 1f; offsetX = 0f; offsetY = 0f
+                                viewModel.resetTransform()
+                            }
+                        },
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.height(32.dp),
+                    )
+                }
             }
 
             // Apply buttons
