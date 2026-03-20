@@ -80,7 +80,7 @@ class WallpapersViewModel @Inject constructor(
     }
 
     fun selectTab(tab: WallpaperTab) {
-        if (tab == WallpaperTab.REDDIT) redditRepo.resetPagination()
+        redditRepo.resetPagination() // Always reset to avoid stale afterToken
         _state.update {
             it.copy(
                 selectedTab = tab,
