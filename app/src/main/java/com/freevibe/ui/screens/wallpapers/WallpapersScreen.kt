@@ -27,10 +27,15 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.ui.components.DownloadProgressBar
 import com.freevibe.ui.components.SearchHistoryDropdown
+import com.freevibe.ui.components.ShimmerBox
 import com.freevibe.ui.components.ShimmerWallpaperGrid
 import com.freevibe.ui.components.SourceBadge
 
@@ -282,6 +287,7 @@ fun WallpapersScreen(
                                     viewModel.selectWallpaper(wp)
                                     onWallpaperClick(wp)
                                 },
+                                onLongPress = { wp -> viewModel.toggleFavorite(wp) },
                                 onLoadMore = { viewModel.loadMore() },
                             )
                         }
@@ -340,12 +346,14 @@ private fun ColorPickerRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WallpaperGrid(
     wallpapers: List<Wallpaper>,
     isLoadingMore: Boolean,
     columns: Int = 2,
     onWallpaperClick: (Wallpaper) -> Unit,
+    onLongPress: ((Wallpaper) -> Unit)? = null,
     onLoadMore: () -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -373,6 +381,7 @@ private fun WallpaperGrid(
             WallpaperCard(
                 wallpaper = wallpaper,
                 onClick = { onWallpaperClick(wallpaper) },
+                onLongPress = onLongPress?.let { { it(wallpaper) } },
             )
         }
 
@@ -394,10 +403,12 @@ private fun WallpaperGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WallpaperCard(
     wallpaper: Wallpaper,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val aspectRatio = if (wallpaper.width > 0 && wallpaper.height > 0) {
         wallpaper.width.toFloat() / wallpaper.height.toFloat()
@@ -407,19 +418,40 @@ private fun WallpaperCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Box {
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = wallpaper.thumbnailUrl,
                 contentDescription = "Wallpaper",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(aspectRatio.coerceIn(0.5f, 1.0f)),
-            )
+            ) {
+                when (painter.state) {
+                    is AsyncImagePainter.State.Loading -> {
+                        ShimmerBox(
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(0.dp),
+                        )
+                    }
+                    is AsyncImagePainter.State.Error -> {
+                        Box(
+                            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.BrokenImage, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    else -> SubcomposeAsyncImageContent()
+                }
+            }
 
             // Bottom gradient with info
             Box(

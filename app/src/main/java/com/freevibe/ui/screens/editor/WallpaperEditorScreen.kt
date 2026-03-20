@@ -231,6 +231,16 @@ fun WallpaperEditorScreen(
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearError() }
     }
 
+    data class EditorPreset(val name: String, val brightness: Float, val contrast: Float, val saturation: Float, val blur: Float)
+    val presets = listOf(
+        EditorPreset("Warm", 15f, 1.1f, 1.3f, 0f),
+        EditorPreset("Cool", -10f, 1.1f, 0.8f, 0f),
+        EditorPreset("Vivid", 5f, 1.3f, 1.6f, 0f),
+        EditorPreset("Cinematic", -5f, 1.4f, 0.7f, 0f),
+        EditorPreset("Dreamy", 20f, 0.9f, 1.1f, 8f),
+        EditorPreset("B&W", 0f, 1.2f, 0f, 0f),
+    )
+
     val filters = listOf(
         FilterControl("Brightness", Icons.Default.BrightnessHigh, state.brightness, -100f..100f) {
             viewModel.updateBrightness(it)
@@ -316,9 +326,31 @@ fun WallpaperEditorScreen(
                 }
             }
 
+            // Preset chips
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(presets) { preset ->
+                    SuggestionChip(
+                        onClick = {
+                            viewModel.updateBrightness(preset.brightness)
+                            viewModel.updateContrast(preset.contrast)
+                            viewModel.updateSaturation(preset.saturation)
+                            viewModel.updateBlur(preset.blur)
+                        },
+                        label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                    )
+                }
+            }
+
             // Filter selector
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(filters) { filter ->

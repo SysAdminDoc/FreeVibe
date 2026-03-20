@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v1.8.0** (versionCode 19)
+- **v1.9.0** (versionCode 20)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -88,6 +88,7 @@ DataStore: Settings, Onboarding
 - `SearchHistoryDropdown.kt` - Reusable recent searches dropdown component
 
 ## Version History
+- v1.9.0: Per-card shimmer loading placeholders in wallpaper grid (SubcomposeAsyncImage), long-press to favorite from grid, editor preset filters (Warm/Cool/Vivid/Cinematic/Dreamy/B&W), staggered category card entrance animations, favorites sorting (Recent/Name/Oldest), fix Reddit pagination (reset afterToken on all tab switches)
 - v1.8.0: Rewrote SoundRepository — targets curated IA collections (freesound, opensource_audio, sound_effects) instead of general search, excludes podcasts/radio/spoken word, semaphore-limited concurrent metadata fetches (max 5), 8s timeout per fetch, fetches 30 items to compensate for duration-filtered rejects. Vertical pager on wallpaper detail screen for swipe up/down between wallpapers with auto-load-more.
 - v1.7.0: Bug audit & fixes — MediaPlayer try-catch in sound editor playback loop, cursor index bounds check in ContactRingtoneService, path-based MIME detection in DownloadManager, fade slider min range guard, DualWallpaperService cropHeight bounds protection, BatchDownloadService try-finally count tracking, OOM protection in wallpaper editor bitmap creation
 - v1.6.0: Wired 3 hidden preferences (sound preview volume slider, Reddit subreddits editor dialog with quick-add chips, resolution preference picker with FHD/QHD/4K), bottom nav favorites badge (BadgedBox with count), Wallhaven views/favorites metadata on detail screen, resolution filter wired to Wallhaven API (atleast parameter), preview volume applied to ExoPlayer playback

@@ -1,11 +1,13 @@
 package com.freevibe.ui.screens.categories
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -70,8 +73,22 @@ fun CategoriesScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            items(categories, key = { it.id }) { cat ->
-                CategoryCard(category = cat, onClick = { onCategoryClick(cat.query) })
+            itemsIndexed(categories, key = { _, cat -> cat.id }) { index, cat ->
+                val animatable = remember { Animatable(0f) }
+                LaunchedEffect(Unit) {
+                    animatable.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = 350, delayMillis = index * 40),
+                    )
+                }
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        alpha = animatable.value
+                        translationY = (1f - animatable.value) * 40f
+                    },
+                ) {
+                    CategoryCard(category = cat, onClick = { onCategoryClick(cat.query) })
+                }
             }
         }
     }
