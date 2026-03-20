@@ -41,13 +41,17 @@ class BatchDownloadService @Inject constructor(
                     try {
                         _state.update { it.copy(currentItem = wp.id) }
                         val ext = wp.fileType.substringAfterLast("/", "jpg").substringAfterLast(".", "jpg")
-                        downloadManager.downloadWallpaper(
-                            id = "batch_${wp.id}",
-                            url = wp.fullUrl,
-                            fileName = "FreeVibe_${wp.id}.$ext",
-                        ).onSuccess {
-                            _state.update { it.copy(completedCount = it.completedCount + 1) }
-                        }.onFailure {
+                        try {
+                            downloadManager.downloadWallpaper(
+                                id = "batch_${wp.id}",
+                                url = wp.fullUrl,
+                                fileName = "FreeVibe_${wp.id}.$ext",
+                            ).onSuccess {
+                                _state.update { it.copy(completedCount = it.completedCount + 1) }
+                            }.onFailure {
+                                _state.update { it.copy(failedCount = it.failedCount + 1) }
+                            }
+                        } catch (_: Exception) {
                             _state.update { it.copy(failedCount = it.failedCount + 1) }
                         }
                     } finally {

@@ -154,7 +154,13 @@ class WallpaperEditorViewModel @Inject constructor(
         contrast: Float,
         saturation: Float,
     ): Bitmap {
-        val result = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val result = try {
+            Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        } catch (_: OutOfMemoryError) {
+            // Fallback: scale down for large images
+            val scale = 0.5f
+            Bitmap.createBitmap((src.width * scale).toInt(), (src.height * scale).toInt(), Bitmap.Config.ARGB_8888)
+        }
         val canvas = Canvas(result)
         val paint = Paint()
 
