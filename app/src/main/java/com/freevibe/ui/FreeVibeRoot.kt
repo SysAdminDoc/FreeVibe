@@ -25,6 +25,7 @@ import com.freevibe.ui.screens.favorites.FavoritesScreen
 import com.freevibe.ui.screens.licenses.LicensesScreen
 import com.freevibe.ui.screens.onboarding.OnboardingScreen
 import com.freevibe.ui.screens.settings.SettingsScreen
+import com.freevibe.ui.screens.settings.WallpaperHistoryScreen
 import com.freevibe.ui.screens.sounds.ContactPickerScreen
 import com.freevibe.ui.screens.sounds.SoundDetailScreen
 import com.freevibe.ui.screens.sounds.SoundsScreen
@@ -152,6 +153,7 @@ fun FreeVibeRoot() {
                     onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
                     onLicensesClick = { navController.navigate(Screen.Licenses.route) },
                     onCategoriesClick = { navController.navigate(Screen.Categories.route) },
+                    onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) },
                 )
             }
 
@@ -214,6 +216,11 @@ fun FreeVibeRoot() {
             // ── Licenses ──────────────────────────────────────────
             composable(Screen.Licenses.route) {
                 LicensesScreen(onBack = { navController.popBackStack() })
+            }
+
+            // ── Wallpaper History ────────────────────────────────
+            composable(Screen.WallpaperHistory.route) {
+                WallpaperHistoryScreen(onBack = { navController.popBackStack() })
             }
         }
     }

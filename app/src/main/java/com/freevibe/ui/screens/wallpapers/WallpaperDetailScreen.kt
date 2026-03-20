@@ -1,5 +1,6 @@
 package com.freevibe.ui.screens.wallpapers
 
+import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.ui.components.SourceBadge
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +46,7 @@ fun WallpaperDetailScreen(
     var showApplyOptions by remember { mutableStateOf(false) }
     var showPhonePreview by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.applySuccess) {
         state.applySuccess?.let {
@@ -189,6 +195,16 @@ fun WallpaperDetailScreen(
                         tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White,
                         onClick = { viewModel.toggleFavorite(wp) },
                     )
+                    // #1/#8: Share wallpaper (source page URL or image URL)
+                    ActionCircle(icon = Icons.Default.Share, onClick = {
+                        val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareUrl)
+                            putExtra(Intent.EXTRA_SUBJECT, "Check out this wallpaper")
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
+                    })
                     ActionCircle(icon = Icons.Default.Edit, onClick = onEdit)
                     ActionCircle(icon = Icons.Default.Crop, onClick = onCrop)
 
@@ -232,11 +248,15 @@ fun WallpaperDetailScreen(
     }
 }
 
-// #1: Phone frame preview composable
+// #1: Phone frame preview composable — #4: uses real device time
 @Composable
 private fun PhoneFramePreview(
     imageUrl: String,
 ) {
+    val now = remember { Date() }
+    val timeStr = remember { SimpleDateFormat("h:mm", Locale.getDefault()).format(now) }
+    val dateStr = remember { SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(now) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -270,7 +290,7 @@ private fun PhoneFramePreview(
                     .padding(horizontal = 22.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("12:00", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(timeStr, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Icon(Icons.Default.SignalCellularAlt, null, Modifier.size(12.dp), tint = Color.White)
                     Icon(Icons.Default.Wifi, null, Modifier.size(12.dp), tint = Color.White)
@@ -286,14 +306,14 @@ private fun PhoneFramePreview(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    "12:00",
+                    timeStr,
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Light,
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    "Saturday, Feb 21",
+                    dateStr,
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                 )

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.Sound
+import com.freevibe.ui.components.ShimmerSoundList
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,10 +104,7 @@ fun SoundsScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    ShimmerSoundList(Modifier.fillMaxSize())
                 }
                 state.error != null -> {
                     // #5: Error with retry

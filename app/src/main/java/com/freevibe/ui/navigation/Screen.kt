@@ -119,6 +119,14 @@ sealed class Screen(
         selectedIcon = Icons.Filled.Description,
     )
 
+    // ── Wallpaper History ───────────────────────────────────────
+    data object WallpaperHistory : Screen(
+        route = "wallpaper_history",
+        title = "Wallpaper History",
+        icon = Icons.Filled.History,
+        selectedIcon = Icons.Filled.History,
+    )
+
     companion object {
         val bottomNavItems = listOf(Wallpapers, Sounds, Favorites, Settings)
     }

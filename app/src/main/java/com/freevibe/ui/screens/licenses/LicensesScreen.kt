@@ -1,5 +1,7 @@
 package com.freevibe.ui.screens.licenses
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +12,7 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 data class OssLicense(
@@ -93,7 +96,11 @@ fun LicensesScreen(onBack: () -> Unit) {
 
 @Composable
 private fun LicenseCard(lic: OssLicense) {
+    val context = LocalContext.current
     Surface(
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(lic.url)))
+        },
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(12.dp),
     ) {
