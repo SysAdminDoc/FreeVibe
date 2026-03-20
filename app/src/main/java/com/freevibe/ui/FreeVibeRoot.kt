@@ -41,16 +41,18 @@ private const val ONBOARDING_DONE = "onboarding_complete"
 @InstallIn(SingletonComponent::class)
 interface SelectedContentEntryPoint {
     fun selectedContentHolder(): SelectedContentHolder
+    fun favoritesRepository(): com.freevibe.data.repository.FavoritesRepository
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FreeVibeRoot() {
     val context = LocalContext.current
-    val selectedContent = remember {
+    val entryPoint = remember {
         EntryPointAccessors.fromApplication(context, SelectedContentEntryPoint::class.java)
-            .selectedContentHolder()
     }
+    val selectedContent = remember { entryPoint.selectedContentHolder() }
+    val favoritesCount by remember { entryPoint.favoritesRepository().count() }.collectAsState(initial = 0)
     val prefs = remember { context.getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE) }
     val onboardingDone = remember { prefs.getBoolean(ONBOARDING_DONE, false) }
 
@@ -89,10 +91,21 @@ fun FreeVibeRoot() {
                                 }
                             },
                             icon = {
-                                Icon(
-                                    imageVector = if (selected) screen.selectedIcon else screen.icon,
-                                    contentDescription = screen.title,
-                                )
+                                if (screen == Screen.Favorites && favoritesCount > 0) {
+                                    BadgedBox(badge = {
+                                        Badge { Text("$favoritesCount") }
+                                    }) {
+                                        Icon(
+                                            imageVector = if (selected) screen.selectedIcon else screen.icon,
+                                            contentDescription = screen.title,
+                                        )
+                                    }
+                                } else {
+                                    Icon(
+                                        imageVector = if (selected) screen.selectedIcon else screen.icon,
+                                        contentDescription = screen.title,
+                                    )
+                                }
                             },
                             label = { Text(screen.title) },
                             colors = NavigationBarItemDefaults.colors(

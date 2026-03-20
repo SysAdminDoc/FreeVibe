@@ -28,6 +28,8 @@ fun WallhavenWallpaper.toWallpaper() = Wallpaper(
     fileSize = fileSize,
     fileType = fileType,
     sourcePageUrl = url,
+    views = views,
+    favorites = favorites,
 )
 
 // -- Picsum -> Wallpaper --

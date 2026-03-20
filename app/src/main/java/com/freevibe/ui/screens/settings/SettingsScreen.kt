@@ -50,6 +50,9 @@ class SettingsViewModel @Inject constructor(
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
     val showNsfw = prefs.showNsfwContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
+    val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,Amoledbackgrounds,MobileWallpaper")
+    val preferredRes = prefs.preferredResolution.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     // #11: Wallpaper history
     val wallpaperHistory = historyManager.getRecent(20).stateIn(
@@ -97,6 +100,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setShowNsfw(show: Boolean) = viewModelScope.launch {
         prefs.setShowNsfw(show)
+    }
+
+    fun setPreviewVolume(volume: Float) = viewModelScope.launch {
+        prefs.setPreviewVolume(volume)
+    }
+
+    fun setRedditSubs(subs: String) = viewModelScope.launch {
+        prefs.setRedditSubreddits(subs)
+    }
+
+    fun setPreferredRes(res: String) = viewModelScope.launch {
+        prefs.setPreferredResolution(res)
     }
 
     fun setVideoWallpaperPath(uri: Uri) {
@@ -153,6 +168,9 @@ fun SettingsScreen(
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
     val showNsfw by viewModel.showNsfw.collectAsState()
+    val previewVolume by viewModel.previewVolume.collectAsState()
+    val redditSubs by viewModel.redditSubs.collectAsState()
+    val preferredRes by viewModel.preferredRes.collectAsState()
 
     // Video wallpaper picker
     val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -177,6 +195,8 @@ fun SettingsScreen(
     var showSourcePicker by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var showColumnsPicker by remember { mutableStateOf(false) }
+    var showRedditEditor by remember { mutableStateOf(false) }
+    var showResPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -245,6 +265,18 @@ fun SettingsScreen(
                 onClick = { videoPickerLauncher.launch("video/*") },
             )
             SettingsItem(
+                icon = Icons.Default.PhotoSizeSelectLarge,
+                title = "Preferred resolution",
+                subtitle = if (preferredRes.isEmpty()) "Any resolution" else preferredRes,
+                onClick = { showResPicker = true },
+            )
+            SettingsItem(
+                icon = Icons.Default.Forum,
+                title = "Reddit subreddits",
+                subtitle = "${redditSubs.split(",").size} subreddits",
+                onClick = { showRedditEditor = true },
+            )
+            SettingsItem(
                 icon = Icons.Default.Category,
                 title = "Browse categories",
                 subtitle = "Nature, Space, Anime, Dark, Neon + 12 more",
@@ -270,6 +302,32 @@ fun SettingsScreen(
                 checked = autoPreview,
                 onCheckedChange = { viewModel.setAutoPreview(it) },
             )
+            // Preview volume slider
+            Surface(color = MaterialTheme.colorScheme.surface) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Icon(Icons.Default.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Preview volume", style = MaterialTheme.typography.bodyLarge)
+                        Slider(
+                            value = previewVolume,
+                            onValueChange = { viewModel.setPreviewVolume(it) },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.height(24.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
+                    Text("${(previewVolume * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
 
         // Storage
@@ -293,7 +351,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.5.0 - Open source device personalization",
+                subtitle = "v1.6.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -381,6 +439,83 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showColumnsPicker = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Resolution picker
+    if (showResPicker) {
+        AlertDialog(
+            onDismissRequest = { showResPicker = false },
+            title = { Text("Preferred resolution") },
+            text = {
+                Column {
+                    listOf("" to "Any resolution", "1920x1080" to "1920x1080 (FHD)", "2560x1440" to "2560x1440 (QHD)", "3840x2160" to "3840x2160 (4K)").forEach { (res, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = preferredRes == res,
+                                onClick = {
+                                    viewModel.setPreferredRes(res)
+                                    showResPicker = false
+                                },
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showResPicker = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Reddit subreddits editor
+    if (showRedditEditor) {
+        var subsText by remember { mutableStateOf(redditSubs) }
+        AlertDialog(
+            onDismissRequest = { showRedditEditor = false },
+            title = { Text("Reddit subreddits") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Comma-separated subreddit names (without r/)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = subsText,
+                        onValueChange = { subsText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("wallpapers,Amoledbackgrounds,...") },
+                        singleLine = false,
+                        maxLines = 3,
+                    )
+                    // Quick add chips
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("EarthPorn", "spaceporn", "CityPorn").forEach { sub ->
+                            if (!subsText.contains(sub, ignoreCase = true)) {
+                                SuggestionChip(
+                                    onClick = { subsText = if (subsText.isBlank()) sub else "$subsText,$sub" },
+                                    label = { Text(sub, style = MaterialTheme.typography.labelSmall) },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setRedditSubs(subsText.trim())
+                    showRedditEditor = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRedditEditor = false }) { Text("Cancel") }
             },
         )
     }

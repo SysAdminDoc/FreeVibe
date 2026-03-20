@@ -163,12 +163,29 @@ fun WallpaperDetailScreen(
                             color = Color.Black.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(8.dp),
                         ) {
-                            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Row(
+                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
                                 Text("${wp.width}x${wp.height}", color = Color.White, style = MaterialTheme.typography.labelSmall)
                                 if (wp.fileSize > 0) {
                                     Text(
-                                        " ${formatFileSize(wp.fileSize)}",
+                                        formatFileSize(wp.fileSize),
                                         color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                if (wp.views > 0) {
+                                    Text(
+                                        "${formatCount(wp.views)} views",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                if (wp.favorites > 0) {
+                                    Text(
+                                        "${formatCount(wp.favorites)} faves",
+                                        color = Color.White.copy(alpha = 0.6f),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
@@ -513,6 +530,12 @@ private fun ApplyOption(
             Text(title, style = MaterialTheme.typography.bodyLarge)
         }
     }
+}
+
+private fun formatCount(count: Int): String = when {
+    count >= 1_000_000 -> "%.1fM".format(count / 1_000_000.0)
+    count >= 1_000 -> "%.1fK".format(count / 1_000.0)
+    else -> "$count"
 }
 
 private fun formatFileSize(bytes: Long): String {
