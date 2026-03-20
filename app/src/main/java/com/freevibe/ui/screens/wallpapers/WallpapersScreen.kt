@@ -22,11 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import coil.compose.AsyncImagePainter
@@ -288,6 +291,7 @@ fun WallpapersScreen(
                                     onWallpaperClick(wp)
                                 },
                                 onLongPress = { wp -> viewModel.toggleFavorite(wp) },
+                                isFavoriteCheck = { id -> viewModel.isFavorite(id) },
                                 onLoadMore = { viewModel.loadMore() },
                             )
                         }
@@ -354,6 +358,7 @@ private fun WallpaperGrid(
     columns: Int = 2,
     onWallpaperClick: (Wallpaper) -> Unit,
     onLongPress: ((Wallpaper) -> Unit)? = null,
+    isFavoriteCheck: ((String) -> kotlinx.coroutines.flow.Flow<Boolean>)? = null,
     onLoadMore: () -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -378,9 +383,13 @@ private fun WallpaperGrid(
         verticalItemSpacing = 8.dp,
     ) {
         items(wallpapers, key = { it.id }) { wallpaper ->
+            val isFav by isFavoriteCheck?.invoke(wallpaper.id)?.collectAsState(initial = false)
+                ?: remember { mutableStateOf(false) }
             WallpaperCard(
                 wallpaper = wallpaper,
+                isFavorite = isFav,
                 onClick = { onWallpaperClick(wallpaper) },
+                onFavoriteClick = onLongPress?.let { { it(wallpaper) } },
                 onLongPress = onLongPress?.let { { it(wallpaper) } },
             )
         }
@@ -407,7 +416,9 @@ private fun WallpaperGrid(
 @Composable
 private fun WallpaperCard(
     wallpaper: Wallpaper,
+    isFavorite: Boolean = false,
     onClick: () -> Unit,
+    onFavoriteClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
 ) {
     val aspectRatio = if (wallpaper.width > 0 && wallpaper.height > 0) {
@@ -478,6 +489,31 @@ private fun WallpaperCard(
                             color = Color.White.copy(alpha = 0.8f),
                         )
                     }
+                }
+            }
+
+            // Favorite heart overlay (top-right)
+            if (onFavoriteClick != null) {
+                val heartScale by animateFloatAsState(
+                    targetValue = if (isFavorite) 1.2f else 1f,
+                    animationSpec = spring(dampingRatio = 0.4f, stiffness = 600f),
+                    label = "heart",
+                )
+                IconButton(
+                    onClick = onFavoriteClick,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(36.dp)
+                        .padding(4.dp),
+                ) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove favorite" else "Add favorite",
+                        tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .graphicsLayer { scaleX = heartScale; scaleY = heartScale },
+                    )
                 }
             }
         }
