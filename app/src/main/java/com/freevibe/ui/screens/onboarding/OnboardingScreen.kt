@@ -176,8 +176,8 @@ private fun FeaturesPage() {
         Text("What you get", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(32.dp))
 
-        FeatureRow(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing, Wikimedia, Reddit, NASA")
-        FeatureRow(Icons.Default.MusicNote, "Ringtones & Sounds", "Millions of audio clips from Internet Archive")
+        FeatureRow(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing & Reddit")
+        FeatureRow(Icons.Default.MusicNote, "Ringtones & Sounds", "600K+ sounds from Freesound + Internet Archive")
         FeatureRow(Icons.Default.Edit, "Built-in Editors", "Crop, adjust, trim before applying")
         FeatureRow(Icons.Default.Widgets, "Home Widget", "Quick shuffle from your home screen")
         FeatureRow(Icons.Default.DarkMode, "OLED Dark Theme", "Deep blacks, zero burn-in")

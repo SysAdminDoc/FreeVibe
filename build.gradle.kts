@@ -1,4 +1,4 @@
-// FreeVibe v0.9.0 - Open Source Device Personalization
+// FreeVibe v1.0.0 - Open Source Device Personalization
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
