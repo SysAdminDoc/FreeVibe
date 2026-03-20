@@ -370,43 +370,19 @@ private fun SoundCard(
                     }
                 }
 
-                // Source + license badges
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    // Source badge
-                    val sourceLabel = when (sound.source.name) {
-                        "FREESOUND" -> "FS"
-                        "INTERNET_ARCHIVE" -> "IA"
-                        else -> sound.source.name.take(2)
-                    }
-                    val sourceColor = when (sound.source.name) {
-                        "FREESOUND" -> Color(0xFF3DB2CE)
-                        "INTERNET_ARCHIVE" -> Color(0xFFFF8C00)
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                // License badge
+                if (sound.license.contains("CC0", ignoreCase = true) ||
+                    sound.license.contains("Public Domain", ignoreCase = true)) {
                     Surface(
-                        color = sourceColor.copy(alpha = 0.15f),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp),
                     ) {
                         Text(
-                            sourceLabel,
+                            if (sound.license.contains("CC0", ignoreCase = true)) "CC0" else "PD",
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = sourceColor,
+                            color = MaterialTheme.colorScheme.secondary,
                         )
-                    }
-
-                    if (sound.license.contains("CC0", ignoreCase = true)) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(4.dp),
-                        ) {
-                            Text(
-                                "CC0",
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                            )
-                        }
                     }
                 }
 

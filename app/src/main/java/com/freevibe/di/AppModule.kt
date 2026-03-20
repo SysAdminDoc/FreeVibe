@@ -12,7 +12,7 @@ import com.freevibe.data.local.SearchHistoryDao
 import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
-import com.freevibe.data.remote.freesound.FreesoundApi
+// Freesound removed — no API key required
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
 import com.freevibe.data.remote.nasa.NasaApodApi
 import com.freevibe.data.remote.picsum.PicsumApi
@@ -124,16 +124,6 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(WikimediaApi::class.java)
-
-    @Provides
-    @Singleton
-    fun provideFreesoundApi(client: OkHttpClient, moshi: Moshi): FreesoundApi =
-        Retrofit.Builder()
-            .baseUrl(FreesoundApi.BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(FreesoundApi::class.java)
 
     @Provides
     @Singleton

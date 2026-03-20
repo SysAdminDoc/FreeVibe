@@ -46,7 +46,6 @@ private val contentSources = listOf(
     OssLicense("Bing Image of the Day", "https://www.bing.com", "Wallpaper use", "Daily curated photos"),
     OssLicense("Reddit", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper subreddits"),
     OssLicense("Internet Archive", "https://archive.org/", "Various CC / Public Domain", "Audio search & download"),
-    OssLicense("Freesound", "https://freesound.org/", "CC0 / CC-BY / CC-BY-NC", "600K+ tagged sound effects"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
