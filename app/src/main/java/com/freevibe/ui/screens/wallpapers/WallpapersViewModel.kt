@@ -2,6 +2,7 @@ package com.freevibe.ui.screens.wallpapers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
@@ -48,6 +49,7 @@ class WallpapersViewModel @Inject constructor(
     private val selectedContent: SelectedContentHolder,
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
+    prefs: PreferencesManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
@@ -56,6 +58,9 @@ class WallpapersViewModel @Inject constructor(
     val selectedWallpaper = selectedContent.selectedWallpaper
 
     val activeDownloads = downloadManager.activeDownloads
+
+    // #9: Grid columns preference
+    val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
 
     init {
         // Check for pending category query from CategoriesScreen
