@@ -1,6 +1,8 @@
 package com.freevibe.ui.screens.onboarding
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -16,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -168,6 +171,15 @@ private fun WelcomePage() {
 
 @Composable
 private fun FeaturesPage() {
+    val features = listOf(
+        Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing & Reddit"),
+        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "Thousands of sounds from Internet Archive"),
+        Triple(Icons.Default.Edit, "Built-in Editors", "Crop, adjust, trim with presets & fade effects"),
+        Triple(Icons.Default.Widgets, "Home Widget", "Quick shuffle from your home screen"),
+        Triple(Icons.Default.DarkMode, "OLED Dark Theme", "Deep blacks, zero burn-in"),
+        Triple(Icons.Default.Download, "Offline Ready", "Download and save your favorites"),
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -178,12 +190,20 @@ private fun FeaturesPage() {
         Text("What you get", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(32.dp))
 
-        FeatureRow(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing & Reddit")
-        FeatureRow(Icons.Default.MusicNote, "Ringtones & Sounds", "600K+ sounds from Freesound + Internet Archive")
-        FeatureRow(Icons.Default.Edit, "Built-in Editors", "Crop, adjust, trim before applying")
-        FeatureRow(Icons.Default.Widgets, "Home Widget", "Quick shuffle from your home screen")
-        FeatureRow(Icons.Default.DarkMode, "OLED Dark Theme", "Deep blacks, zero burn-in")
-        FeatureRow(Icons.Default.Download, "Offline Ready", "Download and save your favorites")
+        features.forEachIndexed { index, (icon, title, subtitle) ->
+            val anim = remember { Animatable(0f) }
+            LaunchedEffect(Unit) {
+                anim.animateTo(1f, animationSpec = tween(400, delayMillis = index * 80))
+            }
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    alpha = anim.value
+                    translationX = (1f - anim.value) * -60f
+                },
+            ) {
+                FeatureRow(icon, title, subtitle)
+            }
+        }
     }
 }
 
