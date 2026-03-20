@@ -2,6 +2,8 @@ package com.freevibe.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.local.FavoriteDao
 import com.freevibe.data.local.FreeVibeDatabase
@@ -48,7 +50,7 @@ object AppModule {
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "FreeVibe/0.7.0 (Android; Open Source)")
+                .header("User-Agent", "FreeVibe/0.8.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -134,12 +136,28 @@ object AppModule {
 
     // -- Database --
 
+    // Migrations preserve user data (favorites, downloads, history) across schema changes.
+    // v1→2: Added wallpaper_cache + wallpaper_history tables
+    // v2→3: Added ia_audio_cache table
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_cache` (`id` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `category` TEXT NOT NULL DEFAULT '', `tags` TEXT NOT NULL DEFAULT '', `fileSize` INTEGER NOT NULL DEFAULT 0, `fileType` TEXT NOT NULL DEFAULT '', `uploaderName` TEXT NOT NULL DEFAULT '', `cacheKey` TEXT NOT NULL DEFAULT '', `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_history` (`historyId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `wallpaperId` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `target` TEXT NOT NULL DEFAULT 'BOTH', `appliedAt` INTEGER NOT NULL DEFAULT 0)")
+        }
+    }
+
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `ia_audio_cache` (`identifier` TEXT NOT NULL, `audioUrl` TEXT NOT NULL, `duration` REAL NOT NULL DEFAULT 0.0, `fileSize` INTEGER NOT NULL DEFAULT 0, `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`identifier`))")
+        }
+    }
+
     @Provides
     @Singleton
-    @Suppress("DEPRECATION")
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
     @Provides
