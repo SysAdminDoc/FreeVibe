@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,8 +44,25 @@ fun WallpaperDetailScreen(
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val wallpapers = state.wallpapers
     val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val wp = wallpaper ?: return
+
+    // Vertical pager for swiping between wallpapers
+    val initialIndex = remember(wp.id) {
+        wallpapers.indexOfFirst { it.id == wp.id }.coerceAtLeast(0)
+    }
+    val pagerState = rememberPagerState(initialPage = initialIndex) { wallpapers.size.coerceAtLeast(1) }
+
+    // Update selected wallpaper when page changes
+    LaunchedEffect(pagerState.settledPage) {
+        wallpapers.getOrNull(pagerState.settledPage)?.let { viewModel.selectWallpaper(it) }
+    }
+    // Load more when near end
+    LaunchedEffect(pagerState.settledPage) {
+        if (pagerState.settledPage >= wallpapers.size - 3) viewModel.loadMore()
+    }
+
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     var showApplyOptions by remember { mutableStateOf(false) }
     var showPhonePreview by remember { mutableStateOf(false) }
@@ -64,14 +83,41 @@ fun WallpaperDetailScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (showPhonePreview) {
-                // #1: Phone frame preview
-                PhoneFramePreview(
-                    imageUrl = wp.fullUrl,
-                )
-            } else {
-                // Full-screen wallpaper preview with loading/error states
-                var imageError by remember { mutableStateOf(false) }
+            // Swipeable wallpaper preview (vertical pager)
+            if (wallpapers.size > 1) {
+                VerticalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    val pageUrl = wallpapers.getOrNull(page)?.fullUrl ?: wp.fullUrl
+                    SubcomposeAsyncImage(
+                        model = pageUrl,
+                        contentDescription = "Wallpaper preview",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        when (painter.state) {
+                            is AsyncImagePainter.State.Loading -> {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(Modifier.size(40.dp), color = Color.White, strokeWidth = 3.dp)
+                                }
+                            }
+                            is AsyncImagePainter.State.Error -> {
+                                Box(
+                                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(Icons.Default.BrokenImage, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            else -> SubcomposeAsyncImageContent()
+                        }
+                    }
+                }
+            } else if (showPhonePreview) {
+                PhoneFramePreview(imageUrl = wp.fullUrl)
+            } else if (wallpapers.size <= 1) {
+                // Single wallpaper (e.g. from favorites/history) — no pager
                 SubcomposeAsyncImage(
                     model = wp.fullUrl,
                     contentDescription = "Wallpaper preview",
@@ -81,32 +127,15 @@ fun WallpaperDetailScreen(
                     when (painter.state) {
                         is AsyncImagePainter.State.Loading -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(40.dp),
-                                    color = Color.White,
-                                    strokeWidth = 3.dp,
-                                )
+                                CircularProgressIndicator(Modifier.size(40.dp), color = Color.White, strokeWidth = 3.dp)
                             }
                         }
                         is AsyncImagePainter.State.Error -> {
-                            imageError = true
                             Box(
                                 Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.BrokenImage,
-                                        null,
-                                        Modifier.size(64.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(
-                                        "Failed to load image",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                                Icon(Icons.Default.BrokenImage, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         else -> SubcomposeAsyncImageContent()
