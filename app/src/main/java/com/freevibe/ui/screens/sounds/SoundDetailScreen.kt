@@ -1,6 +1,8 @@
 package com.freevibe.ui.screens.sounds
 
 import android.content.Intent
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,7 +19,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,6 +130,18 @@ fun SoundDetailScreen(
                         modifier = Modifier.size(56.dp),
                     )
                 }
+            }
+
+            // Waveform visualization
+            if (s.duration > 0) {
+                DetailWaveform(
+                    duration = s.duration,
+                    isPlaying = state.playingId == s.id,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
             }
 
             // Sound name
@@ -502,6 +518,58 @@ private fun ApplyButton(
             Icon(icon, null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(text, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun DetailWaveform(
+    duration: Double,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val barColor = if (isPlaying) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+    val activeColor = MaterialTheme.colorScheme.primary
+
+    val barCount = 60
+    val heights = remember(duration) {
+        val seed = (duration * 1000).toInt()
+        List(barCount) { i ->
+            val angle = (seed + i * 37) % 360
+            (0.15f + 0.85f * ((kotlin.math.sin(angle * 0.0174533) + 1f) / 2f).toFloat())
+        }
+    }
+
+    val progress = if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition(label = "detail_wave")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = (duration * 1000).toInt().coerceIn(2000, 30000),
+                    easing = LinearEasing,
+                ),
+            ),
+            label = "wave_progress",
+        ).value
+    } else 0f
+
+    Canvas(modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainer)) {
+        val barWidth = size.width / barCount
+        val gap = 1.5f
+        heights.forEachIndexed { i, height ->
+            val x = i * barWidth + barWidth / 2
+            val barH = size.height * height * 0.85f
+            val isActive = isPlaying && (i.toFloat() / barCount) < progress
+            drawLine(
+                color = if (isActive) activeColor else barColor,
+                start = Offset(x, size.height / 2 - barH / 2),
+                end = Offset(x, size.height / 2 + barH / 2),
+                strokeWidth = (barWidth - gap).coerceAtLeast(1f),
+                cap = StrokeCap.Round,
+            )
         }
     }
 }

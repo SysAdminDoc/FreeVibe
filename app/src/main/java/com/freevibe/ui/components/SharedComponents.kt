@@ -89,8 +89,14 @@ private fun DownloadItem(
                             color = MaterialTheme.colorScheme.error,
                         )
                     } else if (!download.isComplete) {
+                        val pct = (download.progress * 100).toInt()
+                        val sizeText = if (download.totalBytes > 0) {
+                            "${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)} ($pct%)"
+                        } else {
+                            "${formatBytes(download.downloadedBytes)} ($pct%)"
+                        }
                         Text(
-                            "${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}",
+                            sizeText,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

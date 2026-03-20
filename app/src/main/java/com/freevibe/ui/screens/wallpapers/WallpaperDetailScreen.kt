@@ -483,7 +483,8 @@ private fun DualWallpaperSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        tonalElevation = 12.dp,
     ) {
         Column(
             modifier = Modifier
@@ -516,7 +517,8 @@ private fun ApplyOptionsSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        tonalElevation = 12.dp,
     ) {
         Column(
             modifier = Modifier

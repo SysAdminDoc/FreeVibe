@@ -274,7 +274,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Icon(Icons.Default.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Preview volume", style = MaterialTheme.typography.bodyLarge)
                         Slider(
@@ -314,7 +314,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.9.0 - Open source device personalization",
+                subtitle = "v2.0.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
