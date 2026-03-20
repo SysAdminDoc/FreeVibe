@@ -178,6 +178,7 @@ class WallpapersViewModel @Inject constructor(
             } else {
                 offlineFavorites.removeOffline(wallpaper.id)
             }
+            _state.update { it.copy(applySuccess = if (isFav) "Removed from favorites" else "Added to favorites") }
         }
     }
 

@@ -90,16 +90,24 @@ class SettingsViewModel @Inject constructor(
         prefs.setGridColumns(columns)
     }
 
+    fun getCacheSize(): String {
+        val cacheDir = context.cacheDir
+        val bytes = cacheDir.walkTopDown().filter { it.isFile && it.parentFile?.name != "trimmed" }.sumOf { it.length() }
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
+            bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+            else -> "%.1f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+        }
+    }
+
     fun clearCache() = viewModelScope.launch {
-        // Clear only image/http caches, not trimmed audio or other app state
         val cacheDir = context.cacheDir
         cacheDir.listFiles()?.forEach { file ->
-            // Preserve trimmed audio cache; clear everything else (Coil, OkHttp, etc.)
             if (file.name != "trimmed") {
                 file.deleteRecursively()
             }
         }
-        // Also clear offline favorite files
         offlineFavorites.clearAll()
     }
 }
@@ -219,7 +227,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Folder,
                 title = "Clear cache",
-                subtitle = "Free up disk space used by cached content",
+                subtitle = "Using ${viewModel.getCacheSize()}",
                 onClick = { showClearCacheConfirm = true },
             )
         }
@@ -229,7 +237,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v1.0.0 - Open source device personalization",
+                subtitle = "v1.1.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -326,7 +334,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearCacheConfirm = false },
             title = { Text("Clear cache?") },
-            text = { Text("This will remove all cached images and offline favorites. Downloaded files are not affected.") },
+            text = { Text("This will free ${viewModel.getCacheSize()} by removing cached images and offline favorites. Downloaded files are not affected.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCache()

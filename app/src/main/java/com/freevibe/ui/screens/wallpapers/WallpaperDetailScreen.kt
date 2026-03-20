@@ -24,7 +24,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.ui.components.SourceBadge
 import java.text.SimpleDateFormat
@@ -67,13 +69,48 @@ fun WallpaperDetailScreen(
                     imageUrl = wp.fullUrl,
                 )
             } else {
-                // Full-screen wallpaper preview
-                AsyncImage(
+                // Full-screen wallpaper preview with loading/error states
+                var imageError by remember { mutableStateOf(false) }
+                SubcomposeAsyncImage(
                     model = wp.fullUrl,
                     contentDescription = "Wallpaper preview",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                )
+                ) {
+                    when (painter.state) {
+                        is AsyncImagePainter.State.Loading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(40.dp),
+                                    color = Color.White,
+                                    strokeWidth = 3.dp,
+                                )
+                            }
+                        }
+                        is AsyncImagePainter.State.Error -> {
+                            imageError = true
+                            Box(
+                                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.BrokenImage,
+                                        null,
+                                        Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "Failed to load image",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        else -> SubcomposeAsyncImageContent()
+                    }
+                }
             }
 
             // Top gradient + back button
@@ -273,7 +310,7 @@ private fun PhoneFramePreview(
                 .background(Color(0xFF1A1A1A)),
         ) {
             // Wallpaper image (fills the "screen")
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = imageUrl,
                 contentDescription = "Preview on device",
                 contentScale = ContentScale.Crop,
@@ -281,7 +318,16 @@ private fun PhoneFramePreview(
                     .fillMaxSize()
                     .padding(6.dp)
                     .clip(RoundedCornerShape(28.dp)),
-            )
+            ) {
+                when (painter.state) {
+                    is AsyncImagePainter.State.Loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        }
+                    }
+                    else -> SubcomposeAsyncImageContent()
+                }
+            }
 
             // Simulated status bar
             Row(
