@@ -73,7 +73,7 @@ fun OnboardingScreen(
             ),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Skip button
+            // Skip button (hidden on last page)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -81,8 +81,10 @@ fun OnboardingScreen(
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = { viewModel.skip() }) {
-                    Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (pagerState.currentPage < 2) {
+                    TextButton(onClick = { viewModel.skip() }) {
+                        Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 

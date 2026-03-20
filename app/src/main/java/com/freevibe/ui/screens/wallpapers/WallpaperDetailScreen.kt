@@ -229,11 +229,12 @@ fun WallpaperDetailScreen(
                 ) {
                     ActionCircle(
                         icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        label = if (isFavorite) "Remove from favorites" else "Add to favorites",
                         tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White,
                         onClick = { viewModel.toggleFavorite(wp) },
                     )
                     // #1/#8: Share wallpaper (source page URL or image URL)
-                    ActionCircle(icon = Icons.Default.Share, onClick = {
+                    ActionCircle(icon = Icons.Default.Share, label = "Share", onClick = {
                         val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
@@ -242,8 +243,8 @@ fun WallpaperDetailScreen(
                         }
                         context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
                     })
-                    ActionCircle(icon = Icons.Default.Edit, onClick = onEdit)
-                    ActionCircle(icon = Icons.Default.Crop, onClick = onCrop)
+                    ActionCircle(icon = Icons.Default.Edit, label = "Edit", onClick = onEdit)
+                    ActionCircle(icon = Icons.Default.Crop, label = "Crop", onClick = onCrop)
 
                     Button(
                         onClick = { showApplyOptions = true },
@@ -267,7 +268,7 @@ fun WallpaperDetailScreen(
                         }
                     }
 
-                    ActionCircle(icon = Icons.Default.Download, onClick = { viewModel.downloadWallpaper(wp) })
+                    ActionCircle(icon = Icons.Default.Download, label = "Download", onClick = { viewModel.downloadWallpaper(wp) })
                 }
             }
 
@@ -388,6 +389,7 @@ private fun PhoneFramePreview(
 @Composable
 private fun ActionCircle(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String = "",
     tint: Color = Color.White,
     onClick: () -> Unit,
 ) {
@@ -398,7 +400,7 @@ private fun ActionCircle(
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.15f)),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = label.ifEmpty { null }, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 
