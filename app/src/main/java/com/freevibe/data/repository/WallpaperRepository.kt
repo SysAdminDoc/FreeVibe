@@ -30,6 +30,10 @@ class WallpaperRepository @Inject constructor(
         val nsfw = prefs.showNsfwContent.first()
         return if (nsfw && BuildConfig.WALLHAVEN_API_KEY.isNotBlank()) "111" else "100"
     }
+
+    private suspend fun wallhavenMinRes(): String {
+        return prefs.preferredResolution.first()
+    }
     // -- Wallhaven (toplist by default) --
 
     suspend fun getWallhaven(
@@ -44,6 +48,7 @@ class WallpaperRepository @Inject constructor(
                 sorting = sorting,
                 categories = "111",
                 purity = wallhavenPurity(),
+                minResolution = wallhavenMinRes(),
                 page = page,
                 apiKey = BuildConfig.WALLHAVEN_API_KEY,
             )
