@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.Sound
+import com.freevibe.ui.components.SearchHistoryDropdown
 import com.freevibe.ui.components.ShimmerSoundList
 import kotlin.math.sin
 
@@ -42,42 +43,62 @@ fun SoundsScreen(
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val recentSearches by viewModel.recentSearches.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+    var showSearchHistory by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text("Search sounds...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = ""; focusManager.clearFocus() }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+        // Search bar with history
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search sounds...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            showSearchHistory = false
+                            focusManager.clearFocus()
+                        }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
                     }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    viewModel.search(searchQuery)
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        viewModel.search(searchQuery)
+                        showSearchHistory = false
+                        focusManager.clearFocus()
+                    },
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color.Transparent,
+                ),
+            )
+            SearchHistoryDropdown(
+                recentQueries = recentSearches,
+                isVisible = showSearchHistory && searchQuery.isEmpty(),
+                onQueryClick = { query ->
+                    searchQuery = query
+                    viewModel.search(query)
+                    showSearchHistory = false
                     focusManager.clearFocus()
                 },
-            ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = Color.Transparent,
-            ),
-        )
+                onDeleteQuery = { viewModel.removeSearch(it) },
+                onClearAll = { viewModel.clearSearchHistory() },
+                modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
+            )
+        }
 
         // Tab row
         val visibleTabs = SoundTab.entries.filter {

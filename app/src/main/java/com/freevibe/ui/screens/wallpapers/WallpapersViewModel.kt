@@ -8,6 +8,7 @@ import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
+import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.OfflineFavoritesManager
@@ -47,6 +48,7 @@ class WallpapersViewModel @Inject constructor(
     private val selectedContent: SelectedContentHolder,
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
+    private val searchHistoryRepo: SearchHistoryRepository,
     prefs: PreferencesManager,
 ) : ViewModel() {
 
@@ -59,6 +61,10 @@ class WallpapersViewModel @Inject constructor(
 
     // #9: Grid columns preference
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
+
+    val recentSearches = searchHistoryRepo.getRecentWallpaperSearches(8)
+        .map { list -> list.map { it.query } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         // Check for pending category query from CategoriesScreen
@@ -97,7 +103,16 @@ class WallpapersViewModel @Inject constructor(
                 hasMore = true,
             )
         }
+        viewModelScope.launch { searchHistoryRepo.addWallpaperSearch(query) }
         loadWallpapers()
+    }
+
+    fun removeSearch(query: String) {
+        viewModelScope.launch { searchHistoryRepo.removeSearch(query, "WALLPAPER") }
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch { searchHistoryRepo.clearWallpaperHistory() }
     }
 
     // #9: Color-based search
