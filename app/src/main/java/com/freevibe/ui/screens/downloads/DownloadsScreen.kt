@@ -186,7 +186,14 @@ private fun DownloadHistoryCard(
             )
             Column(Modifier.weight(1f)) {
                 Text(download.name.ifEmpty { download.id }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(dateFormat.format(Date(download.downloadedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(dateFormat.format(Date(download.downloadedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (download.type == "WALLPAPER") "Wallpaper" else "Sound",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             IconButton(onClick = onDelete, Modifier.size(28.dp)) {
                 Icon(Icons.Default.Delete, "Delete", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))

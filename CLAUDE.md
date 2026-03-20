@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v1.1.0** (versionCode 12)
+- **v1.2.0** (versionCode 13)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -77,6 +77,7 @@ DataStore: Settings, Onboarding
 - AutoWallpaperWorker still has string-based "wikimedia"/"nasa" branches for backwards compat with saved prefs
 
 ## Version History
+- v1.2.0: Swipe-to-delete favorites with undo snackbar, wallpaper history tap-to-reapply navigation, hide skip on last onboarding page, improved empty states (contextual messages + action buttons), accessibility labels on wallpaper detail action buttons, download history type badges
 - v1.1.0: Animated nav transitions (fade+slide), "More Like This" for all sounds (not just Freesound), favorite toggle snackbar feedback, clickable sound tags (search on tap), color filter clear/reset button, cache size display in settings, wallpaper detail loading/error states (SubcomposeAsyncImage), version bump
 - v1.0.0: Freesound.org integration (600K+ sounds), dual-source sound search, duration-filtered IA queries, fixed broken trending tab, 10 sound categories, duration filter chips, "More Like This" similar sounds, fade in/out in audio trimmer, local file picker for custom ringtones, removed Wikimedia/NASA wallpaper sources, reordered wallpaper/sound tabs, source badges, tags display, scrollable sound detail
 - v0.9.0: Share wallpaper/sound, wallpaper history screen, sound download, phone preview real time, source code link, licenses clickable, sounds shimmer, grid columns setting, editor error handling

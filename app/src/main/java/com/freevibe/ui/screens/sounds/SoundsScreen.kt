@@ -187,10 +187,31 @@ fun SoundsScreen(
                 }
                 state.sounds.isEmpty() && !state.isRefreshing -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "No sounds found",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.MusicOff,
+                                null,
+                                Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                if (state.selectedTab == SoundTab.SEARCH) "No results for \"${state.query}\""
+                                else if (state.selectedCategory != null) "No ${state.selectedCategory!!.label.lowercase()} sounds found"
+                                else "No sounds found",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (state.durationFilter != DurationFilter.ALL) {
+                                Spacer(Modifier.height(8.dp))
+                                FilledTonalButton(onClick = { viewModel.setDurationFilter(DurationFilter.ALL) }) {
+                                    Text("Clear duration filter")
+                                }
+                            }
+                        }
                     }
                 }
                 else -> {

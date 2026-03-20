@@ -229,7 +229,22 @@ fun FreeVibeRoot() {
 
             // ── Wallpaper History ────────────────────────────────
             composable(Screen.WallpaperHistory.route) {
-                WallpaperHistoryScreen(onBack = { navController.popBackStack() })
+                WallpaperHistoryScreen(
+                    onBack = { navController.popBackStack() },
+                    onWallpaperClick = { entry ->
+                        val wallpaper = com.freevibe.data.model.Wallpaper(
+                            id = entry.wallpaperId,
+                            source = try { com.freevibe.data.model.ContentSource.valueOf(entry.source) }
+                                catch (_: Exception) { com.freevibe.data.model.ContentSource.WALLHAVEN },
+                            thumbnailUrl = entry.thumbnailUrl,
+                            fullUrl = entry.fullUrl,
+                            width = entry.width,
+                            height = entry.height,
+                        )
+                        selectedContent.selectWallpaper(wallpaper)
+                        navController.navigate(Screen.WallpaperDetail.createRoute(entry.wallpaperId))
+                    },
+                )
             }
         }
     }
