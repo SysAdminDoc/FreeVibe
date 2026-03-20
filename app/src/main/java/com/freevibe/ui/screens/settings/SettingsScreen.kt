@@ -19,9 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -43,13 +40,11 @@ class SettingsViewModel @Inject constructor(
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
 ) : ViewModel() {
-    val wallhavenKey = prefs.wallhavenApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
     val autoWpSource = prefs.autoWallpaperSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallhaven")
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
-    val showNsfw = prefs.showNsfwContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
     val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,Amoledbackgrounds,MobileWallpaper")
     val preferredRes = prefs.preferredResolution.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
@@ -58,12 +53,6 @@ class SettingsViewModel @Inject constructor(
     val wallpaperHistory = historyManager.getRecent(20).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
-
-    fun saveKey(type: String, value: String) = viewModelScope.launch {
-        when (type) {
-            "wallhaven" -> prefs.setWallhavenKey(value)
-        }
-    }
 
     fun setAutoWallpaper(enabled: Boolean) = viewModelScope.launch {
         prefs.setAutoWallpaperEnabled(enabled)
@@ -96,10 +85,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setGridColumns(columns: Int) = viewModelScope.launch {
         prefs.setGridColumns(columns)
-    }
-
-    fun setShowNsfw(show: Boolean) = viewModelScope.launch {
-        prefs.setShowNsfw(show)
     }
 
     fun setPreviewVolume(volume: Float) = viewModelScope.launch {
@@ -160,14 +145,12 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val wallhavenKey by viewModel.wallhavenKey.collectAsState()
     val autoWpEnabled by viewModel.autoWpEnabled.collectAsState()
     val autoWpInterval by viewModel.autoWpInterval.collectAsState()
     val autoWpSource by viewModel.autoWpSource.collectAsState()
     val autoPreview by viewModel.autoPreview.collectAsState()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
-    val showNsfw by viewModel.showNsfw.collectAsState()
     val previewVolume by viewModel.previewVolume.collectAsState()
     val redditSubs by viewModel.redditSubs.collectAsState()
     val preferredRes by viewModel.preferredRes.collectAsState()
@@ -190,7 +173,6 @@ fun SettingsScreen(
     }
 
     // Dialog state
-    var editingKey by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showIntervalPicker by remember { mutableStateOf(false) }
     var showSourcePicker by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
@@ -208,27 +190,8 @@ fun SettingsScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
         )
 
-        // API Keys (optional)
-        SettingsSection("Content Sources") {
-            ApiKeyItem(
-                title = "Wallhaven API Key",
-                subtitle = if (wallhavenKey.isNotEmpty()) "Configured" else "Optional - enables higher rate limits",
-                isSet = wallhavenKey.isNotEmpty(),
-                onClick = { editingKey = "wallhaven" to wallhavenKey },
-            )
-        }
-
         // Wallpapers
         SettingsSection("Wallpapers") {
-            if (wallhavenKey.isNotEmpty()) {
-                SettingsToggle(
-                    icon = Icons.Default.VisibilityOff,
-                    title = "Include NSFW content",
-                    subtitle = "Wallhaven only - requires API key",
-                    checked = showNsfw,
-                    onCheckedChange = { viewModel.setShowNsfw(it) },
-                )
-            }
             SettingsToggle(
                 icon = Icons.Default.AutoAwesome,
                 title = "Auto-change wallpaper",
@@ -371,19 +334,6 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(32.dp))
-    }
-
-    // API Key edit dialog
-    editingKey?.let { (type, currentValue) ->
-        ApiKeyDialog(
-            title = "${type.replaceFirstChar { it.uppercase() }} API Key",
-            currentValue = currentValue,
-            onDismiss = { editingKey = null },
-            onSave = { newValue ->
-                viewModel.saveKey(type, newValue)
-                editingKey = null
-            },
-        )
     }
 
     // Interval picker
@@ -541,53 +491,6 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ApiKeyDialog(
-    title: String,
-    currentValue: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-) {
-    var value by remember { mutableStateOf(currentValue) }
-    var showKey by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Paste your API key") },
-                singleLine = true,
-                visualTransformation = if (showKey) VisualTransformation.None
-                else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { showKey = !showKey }) {
-                        Icon(
-                            if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle visibility",
-                        )
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(value.trim()) }) { Text("Save") }
-        },
-        dismissButton = {
-            if (currentValue.isNotEmpty()) {
-                TextButton(onClick = { onSave(""); onDismiss() }) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
-            }
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
-}
-
-@Composable
 private fun IntervalPickerDialog(
     currentInterval: Long,
     onDismiss: () -> Unit,
@@ -634,49 +537,6 @@ private fun SettingsSection(title: String, content: @Composable ColumnScope.() -
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
         content()
-    }
-}
-
-@Composable
-private fun ApiKeyItem(
-    title: String,
-    subtitle: String,
-    isSet: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Icon(
-                Icons.Default.Key,
-                contentDescription = null,
-                tint = if (isSet) MaterialTheme.colorScheme.secondary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isSet) MaterialTheme.colorScheme.secondary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (isSet) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
     }
 }
 

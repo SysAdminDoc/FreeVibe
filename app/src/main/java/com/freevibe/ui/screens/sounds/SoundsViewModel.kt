@@ -221,23 +221,14 @@ class SoundsViewModel @Inject constructor(
 
     fun isFavorite(id: String): Flow<Boolean> = favoritesRepo.isFavorite(id)
 
-    /** Load similar sounds - Freesound API for FS sounds, title-based search for IA */
+    /** Load similar sounds by keyword search */
     suspend fun loadSimilar(soundId: String): List<Sound> {
-        return if (soundId.startsWith("fs_")) {
-            val fsId = soundId.removePrefix("fs_").toIntOrNull() ?: return emptyList()
-            soundRepo.getSimilar(fsId).items
-        } else {
-            // For IA sounds, search by the sound's name keywords
-            val sound = selectedContent.selectedSound.value ?: return emptyList()
-            val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
-                .filter { it.length > 2 }
-                .take(4)
-                .joinToString(" ")
-            if (keywords.isBlank()) return emptyList()
-            soundRepo.search(query = keywords, page = 1, maxDuration = 60).items
-                .filter { it.id != soundId }
-                .take(15)
-        }
+        val sound = selectedContent.selectedSound.value ?: return emptyList()
+        val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
+            .filter { it.length > 2 }
+            .take(4)
+            .joinToString(" ")
+        return soundRepo.searchSimilar(keywords, soundId)
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
