@@ -22,6 +22,10 @@ class SelectedContentHolder @Inject constructor() {
     private val _selectedSound = MutableStateFlow<Sound?>(null)
     val selectedSound: StateFlow<Sound?> = _selectedSound.asStateFlow()
 
+    /** Pending category search query, consumed by WallpapersViewModel */
+    @Volatile
+    var pendingCategoryQuery: String? = null
+
     fun selectWallpaper(wallpaper: Wallpaper) {
         _selectedWallpaper.value = wallpaper
     }
