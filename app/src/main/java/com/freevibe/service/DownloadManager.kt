@@ -165,22 +165,22 @@ class DownloadManager @Inject constructor(
     private fun sanitize(name: String) = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
 
     private fun guessMimeType(url: String): String {
-        val lower = url.lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase()
         return when {
-            lower.contains(".png") -> "image/png"
-            lower.contains(".webp") -> "image/webp"
-            lower.contains(".gif") -> "image/gif"
+            path.endsWith(".png") -> "image/png"
+            path.endsWith(".webp") -> "image/webp"
+            path.endsWith(".gif") -> "image/gif"
             else -> "image/jpeg"
         }
     }
 
     private fun guessAudioMime(url: String): String {
-        val lower = url.lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase()
         return when {
-            lower.contains(".ogg") -> "audio/ogg"
-            lower.contains(".wav") -> "audio/wav"
-            lower.contains(".flac") -> "audio/flac"
-            lower.contains(".m4a") -> "audio/mp4"
+            path.endsWith(".ogg") -> "audio/ogg"
+            path.endsWith(".wav") -> "audio/wav"
+            path.endsWith(".flac") -> "audio/flac"
+            path.endsWith(".m4a") -> "audio/mp4"
             else -> "audio/mpeg"
         }
     }

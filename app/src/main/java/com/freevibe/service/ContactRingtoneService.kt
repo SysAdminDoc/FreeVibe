@@ -51,13 +51,14 @@ class ContactRingtoneService @Inject constructor(
             val ringtoneIdx = cursor.getColumnIndex(ContactsContract.Contacts.CUSTOM_RINGTONE)
 
             while (cursor.moveToNext()) {
+                if (idIdx < 0 || nameIdx < 0) continue
                 contacts.add(
                     ContactInfo(
                         id = cursor.getLong(idIdx),
-                        lookupKey = cursor.getString(lookupIdx) ?: "",
+                        lookupKey = if (lookupIdx >= 0) cursor.getString(lookupIdx) ?: "" else "",
                         name = cursor.getString(nameIdx) ?: "Unknown",
-                        photoUri = cursor.getString(photoIdx),
-                        currentRingtoneUri = cursor.getString(ringtoneIdx),
+                        photoUri = if (photoIdx >= 0) cursor.getString(photoIdx) else null,
+                        currentRingtoneUri = if (ringtoneIdx >= 0) cursor.getString(ringtoneIdx) else null,
                     )
                 )
             }

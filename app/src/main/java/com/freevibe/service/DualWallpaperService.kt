@@ -48,22 +48,14 @@ class DualWallpaperService @Inject constructor(
         runCatching {
             val bitmap = downloadBitmap(wallpaper.fullUrl)
             val height = bitmap.height
-            val cropHeight = (height * 0.7f).toInt()
+            val width = bitmap.width
+            val cropHeight = (height * 0.7f).toInt().coerceIn(1, height)
 
-            val homeCrop = Bitmap.createBitmap(
-                bitmap,
-                0,
-                (height * homeCropTop).toInt().coerceIn(0, height - cropHeight),
-                bitmap.width,
-                cropHeight,
-            )
-            val lockCrop = Bitmap.createBitmap(
-                bitmap,
-                0,
-                (height * lockCropTop).toInt().coerceIn(0, height - cropHeight),
-                bitmap.width,
-                cropHeight,
-            )
+            val homeY = (height * homeCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
+            val lockY = (height * lockCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
+
+            val homeCrop = Bitmap.createBitmap(bitmap, 0, homeY, width, cropHeight)
+            val lockCrop = Bitmap.createBitmap(bitmap, 0, lockY, width, cropHeight)
 
             wallpaperApplier.applyFromBitmap(homeCrop, WallpaperTarget.HOME).getOrThrow()
             wallpaperApplier.applyFromBitmap(lockCrop, WallpaperTarget.LOCK).getOrThrow()
