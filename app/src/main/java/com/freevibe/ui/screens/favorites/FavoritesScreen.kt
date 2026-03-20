@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +31,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.repository.FavoritesRepository
@@ -56,6 +59,7 @@ class FavoritesViewModel @Inject constructor(
     val message = _message.asStateFlow()
 
     fun removeFavorite(id: String) = viewModelScope.launch { favoritesRepo.remove(id) }
+    fun restoreFavorite(entity: FavoriteEntity) = viewModelScope.launch { favoritesRepo.add(entity) }
 
     /** Convert FavoriteEntity to domain Wallpaper and populate shared holder */
     fun selectWallpaper(fav: FavoriteEntity) {
@@ -95,6 +99,7 @@ fun FavoritesScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val tabs = listOf("Wallpapers (${wallpapers.size})", "Sounds (${sounds.size})")
 
     // Export launcher
@@ -195,26 +200,66 @@ fun FavoritesScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             items(sounds, key = { it.id }) { fav ->
-                                Surface(
-                                    onClick = {
-                                        viewModel.selectSound(fav)
-                                        onSoundClick(fav)
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    ) {
-                                        Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(fav.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            if (fav.duration > 0) {
-                                                Text("${fav.duration.toInt()}s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val dismissState = rememberSwipeToDismissBoxState(
+                                    confirmValueChange = { value ->
+                                        if (value != SwipeToDismissBoxValue.Settled) {
+                                            viewModel.removeFavorite(fav.id)
+                                            scope.launch {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "Removed ${fav.name}",
+                                                    actionLabel = "Undo",
+                                                    duration = SnackbarDuration.Short,
+                                                )
+                                                if (result == SnackbarResult.ActionPerformed) {
+                                                    viewModel.restoreFavorite(fav)
+                                                }
                                             }
+                                            true
+                                        } else false
+                                    },
+                                )
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = {
+                                        Box(
+                                            Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.errorContainer)
+                                                .padding(horizontal = 20.dp),
+                                            contentAlignment = Alignment.CenterEnd,
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Delete,
+                                                contentDescription = "Remove",
+                                                tint = MaterialTheme.colorScheme.error,
+                                            )
                                         }
-                                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    },
+                                    enableDismissFromStartToEnd = false,
+                                ) {
+                                    Surface(
+                                        onClick = {
+                                            viewModel.selectSound(fav)
+                                            onSoundClick(fav)
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary)
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(fav.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                if (fav.duration > 0) {
+                                                    Text("${fav.duration.toInt()}s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     }
                                 }
                             }

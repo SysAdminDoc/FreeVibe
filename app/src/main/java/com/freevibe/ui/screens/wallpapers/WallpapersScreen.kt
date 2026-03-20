@@ -216,10 +216,33 @@ fun WallpapersScreen(
                     }
                     state.wallpapers.isEmpty() && !state.isRefreshing -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                "No wallpapers found",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(32.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.ImageNotSupported,
+                                    null,
+                                    Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    when {
+                                        state.selectedTab == WallpaperTab.SEARCH -> "No results for \"${state.query}\""
+                                        state.selectedTab == WallpaperTab.COLOR -> "No wallpapers with this color"
+                                        else -> "No wallpapers found"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (state.selectedColor != null) {
+                                    Spacer(Modifier.height(8.dp))
+                                    FilledTonalButton(onClick = { viewModel.selectTab(WallpaperTab.DISCOVER) }) {
+                                        Text("Back to Discover")
+                                    }
+                                }
+                            }
                         }
                     }
                     else -> {
