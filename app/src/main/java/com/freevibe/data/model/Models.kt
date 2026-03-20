@@ -25,6 +25,8 @@ data class Wallpaper(
     val fileType: String = "",
     val sourcePageUrl: String = "",
     val uploaderName: String = "",
+    val views: Int = 0,
+    val favorites: Int = 0,
 )
 
 // -- Sound --

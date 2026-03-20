@@ -78,6 +78,7 @@ class SoundsViewModel @Inject constructor(
     val selectedSound = selectedContent.selectedSound
 
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
 
     val recentSearches = searchHistoryRepo.getRecentSoundSearches(8)
         .map { list -> list.map { it.query } }
@@ -247,6 +248,7 @@ class SoundsViewModel @Inject constructor(
         exoPlayer = ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(sound.previewUrl))
             prepare()
+            volume = previewVolume.value
             play()
             addListener(object : androidx.media3.common.Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
