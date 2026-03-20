@@ -304,14 +304,20 @@ fun WallpaperDetailScreen(
     }
 }
 
-// #1: Phone frame preview composable — #4: uses real device time
+// #1: Phone frame preview composable — #4: uses real device time (updates every minute)
 @Composable
 private fun PhoneFramePreview(
     imageUrl: String,
 ) {
-    val now = remember { Date() }
-    val timeStr = remember { SimpleDateFormat("h:mm", Locale.getDefault()).format(now) }
-    val dateStr = remember { SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(now) }
+    var now by remember { mutableStateOf(Date()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = Date()
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
+    val timeStr = remember(now) { SimpleDateFormat("h:mm", Locale.getDefault()).format(now) }
+    val dateStr = remember(now) { SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(now) }
 
     Box(
         modifier = Modifier

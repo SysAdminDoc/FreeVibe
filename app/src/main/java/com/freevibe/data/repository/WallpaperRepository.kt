@@ -1,6 +1,7 @@
 package com.freevibe.data.repository
 
 import com.freevibe.BuildConfig
+import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
@@ -11,6 +12,7 @@ import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import com.freevibe.data.remote.wikimedia.WikimediaApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,7 +24,12 @@ class WallpaperRepository @Inject constructor(
     private val bingApi: BingDailyApi,
     private val wikimediaApi: WikimediaApi,
     private val cacheManager: WallpaperCacheManager,
+    private val prefs: PreferencesManager,
 ) {
+    private suspend fun wallhavenPurity(): String {
+        val nsfw = prefs.showNsfwContent.first()
+        return if (nsfw && BuildConfig.WALLHAVEN_API_KEY.isNotBlank()) "111" else "100"
+    }
     // -- Wallhaven (toplist by default) --
 
     suspend fun getWallhaven(
@@ -36,6 +43,7 @@ class WallpaperRepository @Inject constructor(
                 query = query,
                 sorting = sorting,
                 categories = "111",
+                purity = wallhavenPurity(),
                 page = page,
                 apiKey = BuildConfig.WALLHAVEN_API_KEY,
             )
@@ -59,6 +67,7 @@ class WallpaperRepository @Inject constructor(
                 query = "",
                 sorting = "relevance",
                 categories = "111",
+                purity = wallhavenPurity(),
                 page = page,
                 apiKey = BuildConfig.WALLHAVEN_API_KEY,
                 colors = color,

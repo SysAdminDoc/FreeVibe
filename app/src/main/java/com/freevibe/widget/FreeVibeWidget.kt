@@ -2,6 +2,7 @@ package com.freevibe.widget
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
@@ -21,21 +22,30 @@ import androidx.glance.unit.ColorProvider
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.WallpaperApplier
+import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // ── Colors ────────────────────────────────────────────────────────
 
 private val WidgetBg = ColorProvider(Color(0xFF0A0A0F))
 private val Primary = ColorProvider(Color(0xFF7C5CFC))
 private val Secondary = ColorProvider(Color(0xFF00D4AA))
+private val Tertiary = ColorProvider(Color(0xFFFF6B9D))
 private val SurfaceTone = ColorProvider(Color(0xFF1A1A24))
 private val TextDim = ColorProvider(Color(0xFF888888))
 private val White = ColorProvider(Color.White)
+
+private const val WIDGET_PREFS = "freevibe_widget"
+private const val LAST_SHUFFLE_KEY = "last_shuffle_time"
+private const val SHUFFLE_COUNT_KEY = "shuffle_count"
 
 // ── Widget ────────────────────────────────────────────────────────
 
@@ -50,12 +60,26 @@ class FreeVibeWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        provideContent { WidgetContent(LocalSize.current) }
+        val prefs = context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+        val lastShuffle = prefs.getLong(LAST_SHUFFLE_KEY, 0)
+        val shuffleCount = prefs.getInt(SHUFFLE_COUNT_KEY, 0)
+
+        provideContent {
+            WidgetContent(
+                size = LocalSize.current,
+                lastShuffleTime = lastShuffle,
+                shuffleCount = shuffleCount,
+            )
+        }
     }
 }
 
 @Composable
-private fun WidgetContent(size: DpSize) {
+private fun WidgetContent(
+    size: DpSize,
+    lastShuffleTime: Long,
+    shuffleCount: Int,
+) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -68,16 +92,40 @@ private fun WidgetContent(size: DpSize) {
             verticalAlignment = Alignment.Vertical.CenterVertically,
             horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
         ) {
-            Text(
-                text = "FreeVibe",
-                style = TextStyle(
-                    color = Primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                ),
-            )
+            // Header
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+            ) {
+                Text(
+                    text = "FreeVibe",
+                    style = TextStyle(
+                        color = Primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    ),
+                )
+                if (shuffleCount > 0 && size.width >= 200.dp) {
+                    Spacer(GlanceModifier.width(8.dp))
+                    Text(
+                        text = "$shuffleCount shuffled",
+                        style = TextStyle(color = TextDim, fontSize = 10.sp),
+                    )
+                }
+            }
 
-            Spacer(GlanceModifier.height(8.dp))
+            Spacer(GlanceModifier.height(6.dp))
+
+            // Last shuffle timestamp
+            if (lastShuffleTime > 0 && size.height >= 200.dp) {
+                val timeStr = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(lastShuffleTime))
+                Text(
+                    text = "Last: $timeStr",
+                    style = TextStyle(color = TextDim, fontSize = 10.sp),
+                )
+                Spacer(GlanceModifier.height(4.dp))
+            }
 
             // Shuffle button
             Box(
@@ -107,8 +155,10 @@ private fun WidgetContent(size: DpSize) {
                     horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                 ) {
                     QuickActionBtn("Home", GlanceModifier.defaultWeight(), actionRunCallback<ApplyHomeAction>())
-                    Spacer(GlanceModifier.width(8.dp))
+                    Spacer(GlanceModifier.width(6.dp))
                     QuickActionBtn("Lock", GlanceModifier.defaultWeight(), actionRunCallback<ApplyLockAction>())
+                    Spacer(GlanceModifier.width(6.dp))
+                    QuickActionBtn("Faves", GlanceModifier.defaultWeight(), actionRunCallback<OpenFavoritesAction>(), Tertiary)
                 }
             }
 
@@ -130,6 +180,7 @@ private fun QuickActionBtn(
     label: String,
     modifier: GlanceModifier,
     action: androidx.glance.action.Action,
+    color: ColorProvider = Secondary,
 ) {
     Box(
         modifier = modifier
@@ -141,7 +192,7 @@ private fun QuickActionBtn(
     ) {
         Text(
             text = label,
-            style = TextStyle(color = Secondary, fontSize = 12.sp),
+            style = TextStyle(color = color, fontSize = 11.sp),
         )
     }
 }
@@ -153,16 +204,29 @@ private fun QuickActionBtn(
 interface WidgetEntryPoint {
     fun wallpaperRepository(): WallpaperRepository
     fun wallpaperApplier(): WallpaperApplier
+    fun wallpaperHistoryManager(): WallpaperHistoryManager
 }
 
 private fun getEntryPoint(context: Context): WidgetEntryPoint =
     EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
+
+private fun updateWidgetStats(context: Context) {
+    context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putLong(LAST_SHUFFLE_KEY, System.currentTimeMillis())
+        .putInt(SHUFFLE_COUNT_KEY,
+            context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+                .getInt(SHUFFLE_COUNT_KEY, 0) + 1
+        )
+        .apply()
+}
 
 // ── Actions ───────────────────────────────────────────────────────
 
 class ShuffleWallpaperAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.BOTH)
+        updateWidgetStats(context)
         FreeVibeWidget().update(context, glanceId)
     }
 }
@@ -170,12 +234,26 @@ class ShuffleWallpaperAction : ActionCallback {
 class ApplyHomeAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.HOME)
+        updateWidgetStats(context)
+        FreeVibeWidget().update(context, glanceId)
     }
 }
 
 class ApplyLockAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.LOCK)
+        updateWidgetStats(context)
+        FreeVibeWidget().update(context, glanceId)
+    }
+}
+
+class OpenFavoritesAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.putExtra("navigate_to", "favorites")
+            context.startActivity(intent)
+        }
     }
 }
 
@@ -194,6 +272,7 @@ private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
             val ep = getEntryPoint(context)
             val wp = ep.wallpaperRepository().getWallhaven(page = 1).items.randomOrNull() ?: return@withContext
             ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target)
+            ep.wallpaperHistoryManager().record(wp, target)
         } catch (_: Exception) {}
     }
 }
