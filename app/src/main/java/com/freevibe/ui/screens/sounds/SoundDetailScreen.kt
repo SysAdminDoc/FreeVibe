@@ -3,8 +3,12 @@ package com.freevibe.ui.screens.sounds
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -14,11 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.ContentType
+import com.freevibe.data.model.Sound
 import com.freevibe.ui.components.SourceBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,6 +40,10 @@ fun SoundDetailScreen(
     val s = sound ?: return
     val isFavorite by viewModel.isFavorite(s.id).collectAsState(initial = false)
     val context = LocalContext.current
+
+    // Similar sounds
+    val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
+    val similarLoading = remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.applySuccess) {
@@ -79,9 +89,10 @@ fun SoundDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Spacer(Modifier.height(8.dp))
 
@@ -117,8 +128,9 @@ fun SoundDetailScreen(
 
             // Info chips
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 SourceBadge(s.source.name)
                 InfoChip(Icons.Default.Timer, formatDuration(s.duration))
@@ -126,13 +138,29 @@ fun SoundDetailScreen(
                     InfoChip(Icons.Default.Person, s.uploaderName)
                 }
                 if (s.license.isNotEmpty()) {
-                    val shortLicense = when {
-                        s.license.contains("CC0") -> "CC0"
-                        s.license.contains("Attribution") && s.license.contains("NonCommercial") -> "CC-BY-NC"
-                        s.license.contains("Attribution") -> "CC-BY"
-                        else -> "CC"
+                    InfoChip(Icons.Default.Info, s.license)
+                }
+            }
+
+            // Tags
+            if (s.tags.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    s.tags.take(5).forEach { tag ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Text(
+                                "#$tag",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    InfoChip(Icons.Default.Info, shortLicense)
                 }
             }
 
@@ -145,8 +173,6 @@ fun SoundDetailScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-
-            Spacer(Modifier.weight(1f))
 
             // Permission warning
             if (!viewModel.canWriteSettings()) {
@@ -233,7 +259,7 @@ fun SoundDetailScreen(
                     }
                 }
 
-                // #3: Download + #1: Share row
+                // Download + Share row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -264,6 +290,144 @@ fun SoundDetailScreen(
                         Spacer(Modifier.width(6.dp))
                         Text("Share")
                     }
+                }
+            }
+
+            // "More Like This" section (Freesound only)
+            if (s.id.startsWith("fs_")) {
+                Spacer(Modifier.height(8.dp))
+                SimilarSoundsSection(
+                    soundId = s.id.removePrefix("fs_").toIntOrNull() ?: 0,
+                    similarSounds = similarSounds,
+                    isLoading = similarLoading,
+                    viewModel = viewModel,
+                    onSoundClick = { similar ->
+                        viewModel.selectSound(similar)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimilarSoundsSection(
+    soundId: Int,
+    similarSounds: MutableState<List<Sound>>,
+    isLoading: MutableState<Boolean>,
+    viewModel: SoundsViewModel,
+    onSoundClick: (Sound) -> Unit,
+) {
+    var loaded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "More Like This",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (!loaded && !isLoading.value) {
+                TextButton(onClick = {
+                    isLoading.value = true
+                    scope.launch {
+                        try {
+                            val result = viewModel.loadSimilar(soundId)
+                            similarSounds.value = result
+                        } catch (_: Exception) {}
+                        isLoading.value = false
+                        loaded = true
+                    }
+                }) {
+                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Load")
+                }
+            }
+        }
+
+        if (isLoading.value) {
+            Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+        } else if (similarSounds.value.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(similarSounds.value, key = { it.id }) { similar ->
+                    SimilarSoundCard(
+                        sound = similar,
+                        isPlaying = viewModel.state.collectAsState().value.playingId == similar.id,
+                        onPlay = { viewModel.togglePlayback(similar) },
+                        onClick = { onSoundClick(similar) },
+                    )
+                }
+            }
+        } else if (loaded) {
+            Text(
+                "No similar sounds found",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SimilarSoundCard(
+    sound: Sound,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.width(180.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconButton(
+                    onClick = onPlay,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isPlaying) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainer,
+                        ),
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        null,
+                        tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        sound.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        formatDuration(sound.duration),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

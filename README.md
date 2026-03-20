@@ -1,6 +1,6 @@
 # FreeVibe
 
-![Version](https://img.shields.io/badge/version-0.9.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -21,13 +21,17 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 
 | Feature | Description |
 |---------|-------------|
-| HD/4K Wallpapers | Browse from Wallhaven, Unsplash, Bing, Wikimedia, Reddit, NASA |
+| HD/4K Wallpapers | Browse from Wallhaven, Unsplash, Bing & Reddit |
 | Discover Feed | Mixed wallpapers from all sources in one shuffled stream |
 | Phone Preview | See wallpaper on device mockup with clock/status bar before applying |
 | Color Search | Find wallpapers by dominant color via Wallhaven palette |
-| Ringtones & Sounds | Millions of audio clips from Internet Archive |
+| Ringtones & Sounds | 600K+ sounds from Freesound + Internet Archive with duration filtering |
+| Sound Categories | Browse by Nature, Electronic, Funny, Scary, Sci-Fi, Musical, Ambient & more |
+| Duration Filters | Filter sounds by length: short (<5s), medium (5-15s), long (15-60s) |
+| More Like This | Discover acoustically similar sounds via Freesound |
 | Wallpaper Editor | Brightness, contrast, saturation, blur adjustments |
-| Sound Editor | Waveform visualization + lossless trim via MediaMuxer |
+| Sound Editor | Waveform visualization, lossless trim, fade in/out effects |
+| Create from File | Open any audio file from your device to make a ringtone |
 | Crop & Position | Pinch-zoom + pan wallpaper before applying |
 | Per-Contact Ringtones | Assign custom ringtones to individual contacts |
 | Dual Wallpapers | Coordinated home + lock screen wallpaper pairs |
@@ -47,17 +51,14 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 
 ## Content Sources
 
-All sources work without API keys. Zero configuration required.
-
 | Source | Content | Auth | License |
 |--------|---------|------|---------|
 | [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None (optional key for NSFW) | Various per image |
 | [Lorem Picsum](https://picsum.photos) | Curated Unsplash photos | None | Unsplash License |
 | [Bing Daily](https://www.bing.com) | Curated daily photos, UHD, 10 markets | None | Wallpaper use |
-| [Wikimedia Commons](https://commons.wikimedia.org) | Featured/Quality pictures, 64M+ images | None | CC BY-SA / Public Domain |
-| [Internet Archive](https://archive.org) | Millions of audio clips | None | CC / Public Domain |
 | [Reddit](https://reddit.com) | 11 wallpaper subreddits | None | User-owned |
-| [NASA APOD](https://apod.nasa.gov) | ~11K astronomy images | DEMO_KEY (built-in) | Mostly public domain |
+| [Freesound](https://freesound.org) | 600K+ tagged sound effects | Free API key | CC0 / CC-BY / CC-BY-NC |
+| [Internet Archive](https://archive.org) | Millions of audio clips | None | CC / Public Domain |
 
 ## Architecture
 
@@ -66,7 +67,7 @@ Jetpack Compose UI
   Wallpapers | Sounds | Favorites | Settings | Editors
   Onboarding | Categories | Downloads | Glance Widget
 ViewModels (Hilt) + Cache Layer
-  Repositories: Wallhaven, Picsum, Bing, Wikimedia, Internet Archive, Reddit, NASA
+  Repositories: Wallhaven, Picsum, Bing, Reddit, Freesound, Internet Archive
   Services: WallpaperApplier, SoundApplier, DownloadManager,
             AudioTrimmer, DualWallpaper, BatchDownload,
             ContactRingtone, FavoritesExporter,

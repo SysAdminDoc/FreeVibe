@@ -229,7 +229,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v0.9.0 - Open source device personalization",
+                subtitle = "v1.0.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -543,12 +543,10 @@ private fun SourcePickerDialog(
 ) {
     val sources = listOf(
         "discover" to "Discover (mixed)",
-        "wallhaven" to "Wallhaven",
-        "unsplash" to "Unsplash",
-        "bing" to "Bing Daily",
-        "wikimedia" to "Wikimedia Commons",
         "reddit" to "Reddit",
-        "nasa" to "NASA APOD",
+        "wallhaven" to "Wallhaven",
+        "bing" to "Bing Daily",
+        "unsplash" to "Unsplash",
     )
 
     AlertDialog(

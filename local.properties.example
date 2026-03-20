@@ -8,3 +8,7 @@ WALLHAVEN_API_KEY=
 # NASA: Optional - DEMO_KEY is built-in (30 req/hr)
 # Get from: https://api.nasa.gov/
 NASA_API_KEY=DEMO_KEY
+
+# Freesound: Required for sound browsing - free key
+# Get from: https://freesound.org/apiv2/apply/
+FREESOUND_API_KEY=

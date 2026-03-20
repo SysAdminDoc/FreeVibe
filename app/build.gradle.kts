@@ -15,8 +15,8 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.9.0"
+        versionCode = 11
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -24,6 +24,7 @@ android {
         // All content sources work without keys - Wallhaven key is optional for higher rate limits
         buildConfigField("String", "WALLHAVEN_API_KEY", "\"${project.findProperty("WALLHAVEN_API_KEY") ?: ""}\"")
         buildConfigField("String", "NASA_API_KEY", "\"${project.findProperty("NASA_API_KEY") ?: "DEMO_KEY"}\"")
+        buildConfigField("String", "FREESOUND_API_KEY", "\"${project.findProperty("FREESOUND_API_KEY") ?: ""}\"")
     }
 
     buildTypes {

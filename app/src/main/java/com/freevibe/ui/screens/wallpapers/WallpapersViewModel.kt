@@ -7,7 +7,6 @@ import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.repository.FavoritesRepository
-import com.freevibe.data.repository.NasaRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.DownloadManager
@@ -36,13 +35,12 @@ data class WallpapersUiState(
     val selectedColor: String? = null,       // #9: Color filter
 )
 
-enum class WallpaperTab { DISCOVER, WALLHAVEN, UNSPLASH, BING, WIKIMEDIA, REDDIT, NASA, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, REDDIT, WALLHAVEN, BING, UNSPLASH, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
-    private val nasaRepo: NasaRepository,
     private val favoritesRepo: FavoritesRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val downloadManager: DownloadManager,
@@ -199,14 +197,12 @@ class WallpapersViewModel @Inject constructor(
             try {
                 val result = when (s.selectedTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(s.currentPage)
+                    WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = s.currentPage)
-                    WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(s.currentPage)
                     WallpaperTab.BING -> wallpaperRepo.getBingDaily(s.currentPage)
-                    WallpaperTab.WIKIMEDIA -> wallpaperRepo.getWikimedia(s.currentPage)
+                    WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(s.currentPage)
                     WallpaperTab.SEARCH -> wallpaperRepo.searchWallhaven(s.query, page = s.currentPage)
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(s.selectedColor ?: "", s.currentPage)
-                    WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
-                    WallpaperTab.NASA -> nasaRepo.getRandom(count = 30)
                 }
                 _state.update {
                     it.copy(

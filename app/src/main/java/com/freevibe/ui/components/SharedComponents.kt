@@ -244,6 +244,7 @@ fun SourceBadge(source: String, modifier: Modifier = Modifier) {
         "INTERNET_ARCHIVE" -> Color(0xFFFF8C00) to "Archive.org"
         "REDDIT" -> Color(0xFFFF4500) to "Reddit"
         "NASA" -> Color(0xFF0B3D91) to "NASA"
+        "FREESOUND" -> Color(0xFF3DB2CE) to "Freesound"
         else -> MaterialTheme.colorScheme.onSurfaceVariant to source
     }
 

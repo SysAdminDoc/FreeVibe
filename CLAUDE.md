@@ -1,7 +1,7 @@
 # FreeVibe - CLAUDE.md
 
 ## Overview
-Open-source Android app for device personalization - wallpapers, ringtones, sounds from 7 free sources. No API keys required.
+Open-source Android app for device personalization - wallpapers, ringtones, sounds from multiple free sources.
 
 ## Tech Stack
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
@@ -17,14 +17,15 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v0.9.0** (versionCode 10)
+- **v1.0.0** (versionCode 11)
 - Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
 ```
 Compose UI (14 screens, 4 bottom nav tabs)
   ViewModels (Hilt) + SelectedContentHolder singleton
-    Repositories: Wallhaven, Picsum, Bing, Wikimedia, IA, Reddit, NASA
+    Wallpaper repos: Wallhaven, Picsum, Bing, Reddit (Wikimedia/NASA disabled - broken APIs)
+    Sound repos: Freesound (primary, 600K+ tagged), Internet Archive (secondary, duration-filtered)
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService
@@ -36,11 +37,23 @@ DataStore: Settings, Onboarding
 ## Key Files
 - `FreeVibeApp.kt` - Application class, crash logging, cache eviction on startup
 - `FreeVibeRoot.kt` - NavHost with all routes, bottom nav, Hilt EntryPoint for SelectedContentHolder
-- `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services, Room DB with migrations
+- `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services (incl. FreesoundApi), Room DB with migrations
+- `FreesoundApi.kt` - Freesound.org API v2 interface, search/similar endpoints, preview URLs
+- `SoundRepository.kt` - Dual-source sound search (Freesound + IA), duration/category filtering, tab-specific queries
+- `SoundsViewModel.kt` - Sound browsing, ExoPlayer playback, tabs (Trending/Ringtones/Notifications/Alarms/Search), 10 categories, duration filters, similar sounds
+- `SoundsScreen.kt` - Category chips, duration filter chips, source badges (FS/IA), mini waveform
+- `SoundDetailScreen.kt` - Preview, apply buttons, tags, "More Like This" similar sounds section
+- `SoundEditorScreen.kt` - Waveform trim, fade in/out sliders, local file picker (ActivityResultContracts.GetContent)
+- `AudioTrimmer.kt` - Lossless MediaMuxer trim + MP3 fade in/out post-processing
+- `WallpapersViewModel.kt` - Wallpaper state, tabs (Discover/Reddit/Wallhaven/Bing/Unsplash), color search
 - `SelectedContentHolder.kt` - Singleton state bridge between screens + pendingCategoryQuery
-- `WallpapersViewModel.kt` - Main wallpaper state, search, category query consumption, gridColumns from PreferencesManager
-- `ContactPickerScreen.kt` - Downloads sound + sets as contact ringtone via SoundApplier
 - `WallpaperHistoryScreen.kt` - Browsable grid of previously applied wallpapers
+
+## API Keys
+- `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
+- `FREESOUND_API_KEY` - Required for sound browsing (free key from freesound.org/apiv2/apply/)
+- `NASA_API_KEY` - Unused (NASA source disabled)
+- Keys stored in `local.properties`, exposed via BuildConfig
 
 ## Database Migrations
 - v1->2: Added wallpaper_cache + wallpaper_history tables
@@ -53,10 +66,18 @@ DataStore: Settings, Onboarding
 - FreeVibeRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder from Composable
 - Unicode box-drawing chars in section comments - use caution with string matching
 - Crash log at `filesDir/crash.log`, auto-trimmed to 500KB
-- WallpapersViewModel now takes PreferencesManager for grid columns
-- SoundsViewModel now takes DownloadManager for standalone sound download
+- Freesound preview URLs (128kbps MP3) don't require OAuth2 — only full-quality downloads do
+- SoundRepository gracefully degrades if FREESOUND_API_KEY is empty (IA-only mode)
+- Sound tabs use duration-specific queries: Ringtones 3-30s, Notifications 0-8s, Alarms 2-20s
+- DurationFilter and SoundCategory enums are in SoundsViewModel.kt, not Models.kt
+- SimilarSoundsSection uses rememberCoroutineScope for lazy-load (not LaunchedEffect) to avoid auto-fetching
+- AudioTrimmer fade is a lossy byte-level approximation on compressed MP3 — effective but not sample-accurate
+- SoundEditorScreen local file picker uses ActivityResultContracts.GetContent("audio/*")
+- Wallpaper tabs: WIKIMEDIA and NASA removed from WallpaperTab enum entirely (not just hidden)
+- AutoWallpaperWorker still has string-based "wikimedia"/"nasa" branches for backwards compat with saved prefs
 
 ## Version History
-- v0.9.0: Share wallpaper/sound (Intent.ACTION_SEND), wallpaper history browsable grid screen, sound download button, phone preview real time, source code link opens browser, licenses open URLs in browser, sounds shimmer loading, grid columns setting wired to UI, editor error handling with loading/error states
-- v0.8.0: ContactPicker ringtone wiring, cache eviction scheduling, crash logging, confirmation dialogs, category->search flow, database migrations, version sync
+- v1.0.0: Freesound.org integration (600K+ sounds), dual-source sound search, duration-filtered IA queries, fixed broken trending tab, 10 sound categories, duration filter chips, "More Like This" similar sounds, fade in/out in audio trimmer, local file picker for custom ringtones, removed Wikimedia/NASA wallpaper sources, reordered wallpaper/sound tabs, source badges, tags display, scrollable sound detail
+- v0.9.0: Share wallpaper/sound, wallpaper history screen, sound download, phone preview real time, source code link, licenses clickable, sounds shimmer, grid columns setting, editor error handling
+- v0.8.0: ContactPicker ringtone wiring, cache eviction, crash logging, confirmation dialogs, category->search, database migrations, version sync
 - v0.7.0: Initial full-featured release (7 sources, editors, widget, auto-wallpaper, dual wallpaper, video wallpaper, batch download, offline favorites, export/import)

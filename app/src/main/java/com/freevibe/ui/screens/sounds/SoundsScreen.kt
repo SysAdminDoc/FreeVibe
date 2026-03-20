@@ -5,10 +5,12 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -78,26 +80,82 @@ fun SoundsScreen(
         )
 
         // Tab row
+        val visibleTabs = SoundTab.entries.filter {
+            it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
+        }
         ScrollableTabRow(
-            selectedTabIndex = state.selectedTab.ordinal,
+            selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
             containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.primary,
             edgePadding = 16.dp,
             divider = {},
         ) {
-            SoundTab.entries.filter { it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH }
-                .forEach { tab ->
-                    Tab(
-                        selected = state.selectedTab == tab,
-                        onClick = { viewModel.selectTab(tab) },
-                        text = {
-                            Text(
-                                text = tab.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelLarge,
-                            )
+            visibleTabs.forEach { tab ->
+                Tab(
+                    selected = state.selectedTab == tab,
+                    onClick = { viewModel.selectTab(tab) },
+                    text = {
+                        Text(
+                            text = tab.name.lowercase().replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    },
+                )
+            }
+        }
+
+        // Duration filter chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            DurationFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = state.durationFilter == filter,
+                    onClick = { viewModel.setDurationFilter(filter) },
+                    label = { Text(filter.label, style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = if (state.durationFilter == filter) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                    } else null,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.height(32.dp),
+                )
+            }
+        }
+
+        // Category chips (horizontal scroll)
+        AnimatedVisibility(
+            visible = state.selectedTab != SoundTab.SEARCH,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SoundCategory.entries.forEach { cat ->
+                    AssistChip(
+                        onClick = { viewModel.selectCategory(cat) },
+                        label = { Text(cat.label, style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = {
+                            Text(cat.emoji, style = MaterialTheme.typography.labelSmall)
                         },
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.height(32.dp),
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (state.selectedCategory == cat)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
                     )
                 }
+            }
         }
 
         // Content
@@ -107,7 +165,6 @@ fun SoundsScreen(
                     ShimmerSoundList(Modifier.fillMaxSize())
                 }
                 state.error != null -> {
-                    // #5: Error with retry
                     Column(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -128,8 +185,15 @@ fun SoundsScreen(
                         }
                     }
                 }
+                state.sounds.isEmpty() && !state.isRefreshing -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "No sounds found",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 else -> {
-                    // #4: Pull-to-refresh
                     PullToRefreshBox(
                         isRefreshing = state.isRefreshing,
                         onRefresh = { viewModel.refresh() },
@@ -264,18 +328,43 @@ private fun SoundCard(
                     }
                 }
 
-                // License badge
-                if (sound.license.contains("CC0", ignoreCase = true)) {
+                // Source + license badges
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Source badge
+                    val sourceLabel = when (sound.source.name) {
+                        "FREESOUND" -> "FS"
+                        "INTERNET_ARCHIVE" -> "IA"
+                        else -> sound.source.name.take(2)
+                    }
+                    val sourceColor = when (sound.source.name) {
+                        "FREESOUND" -> Color(0xFF3DB2CE)
+                        "INTERNET_ARCHIVE" -> Color(0xFFFF8C00)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                     Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        color = sourceColor.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(4.dp),
                     ) {
                         Text(
-                            "CC0",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            sourceLabel,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
+                            color = sourceColor,
                         )
+                    }
+
+                    if (sound.license.contains("CC0", ignoreCase = true)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(4.dp),
+                        ) {
+                            Text(
+                                "CC0",
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
                     }
                 }
 
@@ -287,7 +376,7 @@ private fun SoundCard(
                 )
             }
 
-            // #12: Mini waveform / duration bar
+            // Mini waveform
             if (sound.duration > 0) {
                 Spacer(Modifier.height(6.dp))
                 MiniWaveform(
@@ -295,14 +384,13 @@ private fun SoundCard(
                     isPlaying = isPlaying,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 56.dp), // align with text
+                        .padding(start = 56.dp),
                 )
             }
         }
     }
 }
 
-// #12: Mini waveform visualization
 @Composable
 private fun MiniWaveform(
     duration: Double,
@@ -313,7 +401,6 @@ private fun MiniWaveform(
     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
     val activeColor = MaterialTheme.colorScheme.primary
 
-    // Deterministic pseudo-waveform based on duration
     val barCount = 40
     val heights = remember(duration) {
         val seed = (duration * 1000).toInt()
@@ -323,7 +410,6 @@ private fun MiniWaveform(
         }
     }
 
-    // Animate playing position
     val progress = if (isPlaying) {
         val infiniteTransition = rememberInfiniteTransition(label = "waveform")
         infiniteTransition.animateFloat(

@@ -4,6 +4,9 @@ import android.content.Context
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -19,12 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -55,13 +54,16 @@ data class SoundEditorState(
     val isLoading: Boolean = false,
     val waveform: FloatArray = floatArrayOf(),
     val durationMs: Long = 0,
-    val trimStartFraction: Float = 0f,    // 0.0 - 1.0
-    val trimEndFraction: Float = 1f,      // 0.0 - 1.0
-    val playbackPosition: Float = 0f,     // 0.0 - 1.0
+    val trimStartFraction: Float = 0f,
+    val trimEndFraction: Float = 1f,
+    val playbackPosition: Float = 0f,
     val isPlaying: Boolean = false,
     val isApplying: Boolean = false,
+    val fadeInMs: Long = 0,
+    val fadeOutMs: Long = 0,
     val fileName: String = "",
     val localFilePath: String? = null,
+    val isLocalFile: Boolean = false,
     val success: String? = null,
     val error: String? = null,
 ) {
@@ -76,8 +78,9 @@ data class SoundEditorState(
             durationMs == other.durationMs && trimStartFraction == other.trimStartFraction &&
             trimEndFraction == other.trimEndFraction && playbackPosition == other.playbackPosition &&
             isPlaying == other.isPlaying && isApplying == other.isApplying &&
+            fadeInMs == other.fadeInMs && fadeOutMs == other.fadeOutMs &&
             fileName == other.fileName && localFilePath == other.localFilePath &&
-            success == other.success && error == other.error
+            isLocalFile == other.isLocalFile && success == other.success && error == other.error
     }
 
     override fun hashCode() = waveform.contentHashCode()
@@ -103,15 +106,13 @@ class SoundEditorViewModel @Inject constructor(
         }
     }
 
-    /** Load audio from URL, download locally, extract waveform */
     fun loadFromUrl(url: String, name: String) {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, fileName = name, error = null) }
+            _state.update { it.copy(isLoading = true, fileName = name, error = null, isLocalFile = false) }
             try {
                 val file = withContext(Dispatchers.IO) { downloadToCache(url, name) }
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
                 val duration = getAudioDuration(file.absolutePath)
-
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -126,6 +127,31 @@ class SoundEditorViewModel @Inject constructor(
         }
     }
 
+    fun loadFromLocalUri(uri: Uri) {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = null, isLocalFile = true) }
+            try {
+                val file = withContext(Dispatchers.IO) { copyUriToCache(uri) }
+                val name = file.nameWithoutExtension
+                val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
+                val duration = getAudioDuration(file.absolutePath)
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        fileName = name,
+                        waveform = waveform,
+                        durationMs = duration,
+                        localFilePath = file.absolutePath,
+                        trimStartFraction = 0f,
+                        trimEndFraction = 1f,
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = "Failed to load file: ${e.message}") }
+            }
+        }
+    }
+
     fun setTrimStart(fraction: Float) {
         val clamped = fraction.coerceIn(0f, _state.value.trimEndFraction - 0.02f)
         _state.update { it.copy(trimStartFraction = clamped) }
@@ -135,6 +161,9 @@ class SoundEditorViewModel @Inject constructor(
         val clamped = fraction.coerceIn(_state.value.trimStartFraction + 0.02f, 1f)
         _state.update { it.copy(trimEndFraction = clamped) }
     }
+
+    fun setFadeIn(ms: Long) = _state.update { it.copy(fadeInMs = ms.coerceIn(0, it.trimDurationMs / 2)) }
+    fun setFadeOut(ms: Long) = _state.update { it.copy(fadeOutMs = ms.coerceIn(0, it.trimDurationMs / 2)) }
 
     fun togglePlayback() {
         if (_state.value.isPlaying) stopPlayback() else startPlayback()
@@ -146,15 +175,15 @@ class SoundEditorViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true) }
             try {
-                // Trim audio losslessly via MediaExtractor + MediaMuxer
                 val trimmedPath = audioTrimmer.trim(
                     inputPath = path,
                     startMs = s.trimStartMs,
                     endMs = s.trimEndMs,
                     outputFileName = s.fileName,
+                    fadeInMs = s.fadeInMs,
+                    fadeOutMs = s.fadeOutMs,
                 ).getOrThrow()
 
-                // Apply trimmed file from local path
                 soundApplier.applyFromLocalFile(trimmedPath, s.fileName, type)
                     .onSuccess {
                         val label = when (type) {
@@ -189,7 +218,6 @@ class SoundEditorViewModel @Inject constructor(
             start()
             _state.update { it.copy(isPlaying = true) }
 
-            // Update playback position
             viewModelScope.launch {
                 while (isPlaying && currentPosition < endMs) {
                     val pos = currentPosition.toFloat() / duration
@@ -237,14 +265,24 @@ class SoundEditorViewModel @Inject constructor(
         file
     }
 
-    /** Extract waveform amplitudes from audio file using MediaExtractor */
+    private suspend fun copyUriToCache(uri: Uri): File = withContext(Dispatchers.IO) {
+        val cacheDir = File(context.cacheDir, "audio_edit")
+        cacheDir.mkdirs()
+        val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "local_audio"
+        val safeName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val file = File(cacheDir, safeName)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(file).use { output -> input.copyTo(output) }
+        } ?: throw IllegalStateException("Cannot read file")
+        file
+    }
+
     private fun extractWaveform(path: String, numSamples: Int = 200): FloatArray {
         val amplitudes = FloatArray(numSamples)
         try {
             val extractor = MediaExtractor()
             extractor.setDataSource(path)
 
-            // Find audio track
             var audioTrack = -1
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
@@ -270,7 +308,6 @@ class SoundEditorViewModel @Inject constructor(
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
 
-                // Calculate RMS amplitude from PCM-like data
                 buffer.order(ByteOrder.LITTLE_ENDIAN)
                 var sumSquares = 0.0
                 val samples = min(size / 2, 1024)
@@ -279,7 +316,7 @@ class SoundEditorViewModel @Inject constructor(
                     sumSquares += sample * sample
                 }
                 val rms = Math.sqrt(sumSquares / max(samples, 1)).toFloat()
-                amplitudes[sampleIndex] = rms / 32768f  // Normalize to 0-1
+                amplitudes[sampleIndex] = rms / 32768f
 
                 buffer.clear()
                 sampleIndex++
@@ -288,7 +325,6 @@ class SoundEditorViewModel @Inject constructor(
 
             extractor.release()
         } catch (_: Exception) {
-            // Fill with placeholder waveform on error
             for (i in amplitudes.indices) {
                 amplitudes[i] = (Math.sin(i * 0.3) * 0.5 + 0.5).toFloat() * 0.7f
             }
@@ -319,6 +355,13 @@ fun SoundEditorScreen(
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Local file picker
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.loadFromLocalUri(it) }
+    }
+
     LaunchedEffect(state.success) {
         state.success?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessages() }
     }
@@ -334,6 +377,12 @@ fun SoundEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
+                actions = {
+                    // Open local file button
+                    IconButton(onClick = { filePicker.launch("audio/*") }) {
+                        Icon(Icons.Default.FolderOpen, "Open file")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
@@ -342,6 +391,7 @@ fun SoundEditorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -359,6 +409,29 @@ fun SoundEditorScreen(
                         Text("Loading waveform...", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            } else if (state.waveform.isEmpty() && state.localFilePath == null) {
+                // No audio loaded — show open file prompt
+                Box(
+                    Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.AudioFile,
+                            null,
+                            Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text("Open an audio file to create a ringtone", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        FilledTonalButton(onClick = { filePicker.launch("audio/*") }) {
+                            Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Browse Files")
+                        }
+                    }
+                }
             } else if (state.waveform.isNotEmpty()) {
                 // Waveform with trim handles
                 WaveformView(
@@ -367,6 +440,8 @@ fun SoundEditorScreen(
                     trimEnd = state.trimEndFraction,
                     playbackPosition = state.playbackPosition,
                     isPlaying = state.isPlaying,
+                    fadeInFraction = if (state.durationMs > 0) state.fadeInMs.toFloat() / state.durationMs else 0f,
+                    fadeOutFraction = if (state.durationMs > 0) state.fadeOutMs.toFloat() / state.durationMs else 0f,
                     onTrimStartChange = { viewModel.setTrimStart(it) },
                     onTrimEndChange = { viewModel.setTrimEnd(it) },
                     modifier = Modifier
@@ -415,24 +490,58 @@ fun SoundEditorScreen(
                         )
                     }
                 }
-            }
 
-            Spacer(Modifier.weight(1f))
+                // Fade controls
+                Text("Fade Effects", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // Fade In
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Fade In: ${state.fadeInMs}ms",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Slider(
+                            value = state.fadeInMs.toFloat(),
+                            onValueChange = { viewModel.setFadeIn(it.toLong()) },
+                            valueRange = 0f..(state.trimDurationMs / 2f).coerceAtLeast(100f),
+                            modifier = Modifier.height(32.dp),
+                        )
+                    }
+                    // Fade Out
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Fade Out: ${state.fadeOutMs}ms",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Slider(
+                            value = state.fadeOutMs.toFloat(),
+                            onValueChange = { viewModel.setFadeOut(it.toLong()) },
+                            valueRange = 0f..(state.trimDurationMs / 2f).coerceAtLeast(100f),
+                            modifier = Modifier.height(32.dp),
+                        )
+                    }
+                }
 
-            // Apply buttons
-            Text("Set trimmed audio as:", style = MaterialTheme.typography.labelLarge)
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ApplyBtn("Ringtone", Modifier.weight(1f), state.isApplying) {
-                    viewModel.applyTrimmed(ContentType.RINGTONE)
-                }
-                ApplyBtn("Notification", Modifier.weight(1f), state.isApplying) {
-                    viewModel.applyTrimmed(ContentType.NOTIFICATION)
-                }
-                ApplyBtn("Alarm", Modifier.weight(1f), state.isApplying) {
-                    viewModel.applyTrimmed(ContentType.ALARM)
+                // Apply buttons
+                Text("Set trimmed audio as:", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ApplyBtn("Ringtone", Modifier.weight(1f), state.isApplying) {
+                        viewModel.applyTrimmed(ContentType.RINGTONE)
+                    }
+                    ApplyBtn("Notification", Modifier.weight(1f), state.isApplying) {
+                        viewModel.applyTrimmed(ContentType.NOTIFICATION)
+                    }
+                    ApplyBtn("Alarm", Modifier.weight(1f), state.isApplying) {
+                        viewModel.applyTrimmed(ContentType.ALARM)
+                    }
                 }
             }
         }
@@ -456,7 +565,7 @@ private fun ApplyBtn(text: String, modifier: Modifier, isLoading: Boolean, onCli
     }
 }
 
-/** Waveform visualization with draggable trim handles */
+/** Waveform visualization with draggable trim handles + fade overlays */
 @Composable
 private fun WaveformView(
     waveform: FloatArray,
@@ -464,15 +573,16 @@ private fun WaveformView(
     trimEnd: Float,
     playbackPosition: Float,
     isPlaying: Boolean,
+    fadeInFraction: Float = 0f,
+    fadeOutFraction: Float = 0f,
     onTrimStartChange: (Float) -> Unit,
     onTrimEndChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val primary = MaterialTheme.colorScheme.primary
-    val primaryDim = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-    val surfaceVar = MaterialTheme.colorScheme.surfaceContainerHigh
     val dimmed = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
     val playhead = MaterialTheme.colorScheme.tertiary
+    val fadeColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
 
     Box(
         modifier = modifier
@@ -526,6 +636,32 @@ private fun WaveformView(
                 size = androidx.compose.ui.geometry.Size(w * (1f - trimEnd), h),
             )
 
+            // Fade in overlay (triangle)
+            if (fadeInFraction > 0f) {
+                val fadeInX = w * (trimStart + fadeInFraction)
+                val trimStartX = w * trimStart
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(trimStartX, 0f)
+                    lineTo(trimStartX, h)
+                    lineTo(fadeInX, h)
+                    close()
+                }
+                drawPath(path, fadeColor)
+            }
+
+            // Fade out overlay (triangle)
+            if (fadeOutFraction > 0f) {
+                val fadeOutStartX = w * (trimEnd - fadeOutFraction)
+                val trimEndX = w * trimEnd
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(trimEndX, 0f)
+                    lineTo(trimEndX, h)
+                    lineTo(fadeOutStartX, h)
+                    close()
+                }
+                drawPath(path, fadeColor)
+            }
+
             // Trim handles
             drawTrimHandle(w * trimStart, h, primary)
             drawTrimHandle(w * trimEnd, h, primary)
@@ -544,20 +680,17 @@ private fun WaveformView(
 }
 
 private fun DrawScope.drawTrimHandle(x: Float, height: Float, color: Color) {
-    // Vertical line
     drawLine(
         color = color,
         start = Offset(x, 0f),
         end = Offset(x, height),
         strokeWidth = 3.dp.toPx(),
     )
-    // Top handle circle
     drawCircle(
         color = color,
         radius = 8.dp.toPx(),
         center = Offset(x, 8.dp.toPx()),
     )
-    // Bottom handle circle
     drawCircle(
         color = color,
         radius = 8.dp.toPx(),

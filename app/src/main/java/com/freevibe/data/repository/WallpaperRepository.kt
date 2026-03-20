@@ -138,7 +138,6 @@ class WallpaperRepository @Inject constructor(
             async { runCatching { getWallhaven(page = page) }.getOrNull() },
             async { runCatching { getPicsum(page = page) }.getOrNull() },
             async { runCatching { getBingDaily(page = page) }.getOrNull() },
-            async { runCatching { getWikimedia(page = page) }.getOrNull() },
         )
         val results = sources.map { it.await() }
         val combined = results.filterNotNull()

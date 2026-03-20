@@ -38,14 +38,15 @@ private val licenses = listOf(
     OssLicense("Paging 3", "https://developer.android.com/topic/libraries/architecture/paging/v3-overview", "Apache 2.0", "Infinite scroll"),
     OssLicense("Glance", "https://developer.android.com/jetpack/compose/glance", "Apache 2.0", "App widgets"),
     OssLicense("Navigation Compose", "https://developer.android.com/jetpack/compose/navigation", "Apache 2.0", "Screen navigation"),
-    // Content sources
-    OssLicense("Wallhaven API", "https://wallhaven.cc/help/api", "Various per image", "Wallpaper source"),
+)
+
+private val contentSources = listOf(
+    OssLicense("Wallhaven", "https://wallhaven.cc/help/api", "Various per image", "Wallpaper source"),
     OssLicense("Lorem Picsum", "https://picsum.photos/", "Unsplash License", "Curated photos from Unsplash"),
     OssLicense("Bing Image of the Day", "https://www.bing.com", "Wallpaper use", "Daily curated photos"),
-    OssLicense("Wikimedia Commons", "https://commons.wikimedia.org/", "CC BY-SA / Public Domain", "Featured pictures"),
+    OssLicense("Reddit", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper subreddits"),
     OssLicense("Internet Archive", "https://archive.org/", "Various CC / Public Domain", "Audio search & download"),
-    OssLicense("Reddit JSON", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper subreddits"),
-    OssLicense("NASA APOD API", "https://api.nasa.gov", "Mostly public domain", "Astronomy images"),
+    OssLicense("Freesound", "https://freesound.org/", "CC0 / CC-BY / CC-BY-NC", "600K+ tagged sound effects"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,7 +76,7 @@ fun LicensesScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
-            items(licenses.filter { !it.name.contains("API") && !it.name.contains("JSON") }) { lic ->
+            items(licenses) { lic ->
                 LicenseCard(lic)
             }
             item {
@@ -87,7 +88,7 @@ fun LicensesScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
-            items(licenses.filter { it.name.contains("API") || it.name.contains("JSON") }) { lic ->
+            items(contentSources) { lic ->
                 LicenseCard(lic)
             }
         }
