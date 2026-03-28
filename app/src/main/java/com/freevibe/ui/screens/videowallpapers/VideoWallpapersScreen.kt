@@ -128,9 +128,9 @@ class VideoWallpapersViewModel @Inject constructor(
         "nature loop", "neon lights", "space", "ocean waves",
     )
 
-    init { load() }
-
     private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds")
+
+    init { load() }
 
     fun refresh() {
         _state.update { it.copy(isRefreshing = true, pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), items = emptyList(), emptyLoadCount = 0) }
