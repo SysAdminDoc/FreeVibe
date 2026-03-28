@@ -117,7 +117,6 @@ class WallpaperRepository @Inject constructor(
         val sources = listOf(
             async { runCatching { getWallhaven(page = page) }.getOrNull() },
             async { runCatching { getPicsum(page = page) }.getOrNull() },
-            async { runCatching { getBingDaily(page = page) }.getOrNull() },
         )
         val results = sources.map { it.await() }
         val combined = results.filterNotNull()
