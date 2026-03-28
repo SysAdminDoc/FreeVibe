@@ -282,10 +282,33 @@ fun WallpaperDetailScreen(
                     )
                 }
 
-                // Action buttons row
+                // Apply button (prominent)
+                Button(
+                    onClick = { showApplyOptions = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    enabled = !state.isApplying,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    if (state.isApplying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Default.Wallpaper, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Apply Wallpaper")
+                    }
+                }
+
+                // Secondary action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ActionCircle(
@@ -294,7 +317,9 @@ fun WallpaperDetailScreen(
                         tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White,
                         onClick = { viewModel.toggleFavorite(wp) },
                     )
-                    // #1/#8: Share wallpaper (source page URL or image URL)
+                    ActionCircle(icon = Icons.Default.Download, label = "Download", onClick = { viewModel.downloadWallpaper(wp) })
+                    ActionCircle(icon = Icons.Default.Edit, label = "Edit", onClick = onEdit)
+                    ActionCircle(icon = Icons.Default.Crop, label = "Crop", onClick = onCrop)
                     ActionCircle(icon = Icons.Default.Share, label = "Share", onClick = {
                         val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
                         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -304,42 +329,11 @@ fun WallpaperDetailScreen(
                         }
                         context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
                     })
-                    ActionCircle(icon = Icons.Default.Edit, label = "Edit", onClick = onEdit)
-                    ActionCircle(icon = Icons.Default.Crop, label = "Crop", onClick = onCrop)
-                    ActionCircle(
-                        icon = Icons.Default.Splitscreen,
-                        label = "Split crop for home & lock",
-                        onClick = { showDualOptions = true },
-                    )
                     ActionCircle(
                         icon = Icons.Default.CreateNewFolder,
                         label = "Save to collection",
                         onClick = { showCollectionPicker = true },
                     )
-
-                    Button(
-                        onClick = { showApplyOptions = true },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        enabled = !state.isApplying,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        if (state.isApplying) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(Icons.Default.Wallpaper, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Apply")
-                        }
-                    }
-
-                    ActionCircle(icon = Icons.Default.Download, label = "Download", onClick = { viewModel.downloadWallpaper(wp) })
                 }
             }
 
@@ -350,6 +344,10 @@ fun WallpaperDetailScreen(
                     onApply = { target ->
                         showApplyOptions = false
                         viewModel.applyWallpaper(wp, target)
+                    },
+                    onSplitCrop = {
+                        showApplyOptions = false
+                        showDualOptions = true
                     },
                 )
             }
@@ -549,6 +547,7 @@ private fun DualWallpaperSheet(
 private fun ApplyOptionsSheet(
     onDismiss: () -> Unit,
     onApply: (WallpaperTarget) -> Unit,
+    onSplitCrop: (() -> Unit)? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -570,6 +569,10 @@ private fun ApplyOptionsSheet(
             ApplyOption(Icons.Default.Home, "Home screen") { onApply(WallpaperTarget.HOME) }
             ApplyOption(Icons.Default.Lock, "Lock screen") { onApply(WallpaperTarget.LOCK) }
             ApplyOption(Icons.Default.Smartphone, "Both") { onApply(WallpaperTarget.BOTH) }
+            if (onSplitCrop != null) {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ApplyOption(Icons.Default.Splitscreen, "Split crop (different home & lock)") { onSplitCrop() }
+            }
         }
     }
 }
