@@ -141,8 +141,31 @@ class VideoWallpapersViewModel @Inject constructor(
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
                     .edit().putString("video_path", file.absolutePath).apply()
 
+                // Extract first frame and set as static wallpaper immediately
+                withContext(Dispatchers.IO) {
+                    try {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        retriever.setDataSource(file.absolutePath)
+                        val frame = retriever.getFrameAtTime(0)
+                        retriever.release()
+                        if (frame != null) {
+                            val wm = android.app.WallpaperManager.getInstance(context)
+                            wm.setBitmap(
+                                frame,
+                                null,
+                                true,
+                                android.app.WallpaperManager.FLAG_SYSTEM or android.app.WallpaperManager.FLAG_LOCK,
+                            )
+                            frame.recycle()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("VideoWP", "Failed to set static frame: ${e.message}")
+                    }
+                }
+
+                // Also try to launch live wallpaper picker for animated version
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Video downloaded! Select FreeVibe in wallpaper picker", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Video wallpaper applied!", Toast.LENGTH_SHORT).show()
                     try {
                         val intent = android.content.Intent(
                             android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
@@ -154,9 +177,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers > FreeVibe", Toast.LENGTH_LONG).show()
-                    }
+                    } catch (_: Exception) {}
                 }
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
