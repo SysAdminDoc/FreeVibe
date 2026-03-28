@@ -48,10 +48,18 @@ class YouTubeRepository @Inject constructor() {
             searchExtractor.fetchPage()
             Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
 
+            val junkPatterns = listOf(
+                "top \\d+", "\\d+ best", "compilation", "mix 20\\d\\d", "playlist",
+                "ranked", "tier list", "reaction", "review", "tutorial", "how to",
+                "part \\d+", "episode", "ep\\.", "podcast", "interview", "live stream",
+            ).map { Regex(it, RegexOption.IGNORE_CASE) }
+
             val sounds = searchExtractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
                 .filter { it.duration > 0 }
                 .filter { it.duration in minDuration.toLong()..maxDuration.toLong() }
+                .filter { item -> junkPatterns.none { it.containsMatchIn(item.name) } }
+                .filter { !it.name.contains("#") } // Skip hashtag-heavy titles
                 .map { it.toSound() }
 
             SearchResult(
