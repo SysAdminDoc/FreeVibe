@@ -22,8 +22,10 @@ class PreferencesManager @Inject constructor(
     // ── API Keys (optional, for higher rate limits) ────────────────
 
     val wallhavenApiKey: Flow<String> = get(Keys.WALLHAVEN_KEY, "")
+    val pexelsApiKey: Flow<String> = get(Keys.PEXELS_KEY, "")
 
     suspend fun setWallhavenKey(key: String) = set(Keys.WALLHAVEN_KEY, key)
+    suspend fun setPexelsKey(key: String) = set(Keys.PEXELS_KEY, key)
 
     // ── Auto-wallpaper ────────────────────────────────────────────
 
@@ -72,6 +74,7 @@ class PreferencesManager @Inject constructor(
 
     private object Keys {
         val WALLHAVEN_KEY = stringPreferencesKey("wallhaven_api_key")
+        val PEXELS_KEY = stringPreferencesKey("pexels_api_key")
         val AUTO_WP_ENABLED = booleanPreferencesKey("auto_wp_enabled")
         val AUTO_WP_INTERVAL = longPreferencesKey("auto_wp_interval")
         val AUTO_WP_SOURCE = stringPreferencesKey("auto_wp_source")

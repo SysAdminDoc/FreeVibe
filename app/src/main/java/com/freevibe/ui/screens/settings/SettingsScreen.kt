@@ -99,6 +99,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setPreferredResolution(res)
     }
 
+    fun setPexelsKey(key: String) = viewModelScope.launch {
+        prefs.setPexelsKey(key)
+    }
+
     fun setVideoWallpaperPath(uri: Uri) {
         val path = try {
             val inputStream = context.contentResolver.openInputStream(uri)
@@ -298,6 +302,45 @@ fun SettingsScreen(
                     }
                     Text("${(previewVolume * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+        }
+
+        // API Keys
+        SettingsSection("API Keys") {
+            var showPexelsKey by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Key,
+                title = "Pexels API Key",
+                subtitle = "Free key for video wallpapers (pexels.com/api)",
+                onClick = { showPexelsKey = true },
+            )
+            if (showPexelsKey) {
+                var keyText by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showPexelsKey = false },
+                    title = { Text("Pexels API Key") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Get a free key at pexels.com/api/new", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(
+                                value = keyText,
+                                onValueChange = { keyText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Paste API key here") },
+                                singleLine = true,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setPexelsKey(keyText.trim())
+                            showPexelsKey = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPexelsKey = false }) { Text("Cancel") }
+                    },
+                )
             }
         }
 
