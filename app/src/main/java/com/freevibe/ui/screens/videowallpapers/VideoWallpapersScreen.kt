@@ -76,11 +76,12 @@ data class VideoWallpapersState(
     val error: String? = null,
     val searchQuery: String = "",
     val pexelsPage: Int = 1,
+    val pixabayPage: Int = 1,
     val ytQueryIndex: Int = 0,
-    val redditSubIndex: Int = 0, // Rotate through subreddits per loadMore
-    val redditAfters: Map<String, String?> = emptyMap(), // Per-subreddit pagination
+    val redditSubIndex: Int = 0,
+    val redditAfters: Map<String, String?> = emptyMap(),
     val hasMore: Boolean = true,
-    val emptyLoadCount: Int = 0, // Track consecutive empty loads
+    val emptyLoadCount: Int = 0,
     val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
 )
 
@@ -89,6 +90,7 @@ class VideoWallpapersViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val youtubeRepo: YouTubeRepository,
     private val pexelsApi: PexelsApi,
+    private val pixabayApi: com.freevibe.data.remote.pixabay.PixabayApi,
     private val prefs: PreferencesManager,
     private val okHttpClient: OkHttpClient,
 ) : ViewModel() {
@@ -128,12 +130,12 @@ class VideoWallpapersViewModel @Inject constructor(
         "nature loop", "neon lights", "space", "ocean waves",
     )
 
-    private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds")
+    private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds", "Cinemagraphs", "perfectloops")
 
     init { load() }
 
     fun refresh() {
-        _state.update { it.copy(isRefreshing = true, pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), items = emptyList(), emptyLoadCount = 0) }
+        _state.update { it.copy(isRefreshing = true, pexelsPage = 1, pixabayPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), items = emptyList(), emptyLoadCount = 0) }
         streamUrls.clear()
         _resolvedIds.value = emptySet()
         load()
@@ -384,7 +386,39 @@ class VideoWallpapersViewModel @Inject constructor(
                     } catch (e: Throwable) { Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
                 }
 
+                // 4. Pixabay Videos (animated loops + short videos)
+                val pixabayJob = async(Dispatchers.IO) {
+                    try {
+                        val query = searchQ ?: "abstract loop"
+                        val response = pixabayApi.searchVideos(
+                            apiKey = com.freevibe.data.remote.pixabay.PixabayApi.API_KEY,
+                            query = query,
+                            videoType = if (searchQ == null) "animation" else "all",
+                            page = s.pixabayPage,
+                            perPage = 15,
+                        )
+                        response.hits.filter { it.duration in 2..60 }.mapNotNull { video ->
+                            val file = video.videos.medium ?: video.videos.small ?: video.videos.large
+                            file?.let {
+                                val item = VideoWallpaperItem(
+                                    id = "pbv_${video.id}",
+                                    title = video.tags.split(",").take(3).joinToString(" ") { it.trim() },
+                                    thumbnailUrl = video.thumbnailUrl,
+                                    source = "Pixabay",
+                                    duration = video.duration.toLong(),
+                                    uploaderName = video.user,
+                                    popularity = video.views.toLong(),
+                                )
+                                streamUrls[item.id] = it.url
+                                _resolvedIds.value = _resolvedIds.value + item.id
+                                item
+                            }
+                        }
+                    } catch (e: Throwable) { Log.e("VideoWP", "Pixabay: ${e.message}"); emptyList() }
+                }
+
                 newItems.addAll(pexelsJob.await())
+                newItems.addAll(pixabayJob.await())
                 newItems.addAll(redditJob.await())
                 newItems.addAll(ytJob.await())
             }
@@ -393,13 +427,15 @@ class VideoWallpapersViewModel @Inject constructor(
             val existingIds = s.items.map { it.id }.toSet()
             val deduped = newItems.filter { it.id !in existingIds }.distinctBy { it.id }
 
-            // Interleave: Pexels, Reddit, YouTube round-robin
+            // Interleave: Pexels, Pixabay, Reddit, YouTube round-robin
             val px = deduped.filter { it.source == "Pexels" }.toMutableList()
+            val pb = deduped.filter { it.source == "Pixabay" }.toMutableList()
             val rd = deduped.filter { it.source == "Reddit" }.sortedByDescending { it.popularity }.toMutableList()
             val yt = deduped.filter { it.source == "YouTube" }.sortedByDescending { it.popularity }.toMutableList()
             val mixed = mutableListOf<VideoWallpaperItem>()
-            while (px.isNotEmpty() || rd.isNotEmpty() || yt.isNotEmpty()) {
+            while (px.isNotEmpty() || pb.isNotEmpty() || rd.isNotEmpty() || yt.isNotEmpty()) {
                 if (px.isNotEmpty()) mixed.add(px.removeFirst())
+                if (pb.isNotEmpty()) mixed.add(pb.removeFirst())
                 if (rd.isNotEmpty()) mixed.add(rd.removeFirst())
                 if (yt.isNotEmpty()) mixed.add(yt.removeFirst())
             }
@@ -410,8 +446,9 @@ class VideoWallpapersViewModel @Inject constructor(
                 it.copy(
                     items = if (loadMore) it.items + mixed else mixed,
                     isLoading = false, isLoadingMore = false, isRefreshing = false,
-                    hasMore = newEmptyCount < 3, // Stop after 3 consecutive empty loads
+                    hasMore = newEmptyCount < 3,
                     pexelsPage = it.pexelsPage + 1,
+                    pixabayPage = it.pixabayPage + 1,
                     ytQueryIndex = it.ytQueryIndex + 1,
                     redditSubIndex = it.redditSubIndex + 2,
                     emptyLoadCount = newEmptyCount,
@@ -740,8 +777,10 @@ private fun VideoCard(
             Surface(
                 color = when (item.source) {
                     "Pexels" -> Color(0xFF05A081)
+                    "Pixabay" -> Color(0xFF00AB6C)
                     "YouTube" -> Color(0xFFFF0000)
                     "Reddit" -> Color(0xFFFF4500)
+                    "Klipy" -> Color(0xFFE040FB)
                     else -> Color(0xFF7C5CFC)
                 }.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(4.dp),
