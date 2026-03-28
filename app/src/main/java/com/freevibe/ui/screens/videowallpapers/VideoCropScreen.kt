@@ -250,24 +250,22 @@ private suspend fun cropVideo(
         val ffmpegCmd = "-y -i ${inputFile.absolutePath} -vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast -crf 23 -an ${outputFile.absolutePath}"
 
         try {
-            Log.d("VideoCrop", "Cropping via Android MediaCodec: ${cropW}x${cropH} at x=$cropX")
-            // Use Android's built-in MediaExtractor + MediaMuxer to re-mux
-            // Since we can't easily transcode with crop on Android without FFmpeg,
-            // use a bitmap-based approach: extract frames, draw cropped, re-encode
-            // For now, use the simpler approach: copy video and let the wallpaper service
-            // handle the cropping via SCALE_TO_FIT_WITH_CROPPING scaling mode
-            //
-            // The key insight: if we set the crop metadata, the service knows
-            // the intended viewport. Since SCALE_TO_FIT_WITH_CROPPING zooms to fill,
-            // a video that's already been conceptually "cropped" (even if the file is the same)
-            // will display correctly because the service fills the screen.
-            //
-            // For proper pixel-level crop, we'd need a working FFmpeg. For now,
-            // the scaling mode handles it visually.
-            inputFile.copyTo(outputFile, overwrite = true)
-            Log.d("VideoCrop", "Video copied: ${outputFile.length() / 1024}KB")
+            Log.d("VideoCrop", "Cropping via yt-dlp FFmpeg: ${cropW}x${cropH} at x=$cropX")
+            // Use yt-dlp to re-download with crop filter applied via --postprocessor-args
+            // yt-dlp bundles its own FFmpeg that handles linking properly
+            val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
+            request.addOption("-o", outputFile.absolutePath)
+            request.addOption("--postprocessor-args", "ffmpeg:-vf crop=$cropW:$cropH:$cropX:$cropY")
+            request.addOption("--recode-video", "mp4")
+            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+            Log.d("VideoCrop", "yt-dlp crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
+
+            if (!outputFile.exists() || outputFile.length() == 0L) {
+                Log.w("VideoCrop", "yt-dlp crop produced no output, copying original")
+                inputFile.copyTo(outputFile, overwrite = true)
+            }
         } catch (e: Exception) {
-            Log.e("VideoCrop", "Copy failed: ${e.message}")
+            Log.e("VideoCrop", "yt-dlp crop failed: ${e.message}, copying original")
             inputFile.copyTo(outputFile, overwrite = true)
         }
 
