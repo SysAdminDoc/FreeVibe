@@ -13,7 +13,6 @@ import com.freevibe.data.local.SearchHistoryDao
 import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
-// Freesound removed — no API key required
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.reddit.RedditApi
@@ -50,7 +49,7 @@ object AppModule {
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "FreeVibe/2.5.0 (Android; Open Source)")
+                .header("User-Agent", "FreeVibe/2.6.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }

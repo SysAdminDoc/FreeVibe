@@ -8,7 +8,6 @@ import com.freevibe.data.remote.internetarchive.InternetArchiveApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.picsum.PicsumPhoto
 import com.freevibe.data.remote.reddit.RedditPost
-import com.freevibe.data.remote.freesound.FreesoundSound
 import com.freevibe.data.remote.wallhaven.WallhavenWallpaper
 
 // -- Wallhaven -> Wallpaper --
@@ -139,35 +138,6 @@ fun RedditPost.toWallpaper(): Wallpaper {
         tags = listOf(subreddit),
         sourcePageUrl = "https://www.reddit.com$permalink",
         uploaderName = author,
-    )
-}
-
-// -- Freesound -> Sound --
-
-fun FreesoundSound.toSound(): Sound? {
-    val previewUrl = previews?.previewHqMp3 ?: previews?.previewLqMp3 ?: return null
-    val shortLicense = when {
-        license.contains("Creative Commons 0", ignoreCase = true) -> "CC0"
-        license.contains("Attribution Noncommercial", ignoreCase = true) -> "CC-BY-NC"
-        license.contains("Attribution", ignoreCase = true) -> "CC-BY"
-        license.contains("Sampling+", ignoreCase = true) -> "Sampling+"
-        else -> license.substringAfterLast("/").trimEnd('/').ifEmpty { "CC" }
-    }
-    return Sound(
-        id = "fs_$id",
-        source = ContentSource.FREESOUND,
-        name = name,
-        description = description.take(300),
-        previewUrl = previewUrl,
-        downloadUrl = previewUrl, // Preview MP3 (128kbps) — no OAuth needed
-        duration = duration,
-        sampleRate = samplerate.toInt(),
-        fileType = "audio/mpeg",
-        fileSize = filesize,
-        tags = tags.take(10),
-        license = shortLicense,
-        uploaderName = username,
-        sourcePageUrl = "https://freesound.org/people/$username/sounds/$id/",
     )
 }
 
