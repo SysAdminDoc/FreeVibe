@@ -1,6 +1,7 @@
 package com.freevibe.ui.screens.videowallpapers
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -76,8 +77,8 @@ class VideoWallpapersViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     private val redditSubreddits = listOf(
-        "LiveWallpaper", "videowallpapers", "Amoledbackgrounds",
-        "wallpaperengine", "PhoneWallpapers",
+        "LiveWallpaper", "Amoledbackgrounds", "MobileWallpaper",
+        "wallpapers", "S24Ultra", "iPhoneWallpapers",
     )
 
     private val youtubeQueries = listOf(
@@ -93,6 +94,8 @@ class VideoWallpapersViewModel @Inject constructor(
         "FAQ", "help", "guide", "install", "download app", "engine",
         "ranked", "tier list", "vs\\.", "comparison", "explained",
         "official", "trailer", "teaser", "behind the scenes",
+        "i tested", "i tried", "i bought", "i found", "must have",
+        "you need", "don.?t buy", "worth it", "honest",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     init { load() }
@@ -111,17 +114,25 @@ class VideoWallpapersViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isApplying = item.id) }
             try {
+                Log.d("VideoWP", "Applying: ${item.title} (${item.source})")
+
                 val videoUrl = if (item.source == "YouTube" && item.videoId.isNotEmpty()) {
+                    Log.d("VideoWP", "Extracting YouTube video URL via yt-dlp...")
                     youtubeRepo.getVideoStreamUrl(item.videoId)
-                        ?: youtubeRepo.getAudioStreamUrl(item.videoId) // fallback
                 } else {
                     item.directVideoUrl.ifEmpty { null }
                 }
 
                 if (videoUrl == null) {
-                    _state.update { it.copy(isApplying = null, error = "Could not get video URL") }
+                    Log.e("VideoWP", "Could not get video URL")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Could not get video URL", Toast.LENGTH_SHORT).show()
+                    }
+                    _state.update { it.copy(isApplying = null) }
                     return@launch
                 }
+
+                Log.d("VideoWP", "Downloading video: ${videoUrl.take(80)}")
 
                 // Download video to internal storage
                 val file = withContext(Dispatchers.IO) {
@@ -132,15 +143,17 @@ class VideoWallpapersViewModel @Inject constructor(
                     response.body?.byteStream()?.use { input ->
                         cacheFile.outputStream().use { output -> input.copyTo(output) }
                     }
+                    Log.d("VideoWP", "Downloaded ${cacheFile.length() / 1024}KB to ${cacheFile.absolutePath}")
                     cacheFile
                 }
 
-                // Save path to SharedPreferences (VideoWallpaperService reads from here)
+                // Save path to SharedPreferences
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
                     .edit().putString("video_path", file.absolutePath).apply()
 
                 // Launch live wallpaper picker
                 withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Video downloaded! Select FreeVibe in the wallpaper picker", Toast.LENGTH_LONG).show()
                     val intent = android.content.Intent(
                         android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
                     ).apply {
@@ -150,14 +163,19 @@ class VideoWallpapersViewModel @Inject constructor(
                         )
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    try { context.startActivity(intent) } catch (_: Exception) {
-                        Toast.makeText(context, "Video wallpaper saved", Toast.LENGTH_SHORT).show()
+                    try { context.startActivity(intent) } catch (e: Exception) {
+                        Log.e("VideoWP", "Could not launch wallpaper picker: ${e.message}")
+                        Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers > FreeVibe", Toast.LENGTH_LONG).show()
                     }
                 }
 
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
-                _state.update { it.copy(isApplying = null, error = "Failed: ${e.message}") }
+                Log.e("VideoWP", "Apply failed: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+                _state.update { it.copy(isApplying = null) }
             }
         }
     }
@@ -169,35 +187,39 @@ class VideoWallpapersViewModel @Inject constructor(
             val results = mutableListOf<VideoWallpaperItem>()
             val tab = _state.value.selectedTab
 
-            // YouTube results
+            // YouTube results — search multiple queries for variety
             if (tab == 0 || tab == 1) {
-                try {
-                    val query = youtubeQueries.random()
-                    val ytResults = withContext(Dispatchers.IO) {
-                        val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-                        val extractor = service.getSearchExtractor(query)
-                        extractor.fetchPage()
-                        extractor.initialPage.items
-                            .filterIsInstance<StreamInfoItem>()
-                            .filter { it.duration in 5..120 }
-                            .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.name) } }
-                            .filter { !it.name.contains("#") }
-                            .map { item ->
-                                val vid = item.url.substringAfter("v=").substringBefore("&")
-                                VideoWallpaperItem(
-                                    id = "yt_$vid",
-                                    title = item.name,
-                                    thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
-                                    source = "YouTube",
-                                    duration = item.duration,
-                                    uploaderName = item.uploaderName ?: "",
-                                    sourceUrl = item.url,
-                                    videoId = vid,
-                                )
-                            }
+                withContext(Dispatchers.IO) {
+                    val service = NewPipe.getService(ServiceList.YouTube.serviceId)
+                    for (query in youtubeQueries) {
+                        try {
+                            val extractor = service.getSearchExtractor(query)
+                            extractor.fetchPage()
+                            val ytItems = extractor.initialPage.items
+                                .filterIsInstance<StreamInfoItem>()
+                                .filter { it.duration in 5..120 }
+                                .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.name) } }
+                                .filter { !it.name.contains("#") }
+                                .map { item ->
+                                    val vid = item.url.substringAfter("v=").substringBefore("&")
+                                    VideoWallpaperItem(
+                                        id = "yt_$vid",
+                                        title = item.name,
+                                        thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
+                                        source = "YouTube",
+                                        duration = item.duration,
+                                        uploaderName = item.uploaderName ?: "",
+                                        sourceUrl = item.url,
+                                        videoId = vid,
+                                    )
+                                }
+                            results.addAll(ytItems)
+                        } catch (_: Exception) { continue }
                     }
-                    results.addAll(ytResults)
-                } catch (_: Exception) {}
+                }
+                // Deduplicate by video ID
+                val seen = mutableSetOf<String>()
+                results.retainAll { seen.add(it.id) }
             }
 
             // Reddit results
