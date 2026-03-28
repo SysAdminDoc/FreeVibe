@@ -141,42 +141,71 @@ class VideoWallpapersViewModel @Inject constructor(
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
                     .edit().putString("video_path", file.absolutePath).apply()
 
+                val videoUri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file,
+                )
+
                 withContext(Dispatchers.Main) {
-                    // Try Samsung-specific video wallpaper intent first
-                    var applied = false
-                    try {
-                        val videoUri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            file,
-                        )
-                        val intent = android.content.Intent("com.samsung.android.wallpaper.CROP_AND_SET").apply {
+                    // Try multiple intents in order until one works
+                    val intents = listOf(
+                        // 1. Samsung video wallpaper crop
+                        android.content.Intent("com.samsung.android.wallpaper.CROP_AND_SET").apply {
                             setDataAndType(videoUri, "video/mp4")
                             putExtra("SET_AS_TYPE", "BOTH")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                        // 2. Generic ATTACH_DATA (works on many OEMs for setting wallpaper)
+                        android.content.Intent(android.content.Intent.ACTION_ATTACH_DATA).apply {
+                            setDataAndType(videoUri, "video/mp4")
+                            putExtra("mimeType", "video/mp4")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                        // 3. Generic SET_WALLPAPER with video
+                        android.content.Intent(android.content.Intent.ACTION_SET_WALLPAPER).apply {
+                            setDataAndType(videoUri, "video/mp4")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                        // 4. Live wallpaper picker
+                        android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                            putExtra(
+                                android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
+                            )
                             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                        applied = true
-                        Toast.makeText(context, "Setting video wallpaper...", Toast.LENGTH_SHORT).show()
-                    } catch (_: Exception) {}
+                        },
+                        // 5. VIEW video (opens gallery/player which often has "Set as wallpaper")
+                        android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(videoUri, "video/mp4")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        },
+                    )
 
-                    // Fallback: open live wallpaper picker with FreeVibe pre-selected
-                    if (!applied) {
+                    var launched = false
+                    for (intent in intents) {
                         try {
-                            val intent = android.content.Intent(
-                                android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
-                            ).apply {
-                                putExtra(
-                                    android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                                    android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
-                                )
-                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            if (intent.resolveActivity(context.packageManager) != null) {
+                                context.startActivity(intent)
+                                Toast.makeText(context, "Select 'Set as wallpaper' if prompted", Toast.LENGTH_LONG).show()
+                                launched = true
+                                break
                             }
-                            context.startActivity(intent)
-                            Toast.makeText(context, "Tap 'Set wallpaper' to apply the video", Toast.LENGTH_LONG).show()
+                        } catch (_: Exception) { continue }
+                    }
+
+                    if (!launched) {
+                        // Last resort: just open the video file
+                        try {
+                            val viewIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(videoUri, "video/*")
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(android.content.Intent.createChooser(viewIntent, "Set as wallpaper").apply {
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
                         } catch (_: Exception) {
-                            Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers > FreeVibe", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Video saved to ${file.absolutePath}", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
