@@ -163,37 +163,29 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
 
                 withContext(Dispatchers.Main) {
-                    if (savedUri != null) {
-                        var launched = false
-                        // Try Samsung Gallery directly
-                        for (pkg in listOf("com.sec.android.gallery3d", "com.samsung.android.gallery")) {
-                            try {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                    setDataAndType(savedUri, "video/mp4")
-                                    setPackage(pkg)
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Tap three dots (top right) > Set as wallpaper", Toast.LENGTH_LONG).show()
-                                launched = true
-                                break
-                            } catch (_: Exception) { continue }
+                    // Launch live wallpaper picker directly by component (bypasses intent interceptors)
+                    try {
+                        val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                            setComponent(android.content.ComponentName(
+                                "com.android.wallpaper.livepicker",
+                                "com.android.wallpaper.livepicker.LiveWallpaperActivity",
+                            ))
+                            putExtra(
+                                android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
+                            )
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                        // Fallback: Google Photos or any gallery
-                        if (!launched) {
-                            try {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                    setDataAndType(savedUri, "video/mp4")
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Open in Gallery, then set as wallpaper from menu", Toast.LENGTH_LONG).show()
-                            } catch (_: Exception) {
-                                Toast.makeText(context, "Video saved to Movies/FreeVibe", Toast.LENGTH_LONG).show()
-                            }
+                        context.startActivity(intent)
+                        Toast.makeText(context, "Tap 'FreeVibe Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Log.e("VideoWP", "Live wallpaper picker failed: ${e.message}")
+                        // Fallback: save to gallery
+                        if (savedUri != null) {
+                            Toast.makeText(context, "Video saved to Movies/FreeVibe. Open in Gallery > Set as wallpaper", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
                         }
-                    } else {
-                        Toast.makeText(context, "Failed to save video", Toast.LENGTH_SHORT).show()
                     }
                 }
                 _state.update { it.copy(isApplying = null) }
