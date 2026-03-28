@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.data.remote.toWallpaper
+import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
 import dagger.assisted.Assisted
@@ -18,6 +21,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
+    private val favoritesRepo: FavoritesRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val historyManager: WallpaperHistoryManager,
     private val prefs: PreferencesManager,
@@ -37,6 +41,11 @@ class AutoWallpaperWorker @AssistedInject constructor(
                 "bing" -> wallpaperRepo.getBingDaily(page = 1)
                 "reddit" -> redditRepo.getMultiSubreddit()
                 "discover" -> wallpaperRepo.getDiscover(page = 1)
+                "favorites" -> {
+                    val favs = favoritesRepo.getWallpapers().first()
+                        .map { it.toWallpaper() }
+                    SearchResult(items = favs, totalCount = favs.size, currentPage = 1, hasMore = false)
+                }
                 else -> wallpaperRepo.getWallhaven(page = 1)
             }
 

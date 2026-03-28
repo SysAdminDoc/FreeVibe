@@ -24,6 +24,7 @@ import com.freevibe.data.model.DownloadEntity
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.DownloadProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -57,6 +58,8 @@ fun DownloadsScreen(
     val tabs = listOf("All", "Wallpapers", "Sounds")
     val context = LocalContext.current
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val displayList = when (selectedTab) {
         1 -> allDownloads.filter { it.type == "WALLPAPER" }
         2 -> allDownloads.filter { it.type == "SOUND" }
@@ -64,6 +67,7 @@ fun DownloadsScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Downloads") },
@@ -118,7 +122,9 @@ fun DownloadsScreen(
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
                                     context.startActivity(intent)
-                                } catch (_: Exception) {}
+                                } catch (_: Exception) {
+                                    scope.launch { snackbarHostState.showSnackbar("Cannot open file") }
+                                }
                             },
                             onDelete = { viewModel.deleteDownload(download.id) },
                         )

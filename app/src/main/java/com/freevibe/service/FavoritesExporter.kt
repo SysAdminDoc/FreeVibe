@@ -44,7 +44,11 @@ class FavoritesExporter @Inject constructor(
                 BufferedReader(InputStreamReader(input)).readText()
             } ?: throw IllegalStateException("Failed to read file")
 
-            val items = adapter.fromJson(json) ?: throw IllegalStateException("Invalid JSON")
+            val items = try {
+                adapter.fromJson(json) ?: throw IllegalStateException("Invalid JSON format")
+            } catch (e: Exception) {
+                throw IllegalStateException("Invalid favorites file: ${e.message}")
+            }
             var count = 0
             items.forEach { item ->
                 favoriteDao.insert(item.toEntity())

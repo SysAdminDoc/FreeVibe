@@ -237,6 +237,13 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
+    fun applyRandom() {
+        val wallpapers = _state.value.wallpapers
+        if (wallpapers.isEmpty()) return
+        val wp = wallpapers.random()
+        applyWallpaper(wp, WallpaperTarget.BOTH)
+    }
+
     fun addToCollection(collectionId: Long, wallpaper: Wallpaper) {
         viewModelScope.launch {
             collectionRepo.addWallpaper(collectionId, wallpaper)
