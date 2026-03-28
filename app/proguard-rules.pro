@@ -18,8 +18,15 @@
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
 
-# NewPipe Extractor (Rhino JS engine)
--dontwarn javax.script.ScriptEngineFactory
+# NewPipe Extractor + Rhino JS
+-dontwarn javax.script.**
+-dontwarn java.beans.**
+-dontwarn jdk.dynalink.**
+-keep class org.schabi.newpipe.extractor.** { *; }
+-keep class org.mozilla.javascript.** { *; }
+
+# yt-dlp / youtubedl-android
+-keep class com.yausername.** { *; }
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
