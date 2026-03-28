@@ -9,7 +9,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="FreeVibe"
+        android:text="Aura"
         android:textColor="#7C5CFC"
         android:textSize="14sp"
         android:textStyle="bold" />

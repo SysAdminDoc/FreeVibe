@@ -99,7 +99,7 @@ private fun WidgetContent(
                 verticalAlignment = Alignment.Vertical.CenterVertically,
             ) {
                 Text(
-                    text = "FreeVibe",
+                    text = "Aura",
                     style = TextStyle(
                         color = Primary,
                         fontWeight = FontWeight.Bold,

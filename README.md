@@ -1,4 +1,4 @@
-# FreeVibe
+# Aura
 
 ![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -8,7 +8,7 @@
 
 > Open-source alternative to Zedge — wallpapers, video wallpapers, ringtones, and sounds for Android. **YouTube integration, yt-dlp powered. Zero configuration. Install and go.**
 
-## What Makes FreeVibe Different
+## What Makes Aura Different
 
 - **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction. No API keys needed.
 - **Video wallpapers from YouTube** — browse, preview with ExoPlayer auto-play, crop landscape to portrait, apply as live wallpaper.
@@ -18,8 +18,8 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/SysAdminDoc/FreeVibe.git
-cd FreeVibe
+git clone https://github.com/SysAdminDoc/Aura.git
+cd Aura
 ```
 
 Open in Android Studio and run. Everything works out of the box.

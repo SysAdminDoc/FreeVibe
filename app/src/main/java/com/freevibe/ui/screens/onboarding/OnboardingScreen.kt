@@ -164,8 +164,8 @@ private fun WelcomePage() {
     PageLayout(
         icon = Icons.Default.Wallpaper,
         iconColor = MaterialTheme.colorScheme.primary,
-        title = "Welcome to FreeVibe",
-        description = "The open-source way to personalize your Android device with wallpapers, ringtones, notifications, and alarm sounds. No accounts, no API keys, no setup.",
+        title = "Welcome to Aura",
+        description = "The open-source way to personalize your Android device with wallpapers, video wallpapers, ringtones, and sounds. YouTube-powered. No accounts, no ads, no setup.",
     )
 }
 

@@ -45,7 +45,7 @@ class BatchDownloadService @Inject constructor(
                             downloadManager.downloadWallpaper(
                                 id = "batch_${wp.id}",
                                 url = wp.fullUrl,
-                                fileName = "FreeVibe_${wp.id}.$ext",
+                                fileName = "Aura_${wp.id}.$ext",
                             ).onSuccess {
                                 _state.update { it.copy(completedCount = it.completedCount + 1) }
                             }.onFailure {

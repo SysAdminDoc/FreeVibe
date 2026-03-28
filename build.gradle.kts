@@ -1,4 +1,4 @@
-// FreeVibe v3.0.0 - Open Source Device Personalization
+// Aura v3.0.0 - Open Source Device Personalization
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false

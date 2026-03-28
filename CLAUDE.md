@@ -1,4 +1,4 @@
-# FreeVibe - CLAUDE.md
+# Aura - CLAUDE.md
 
 ## Overview
 Open-source Android app for device personalization - wallpapers, ringtones, sounds from multiple free sources.
@@ -48,7 +48,7 @@ DataStore: Settings, Onboarding
 ## Gotchas
 - `SelectedContentHolder.pendingCategoryQuery` is consumed on WallpapersViewModel init (set to null after read)
 - Category navigation uses `saveState=false, restoreState=false` to force ViewModel recreation
-- FreeVibeRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder from Composable
+- AuraRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder from Composable
 - Unicode box-drawing chars in section comments - use caution with string matching
 - Crash log at `filesDir/crash.log`, auto-trimmed to 500KB
 - Freesound preview URLs (128kbps MP3) don't require OAuth2 — only full-quality downloads do
@@ -60,16 +60,16 @@ DataStore: Settings, Onboarding
 - SoundEditorScreen local file picker uses ActivityResultContracts.GetContent("audio/*")
 - NASA/Wikimedia API files fully deleted in v2.1.0 — enum values kept in ContentSource for legacy favorites compatibility
 - WallpaperRepository no longer depends on WikimediaApi (constructor param removed)
-- NavHost uses animated transitions (fade+slide) — enterTransition/exitTransition/popEnter/popExit in FreeVibeRoot
+- NavHost uses animated transitions (fade+slide) — enterTransition/exitTransition/popEnter/popExit in AuraRoot
 - WallpaperDetailScreen uses SubcomposeAsyncImage (not AsyncImage) for loading/error state handling
 - SoundsViewModel.loadSimilar() accepts String soundId — dispatches to Freesound API for fs_ prefixed, keyword search for IA
 - FavoritesScreen sound list uses SwipeToDismissBox — swipe-to-delete with undo via snackbar + restoreFavorite()
-- WallpaperHistoryScreen.onWallpaperClick converts WallpaperHistoryEntity to Wallpaper domain model in FreeVibeRoot
+- WallpaperHistoryScreen.onWallpaperClick converts WallpaperHistoryEntity to Wallpaper domain model in AuraRoot
 - ActionCircle composable has optional `label` param for accessibility contentDescription
 
 ## Key Files
-- `FreeVibeApp.kt` - Application class, crash logging, cache eviction on startup
-- `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint for SelectedContentHolder
+- `AuraApp.kt` - Application class, crash logging, cache eviction on startup
+- `AuraRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint for SelectedContentHolder
 - `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services (incl. FreesoundApi), Room DB with migrations
 - `FreesoundApi.kt` - Freesound.org API v2 interface, search/similar endpoints, preview URLs
 - `SoundRepository.kt` - Dual-source sound search (Freesound + IA), duration/category filtering, tab-specific queries
@@ -94,7 +94,7 @@ DataStore: Settings, Onboarding
 - v2.7.0: Sound loading progress indicator ("Fetching sounds... 12/50" bar during IA metadata resolution). Remove Trending tab (default to Ringtones). Fix duration limits: notifications max 5s, ringtones/alarms max 4min. Duration filter chips updated (All/< 5s/5-30s/30s-4m). Remove dead getTrending() from SoundRepository.
 - v2.6.0: Delete dead FreesoundApi.kt + FreesoundSound.toSound() mapper. Sync all version strings to v2.6.0 (README badge, root build.gradle.kts comment, Settings, User-Agent). Update README feature table with v2.1-2.5 additions (collections, shuffle FAB, parallax, haptic, auto-wallpaper from favorites, editor presets/undo, HTTP validation). Update README architecture (15 screens, Room v4, Collections). Clean stale Freesound comment from AppModule.
 - v2.5.0: Validate HTTP response codes across all network callers — SoundApplier, OfflineFavoritesManager, DownloadManager, WallpaperEditorVM, SoundEditorVM, WallpaperCropVM now check response.isSuccessful before processing body (prevents writing error pages as media). SoundRepository fetch rows increased from 30 to 50 for better fill rate after duration filtering.
-- v2.4.0: Fix VideoWallpaperService crash on missing video file (existence check before setDataSource). Fix WallpaperCacheManager valueOf crash on unknown source (try-catch fallback). Remove dead onSearchTag callback from FreeVibeRoot. Collections: long-press to remove wallpapers from collection (snackbar feedback). Clean stale NASA/Wikimedia TTL constants from WallpaperCacheManager. Remove unused imports from FavoritesScreen.
+- v2.4.0: Fix VideoWallpaperService crash on missing video file (existence check before setDataSource). Fix WallpaperCacheManager valueOf crash on unknown source (try-catch fallback). Remove dead onSearchTag callback from AuraRoot. Collections: long-press to remove wallpapers from collection (snackbar feedback). Clean stale NASA/Wikimedia TTL constants from WallpaperCacheManager. Remove unused imports from FavoritesScreen.
 - v2.3.0: Fix WallpaperCropScreen aspect ratio preset math (proper viewport-relative scaling). Add "Favorites" as auto-wallpaper source (AutoWallpaperWorker + SettingsScreen picker). Fix FavoritesExporter import crash on malformed JSON (catch + user-friendly error). Haptic feedback on wallpaper favorite toggle. Updated onboarding features page (Collections + Auto-Wallpaper replace Dark Theme + Offline Ready). Fix DownloadsScreen silent catch on file open failure (snackbar). Random wallpaper shuffle FAB on WallpapersScreen.
 - v2.2.0: Fix AudioTrimmer resource leak (try-finally for extractor/muxer) + unsigned byte fade. Fix SoundEditor extractWaveform resource leak + playback race condition (state-based loop instead of player-based). Fix DualWallpaperService bitmap leak on exception (try-finally recycle). Batch WallpaperEditor preset application (single applyPreset() instead of 4 separate filter calls). Sound editor undo (one-level snapshot of trim/fade state, Undo button in top bar). Widget shuffle error feedback (Toast on failure instead of silent catch).
 - v2.1.0: Remove dead NASA/Wikimedia code (files, AppModule providers, WallpaperRepository dep, mappers). Fix unsafe Activity cast in Theme.kt. Batch favorite status loading (single query for all IDs instead of N per-card Flow collectors). Parallax effect on wallpaper detail pager (scale + translate + alpha on page offset). Wallpaper collections feature: Room entities + migration v3->v4, CollectionDao, CollectionRepository, CollectionsScreen (list + detail grid), "Save to Collection" bottom sheet on wallpaper detail, Settings entry.

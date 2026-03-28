@@ -51,7 +51,7 @@ class DownloadManager @Inject constructor(
             url = url,
             fileName = sanitize(fileName),
             mimeType = guessMimeType(url),
-            relativePath = Environment.DIRECTORY_PICTURES + "/FreeVibe",
+            relativePath = Environment.DIRECTORY_PICTURES + "/Aura",
             collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             contentType = "WALLPAPER",
         )
@@ -69,7 +69,7 @@ class DownloadManager @Inject constructor(
             ContentType.NOTIFICATION -> Environment.DIRECTORY_NOTIFICATIONS
             ContentType.ALARM -> Environment.DIRECTORY_ALARMS
             else -> Environment.DIRECTORY_MUSIC
-        } + "/FreeVibe"
+        } + "/Aura"
 
         downloadFile(
             id = id,

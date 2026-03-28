@@ -159,9 +159,9 @@ class VideoWallpapersViewModel @Inject constructor(
                 val savedUri = withContext(Dispatchers.IO) {
                     try {
                         val values = android.content.ContentValues().apply {
-                            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, "FreeVibe_Wallpaper_${System.currentTimeMillis()}.mp4")
+                            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, "Aura_Wallpaper_${System.currentTimeMillis()}.mp4")
                             put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                            put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/FreeVibe")
+                            put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/Aura")
                         }
                         val uri = context.contentResolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
                         uri?.let { destUri ->
@@ -191,12 +191,12 @@ class VideoWallpapersViewModel @Inject constructor(
                             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
-                        Toast.makeText(context, "Tap 'FreeVibe Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Tap 'Aura Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
                     } catch (e: Exception) {
                         Log.e("VideoWP", "Live wallpaper picker failed: ${e.message}")
                         // Fallback: save to gallery
                         if (savedUri != null) {
-                            Toast.makeText(context, "Video saved to Movies/FreeVibe. Open in Gallery > Set as wallpaper", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Video saved to Movies/Aura. Open in Gallery > Set as wallpaper", Toast.LENGTH_LONG).show()
                         } else {
                             Toast.makeText(context, "Video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
                         }
@@ -312,7 +312,7 @@ fun VideoWallpapersScreen(
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     appContext.startActivity(intent)
-                    Toast.makeText(appContext, "Tap 'FreeVibe Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
+                    Toast.makeText(appContext, "Tap 'Aura Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
                 } catch (_: Exception) {
                     Toast.makeText(appContext, "Cropped video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
                 }
