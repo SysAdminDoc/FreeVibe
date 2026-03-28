@@ -15,6 +15,7 @@ import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
 import com.freevibe.data.remote.klipy.KlipyApi
+import com.freevibe.data.remote.weather.OpenMeteoApi
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
@@ -135,6 +136,16 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(PixabayApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideOpenMeteoApi(client: OkHttpClient, moshi: Moshi): OpenMeteoApi =
+        Retrofit.Builder()
+            .baseUrl(OpenMeteoApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(OpenMeteoApi::class.java)
 
     @Provides
     @Singleton
