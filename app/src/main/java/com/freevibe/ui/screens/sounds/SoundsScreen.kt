@@ -44,6 +44,7 @@ fun SoundsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
+    val cachedYtIds by viewModel.cachedYtIds.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showSearchHistory by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -271,6 +272,7 @@ fun SoundsScreen(
                             sounds = state.sounds,
                             playingId = state.playingId,
                             isLoadingMore = state.isLoadingMore,
+                            cachedYtIds = cachedYtIds,
                             onSoundClick = { sound ->
                                 viewModel.selectSound(sound)
                                 onSoundClick(sound)
@@ -290,6 +292,7 @@ private fun SoundsList(
     sounds: List<Sound>,
     playingId: String?,
     isLoadingMore: Boolean,
+    cachedYtIds: Set<String> = emptySet(),
     onSoundClick: (Sound) -> Unit,
     onPlayClick: (Sound) -> Unit,
     onLoadMore: () -> Unit,
@@ -313,9 +316,12 @@ private fun SoundsList(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         items(sounds, key = { it.id }) { sound ->
+            val isYt = sound.id.startsWith("yt_")
+            val isReady = !isYt || sound.id in cachedYtIds
             SoundCard(
                 sound = sound,
                 isPlaying = playingId == sound.id,
+                isResolving = isYt && !isReady && playingId == sound.id,
                 onClick = { onSoundClick(sound) },
                 onPlayClick = { onPlayClick(sound) },
             )
@@ -335,6 +341,7 @@ private fun SoundsList(
 private fun SoundCard(
     sound: Sound,
     isPlaying: Boolean,
+    isResolving: Boolean = false,
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
 ) {
@@ -363,12 +370,20 @@ private fun SoundCard(
                             else MaterialTheme.colorScheme.surfaceContainerHigh
                         ),
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    if (isResolving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
 
                 // Sound info
