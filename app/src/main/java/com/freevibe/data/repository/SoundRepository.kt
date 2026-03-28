@@ -48,9 +48,10 @@ class SoundRepository @Inject constructor(
         maxDuration: Int = 60,
         minDuration: Int = 0,
         onProgress: ((Int, Int) -> Unit)? = null,
+        onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery(query)
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
     suspend fun searchRingtones(
@@ -58,9 +59,10 @@ class SoundRepository @Inject constructor(
         maxDuration: Int = 240,
         minDuration: Int = 3,
         onProgress: ((Int, Int) -> Unit)? = null,
+        onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("ringtone OR melody OR music OR tone OR jingle")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
     suspend fun searchNotifications(
@@ -68,9 +70,10 @@ class SoundRepository @Inject constructor(
         maxDuration: Int = 5,
         minDuration: Int = 0,
         onProgress: ((Int, Int) -> Unit)? = null,
+        onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("notification OR alert OR chime OR beep OR ding OR ping")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
     suspend fun searchAlarms(
@@ -78,9 +81,10 @@ class SoundRepository @Inject constructor(
         maxDuration: Int = 240,
         minDuration: Int = 2,
         onProgress: ((Int, Int) -> Unit)? = null,
+        onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("alarm OR buzzer OR siren OR wake OR warning")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
     suspend fun searchSimilar(keywords: String, excludeId: String): List<Sound> {
@@ -98,10 +102,8 @@ class SoundRepository @Inject constructor(
 
     /**
      * Fetch sounds with concurrency-limited metadata resolution.
-     * - Max 5 concurrent metadata fetches (prevents overwhelming IA servers)
-     * - 8 second timeout per metadata fetch (prevents hangs)
-     * - Fetches extra items to compensate for duration-filtered rejects
-     * - Reports progress via onProgress callback for UI feedback
+     * Results are streamed progressively via onSoundResolved callback
+     * so the UI can show sounds as they arrive instead of waiting for all.
      */
     private suspend fun fetchSounds(
         query: String,
@@ -110,10 +112,11 @@ class SoundRepository @Inject constructor(
         minDuration: Int,
         sort: String,
         onProgress: ((resolved: Int, total: Int) -> Unit)? = null,
+        onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> = coroutineScope {
         val response = archiveApi.search(
             query = query,
-            rows = 50, // Fetch extra to compensate for duration-filtered rejects
+            rows = 50,
             page = page,
             sort = sort,
         )
@@ -121,48 +124,45 @@ class SoundRepository @Inject constructor(
         val docs = response.response.docs
         val identifiers = docs.map { it.identifier }
 
-        // Batch-check cache first (single DB query, not N queries)
         val cached = audioCacheDao.getByIdentifiers(identifiers)
             .associateBy { it.identifier }
 
-        val semaphore = Semaphore(5) // Max 5 concurrent metadata fetches
+        val semaphore = Semaphore(10)
         val total = docs.size
         var resolved = 0
         val mutex = Mutex()
+        val results = mutableListOf<Sound>()
 
-        val sounds = docs.map { doc ->
+        docs.map { doc ->
             async {
-                // Use cache if available
-                cached[doc.identifier]?.let { entry ->
+                val sound: Sound? = cached[doc.identifier]?.let { entry ->
                     if (entry.duration in minDuration.toDouble()..maxDuration.toDouble() && entry.duration > 0) {
-                        mutex.withLock { resolved++; onProgress?.invoke(resolved, total) }
-                        return@async doc.toSound(
-                            audioUrl = entry.audioUrl,
-                            duration = entry.duration,
-                            fileSize = entry.fileSize,
-                        )
+                        doc.toSound(audioUrl = entry.audioUrl, duration = entry.duration, fileSize = entry.fileSize)
+                    } else null
+                } ?: run {
+                    semaphore.acquire()
+                    try {
+                        withTimeoutOrNull(4000L) {
+                            resolveMetadata(doc, minDuration, maxDuration)
+                        }
+                    } finally {
+                        semaphore.release()
                     }
                 }
 
-                // Fetch metadata with concurrency limit + timeout
-                semaphore.acquire()
-                try {
-                    val result = withTimeoutOrNull(8000L) {
-                        resolveMetadata(doc, minDuration, maxDuration)
-                    }
-                    mutex.withLock { resolved++; onProgress?.invoke(resolved, total) }
-                    result
-                } finally {
-                    semaphore.release()
+                mutex.withLock {
+                    resolved++
+                    sound?.let { results.add(it); onSoundResolved?.invoke(it) }
+                    onProgress?.invoke(resolved, total)
                 }
             }
-        }.awaitAll().filterNotNull()
+        }.awaitAll()
 
         SearchResult(
-            items = sounds,
+            items = results.toList(),
             totalCount = response.response.numFound,
             currentPage = page,
-            hasMore = docs.size >= 50 && sounds.isNotEmpty(),
+            hasMore = docs.size >= 50 && results.isNotEmpty(),
         )
     }
 
