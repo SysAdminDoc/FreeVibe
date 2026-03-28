@@ -11,6 +11,15 @@ android {
     namespace = "com.freevibe"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../freevibe.jks")
+            storePassword = "freevibe123"
+            keyAlias = "freevibe"
+            keyPassword = "freevibe123"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.freevibe"
         minSdk = 26
@@ -27,6 +36,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
