@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 
 // -- Unified content types --
 
-enum class ContentSource { WALLHAVEN, PICSUM, BING, WIKIMEDIA, INTERNET_ARCHIVE, REDDIT, NASA, FREESOUND, LOCAL, YOUTUBE, PEXELS }
+enum class ContentSource { WALLHAVEN, PICSUM, BING, WIKIMEDIA, INTERNET_ARCHIVE, REDDIT, NASA, FREESOUND, LOCAL, YOUTUBE, PEXELS, PIXABAY, KLIPY }
 enum class ContentType { WALLPAPER, LIVE_WALLPAPER, RINGTONE, NOTIFICATION, ALARM }
 enum class WallpaperTarget { HOME, LOCK, BOTH }
 

@@ -7,6 +7,7 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.picsum.PicsumApi
+import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import kotlinx.coroutines.async
@@ -20,6 +21,7 @@ class WallpaperRepository @Inject constructor(
     private val wallhavenApi: WallhavenApi,
     private val picsumApi: PicsumApi,
     private val bingApi: BingDailyApi,
+    private val pixabayApi: PixabayApi,
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
 ) {
@@ -58,7 +60,7 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchWallhaven(query: String, page: Int = 1) =
         getWallhaven(query = query, page = page)
 
-    // -- #9: Wallhaven color search --
+    // -- Wallhaven color search --
 
     suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> =
         withCacheFallback("wallhaven_color_${color}_$page", ContentSource.WALLHAVEN) {
@@ -92,12 +94,10 @@ class WallpaperRepository @Inject constructor(
             )
         }
 
-    // -- #8: Bing Daily (proper pagination via idx + market) --
+    // -- Bing Daily --
 
     suspend fun getBingDaily(page: Int = 1): SearchResult<Wallpaper> =
         withCacheFallback("bing_$page", ContentSource.BING) {
-            // Page 1 = idx 0 en-US, Page 2 = idx 0 en-GB, ...
-            // After exhausting markets, cycle with higher idx
             val marketsCount = BingDailyApi.MARKETS.size
             val idx = (page - 1) / marketsCount
             val marketIndex = (page - 1) % marketsCount
@@ -107,16 +107,38 @@ class WallpaperRepository @Inject constructor(
                 items = response.images.map { it.toWallpaper() },
                 totalCount = marketsCount * 8 * 2,
                 currentPage = page,
-                hasMore = idx < 1, // Bing supports ~16 days back
+                hasMore = idx < 1,
             )
         }
 
-    // -- #2: Discover feed (mixed from all sources) --
+    // -- Pixabay --
+
+    suspend fun getPixabay(page: Int = 1, query: String = ""): SearchResult<Wallpaper> =
+        withCacheFallback("pixabay_${query.hashCode()}_$page", ContentSource.PIXABAY) {
+            val response = pixabayApi.searchPhotos(
+                apiKey = PixabayApi.API_KEY,
+                query = query.ifBlank { "wallpaper" },
+                page = page,
+                editorsChoice = query.isBlank(),
+            )
+            SearchResult(
+                items = response.hits.map { it.toWallpaper() },
+                totalCount = response.totalHits,
+                currentPage = page,
+                hasMore = page * 30 < response.totalHits,
+            )
+        }
+
+    suspend fun searchPixabay(query: String, page: Int = 1) =
+        getPixabay(page = page, query = query)
+
+    // -- Discover feed (mixed from all sources) --
 
     suspend fun getDiscover(page: Int = 1): SearchResult<Wallpaper> = supervisorScope {
         val sources = listOf(
             async { runCatching { getWallhaven(page = page) }.getOrNull() },
             async { runCatching { getPicsum(page = page) }.getOrNull() },
+            async { runCatching { getPixabay(page = page) }.getOrNull() },
         )
         val results = sources.map { it.await() }
         val combined = results.filterNotNull()
@@ -127,12 +149,11 @@ class WallpaperRepository @Inject constructor(
             items = combined,
             totalCount = combined.size * 10,
             currentPage = page,
-            // Only continue if we actually got a reasonable number of results
             hasMore = combined.size >= 10 && results.any { it?.hasMore == true },
         )
     }
 
-    // -- #5: Error handling with cache fallback --
+    // -- Error handling with cache fallback --
 
     private suspend fun withCacheFallback(
         cacheKey: String,
@@ -141,13 +162,11 @@ class WallpaperRepository @Inject constructor(
     ): SearchResult<Wallpaper> {
         return try {
             val result = fetch()
-            // Cache successful results
             if (result.items.isNotEmpty()) {
                 cacheManager.cache(cacheKey, result.items)
             }
             result
         } catch (e: Exception) {
-            // Try stale cache on network failure
             val cached = cacheManager.getStaleCached(cacheKey)
             if (cached != null && cached.isNotEmpty()) {
                 SearchResult(
@@ -157,7 +176,7 @@ class WallpaperRepository @Inject constructor(
                     hasMore = false,
                 )
             } else {
-                throw e // No cache available, propagate error
+                throw e
             }
         }
     }

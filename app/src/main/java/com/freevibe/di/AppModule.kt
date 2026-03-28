@@ -14,8 +14,10 @@ import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
+import com.freevibe.data.remote.klipy.KlipyApi
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
+import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import com.squareup.moshi.Moshi
@@ -123,6 +125,26 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(PexelsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePixabayApi(client: OkHttpClient, moshi: Moshi): PixabayApi =
+        Retrofit.Builder()
+            .baseUrl(PixabayApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(PixabayApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideKlipyApi(client: OkHttpClient, moshi: Moshi): KlipyApi =
+        Retrofit.Builder()
+            .baseUrl(KlipyApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(KlipyApi::class.java)
 
     // -- Database --
 
