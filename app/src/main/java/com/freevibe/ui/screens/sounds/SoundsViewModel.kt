@@ -177,15 +177,15 @@ class SoundsViewModel @Inject constructor(
         if (_state.value.playingId == sound.id) {
             stopPlayback()
         } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
-            // YouTube: resolve audio stream URL first
+            // YouTube: use fast preview URL (worstaudio, cached)
             viewModelScope.launch {
                 _state.update { it.copy(playingId = sound.id) }
                 val videoId = sound.id.removePrefix("yt_")
-                Log.d("SoundsVM", "Resolving YouTube audio for: $videoId")
-                val url = youtubeRepo.getAudioStreamUrl(videoId)
-                Log.d("SoundsVM", "YouTube audio URL: ${url?.take(80) ?: "NULL"}")
+                Log.d("SoundsVM", "Resolving YouTube preview for: $videoId")
+                val url = youtubeRepo.getAudioPreviewUrl(videoId)
+                Log.d("SoundsVM", "YouTube preview URL: ${url?.take(80) ?: "NULL"}")
                 if (url != null) {
-                    val resolved = sound.copy(previewUrl = url, downloadUrl = url)
+                    val resolved = sound.copy(previewUrl = url)
                     startPlayback(resolved)
                 } else {
                     _state.update { it.copy(playingId = null, applySuccess = "Could not load audio") }
@@ -355,6 +355,15 @@ class SoundsViewModel @Inject constructor(
                             ytResult.items.forEach { allResults.add(it) }
                             _state.update { st ->
                                 st.copy(sounds = allResults.toList(), isLoading = false)
+                            }
+                            // Pre-resolve first 3 YouTube audio URLs in background for instant playback
+                            ytResult.items.take(3).forEach { yt ->
+                                launch {
+                                    try {
+                                        val vid = yt.id.removePrefix("yt_")
+                                        youtubeRepo.getAudioPreviewUrl(vid)
+                                    } catch (_: Exception) {}
+                                }
                             }
                         }
                     } catch (_: Exception) {}
