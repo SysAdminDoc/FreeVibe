@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v2.2.0** (versionCode 23)
+- **v2.3.0** (versionCode 24)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -90,6 +90,7 @@ DataStore: Settings, Onboarding
 - `CollectionRepository.kt` - CRUD for wallpaper collections (Room-backed)
 
 ## Version History
+- v2.3.0: Fix WallpaperCropScreen aspect ratio preset math (proper viewport-relative scaling). Add "Favorites" as auto-wallpaper source (AutoWallpaperWorker + SettingsScreen picker). Fix FavoritesExporter import crash on malformed JSON (catch + user-friendly error). Haptic feedback on wallpaper favorite toggle. Updated onboarding features page (Collections + Auto-Wallpaper replace Dark Theme + Offline Ready). Fix DownloadsScreen silent catch on file open failure (snackbar). Random wallpaper shuffle FAB on WallpapersScreen.
 - v2.2.0: Fix AudioTrimmer resource leak (try-finally for extractor/muxer) + unsigned byte fade. Fix SoundEditor extractWaveform resource leak + playback race condition (state-based loop instead of player-based). Fix DualWallpaperService bitmap leak on exception (try-finally recycle). Batch WallpaperEditor preset application (single applyPreset() instead of 4 separate filter calls). Sound editor undo (one-level snapshot of trim/fade state, Undo button in top bar). Widget shuffle error feedback (Toast on failure instead of silent catch).
 - v2.1.0: Remove dead NASA/Wikimedia code (files, AppModule providers, WallpaperRepository dep, mappers). Fix unsafe Activity cast in Theme.kt. Batch favorite status loading (single query for all IDs instead of N per-card Flow collectors). Parallax effect on wallpaper detail pager (scale + translate + alpha on page offset). Wallpaper collections feature: Room entities + migration v3->v4, CollectionDao, CollectionRepository, CollectionsScreen (list + detail grid), "Save to Collection" bottom sheet on wallpaper detail, Settings entry.
 - v2.0.0: Animated favorite heart overlay on wallpaper grid cards (tap to toggle, spring bounce animation), sound detail waveform visualization (60-bar Canvas with animated playback progress), onboarding feature stagger animations (slide-in from left, 80ms delay per row), glassmorphic bottom sheets (92% alpha, 12dp tonal elevation), download progress shows percentage, fix deprecated VolumeUp icon
