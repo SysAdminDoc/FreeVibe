@@ -1,4 +1,8 @@
-# Aura
+<p align="center">
+  <img src="Aura-Logo.png" width="128" alt="Aura">
+</p>
+
+<h1 align="center">Aura</h1>
 
 ![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
