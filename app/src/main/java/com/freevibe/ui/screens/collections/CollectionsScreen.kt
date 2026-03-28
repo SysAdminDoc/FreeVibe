@@ -1,6 +1,8 @@
 package com.freevibe.ui.screens.collections
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -97,8 +99,11 @@ fun CollectionsScreen(
     val selectedCollectionId by viewModel.selectedCollectionId.collectAsState()
     val selectedItems by viewModel.selectedItems.collectAsState()
     val selectedCollection = collections.find { it.collectionId == selectedCollectionId }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -167,15 +172,24 @@ fun CollectionsScreen(
                 ) {
                     items(selectedItems.size, key = { selectedItems[it].wallpaperId }) { index ->
                         val item = selectedItems[index]
+                        @OptIn(ExperimentalFoundationApi::class)
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp)),
+                                .clip(RoundedCornerShape(12.dp))
+                                .combinedClickable(
+                                    onClick = {
+                                        viewModel.selectWallpaper(item)
+                                        onWallpaperClick(item.wallpaperId)
+                                    },
+                                    onLongClick = {
+                                        viewModel.removeItem(selectedCollectionId!!, item.wallpaperId)
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Removed from collection")
+                                        }
+                                    },
+                                ),
                             shape = RoundedCornerShape(12.dp),
-                            onClick = {
-                                viewModel.selectWallpaper(item)
-                                onWallpaperClick(item.wallpaperId)
-                            },
                         ) {
                             AsyncImage(
                                 model = item.thumbnailUrl,

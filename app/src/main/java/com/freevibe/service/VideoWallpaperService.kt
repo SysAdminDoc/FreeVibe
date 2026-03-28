@@ -57,6 +57,7 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun initializePlayer(holder: SurfaceHolder) {
             val path = videoPath ?: return
+            if (!java.io.File(path).exists()) return
             try {
                 releasePlayer()
                 mediaPlayer = MediaPlayer().apply {
