@@ -17,32 +17,32 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v2.0.0** (versionCode 21)
-- Version strings in: `app/build.gradle.kts`, `build.gradle.kts` comment, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
+- **v2.1.0** (versionCode 22)
+- Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
 ```
-Compose UI (14 screens, 4 bottom nav tabs)
+Compose UI (15 screens, 4 bottom nav tabs)
   ViewModels (Hilt) + SelectedContentHolder singleton
-    Wallpaper repos: Wallhaven, Picsum, Bing, Reddit (Wikimedia/NASA disabled - broken APIs)
+    Wallpaper repos: Wallhaven, Picsum, Bing, Reddit
     Sound repos: Freesound (primary, 600K+ tagged), Internet Archive (secondary, duration-filtered)
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
-              OfflineFavorites, WallpaperHistory, VideoWallpaperService
-Room DB (v3): favorites, downloads, search_history, wallpaper_cache,
-              wallpaper_history, ia_audio_cache
+              OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
+Room DB (v4): favorites, downloads, search_history, wallpaper_cache,
+              wallpaper_history, ia_audio_cache, wallpaper_collections, wallpaper_collection_items
 DataStore: Settings, Onboarding
 ```
 
 ## API Keys
 - `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
 - `FREESOUND_API_KEY` - Required for sound browsing (free key from freesound.org/apiv2/apply/)
-- `NASA_API_KEY` - Unused (NASA source disabled)
 - Keys stored in `local.properties`, exposed via BuildConfig
 
 ## Database Migrations
 - v1->2: Added wallpaper_cache + wallpaper_history tables
 - v2->3: Added ia_audio_cache table
+- v3->4: Added wallpaper_collections + wallpaper_collection_items tables
 - Migrations defined in AppModule.kt. Uses fallbackToDestructiveMigrationOnDowngrade() only.
 
 ## Gotchas
@@ -58,8 +58,8 @@ DataStore: Settings, Onboarding
 - SimilarSoundsSection uses rememberCoroutineScope for lazy-load (not LaunchedEffect) to avoid auto-fetching
 - AudioTrimmer fade is a lossy byte-level approximation on compressed MP3 — effective but not sample-accurate
 - SoundEditorScreen local file picker uses ActivityResultContracts.GetContent("audio/*")
-- Wallpaper tabs: WIKIMEDIA and NASA removed from WallpaperTab enum entirely (not just hidden)
-- AutoWallpaperWorker still has string-based "wikimedia"/"nasa" branches for backwards compat with saved prefs
+- NASA/Wikimedia API files fully deleted in v2.1.0 — enum values kept in ContentSource for legacy favorites compatibility
+- WallpaperRepository no longer depends on WikimediaApi (constructor param removed)
 - NavHost uses animated transitions (fade+slide) — enterTransition/exitTransition/popEnter/popExit in FreeVibeRoot
 - WallpaperDetailScreen uses SubcomposeAsyncImage (not AsyncImage) for loading/error state handling
 - SoundsViewModel.loadSimilar() accepts String soundId — dispatches to Freesound API for fs_ prefixed, keyword search for IA
@@ -86,8 +86,11 @@ DataStore: Settings, Onboarding
 - `SelectedContentHolder.kt` - Singleton state bridge between screens + pendingCategoryQuery
 - `WallpaperHistoryScreen.kt` - Browsable grid, tap to re-apply (navigates to detail)
 - `SearchHistoryDropdown.kt` - Reusable recent searches dropdown component
+- `CollectionsScreen.kt` - Wallpaper collections list + detail grid, CollectionsViewModel
+- `CollectionRepository.kt` - CRUD for wallpaper collections (Room-backed)
 
 ## Version History
+- v2.1.0: Remove dead NASA/Wikimedia code (files, AppModule providers, WallpaperRepository dep, mappers). Fix unsafe Activity cast in Theme.kt. Batch favorite status loading (single query for all IDs instead of N per-card Flow collectors). Parallax effect on wallpaper detail pager (scale + translate + alpha on page offset). Wallpaper collections feature: Room entities + migration v3->v4, CollectionDao, CollectionRepository, CollectionsScreen (list + detail grid), "Save to Collection" bottom sheet on wallpaper detail, Settings entry.
 - v2.0.0: Animated favorite heart overlay on wallpaper grid cards (tap to toggle, spring bounce animation), sound detail waveform visualization (60-bar Canvas with animated playback progress), onboarding feature stagger animations (slide-in from left, 80ms delay per row), glassmorphic bottom sheets (92% alpha, 12dp tonal elevation), download progress shows percentage, fix deprecated VolumeUp icon
 - v1.9.0: Per-card shimmer loading placeholders in wallpaper grid (SubcomposeAsyncImage), long-press to favorite from grid, editor preset filters (Warm/Cool/Vivid/Cinematic/Dreamy/B&W), staggered category card entrance animations, favorites sorting (Recent/Name/Oldest), fix Reddit pagination (reset afterToken on all tab switches)
 - v1.8.0: Rewrote SoundRepository — targets curated IA collections (freesound, opensource_audio, sound_effects) instead of general search, excludes podcasts/radio/spoken word, semaphore-limited concurrent metadata fetches (max 5), 8s timeout per fetch, fetches 30 items to compensate for duration-filtered rejects. Vertical pager on wallpaper detail screen for swipe up/down between wallpapers with auto-load-more.

@@ -142,6 +142,7 @@ fun SettingsScreen(
     onLicensesClick: () -> Unit = {},
     onCategoriesClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
+    onCollectionsClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -245,6 +246,12 @@ fun SettingsScreen(
                 subtitle = "Nature, Space, Anime, Dark, Neon + 12 more",
                 onClick = onCategoriesClick,
             )
+            SettingsItem(
+                icon = Icons.Default.Folder,
+                title = "Collections",
+                subtitle = "Organize wallpapers into folders",
+                onClick = onCollectionsClick,
+            )
             // #2: Wallpaper history — opens browsable grid
             if (wallpaperHistory.isNotEmpty()) {
                 SettingsItem(
@@ -315,7 +322,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "FreeVibe",
-                subtitle = "v2.0.0 - Open source device personalization",
+                subtitle = "v2.1.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
