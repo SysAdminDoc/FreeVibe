@@ -70,6 +70,9 @@ class VideoWallpaperService : WallpaperService() {
             try {
                 releasePlayer()
                 lastModified = file.lastModified()
+                val screenW = resources.displayMetrics.widthPixels
+                val screenH = resources.displayMetrics.heightPixels
+
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
                     val wrappedHolder = object : SurfaceHolder by holder {
@@ -78,8 +81,26 @@ class VideoWallpaperService : WallpaperService() {
                     setDisplay(wrappedHolder)
                     isLooping = true
                     setVolume(0f, 0f)
-                    setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
                     prepare()
+
+                    // Scale surface to fill screen (zoom-to-fill, crop excess)
+                    val vw = videoWidth
+                    val vh = videoHeight
+                    if (vw > 0 && vh > 0) {
+                        val videoRatio = vw.toFloat() / vh
+                        val screenRatio = screenW.toFloat() / screenH
+                        val (surfW, surfH) = if (videoRatio > screenRatio) {
+                            // Video is wider than screen — match height, overflow width
+                            val w = (screenH * videoRatio).toInt()
+                            w to screenH
+                        } else {
+                            // Video is taller — match width, overflow height
+                            val h = (screenW / videoRatio).toInt()
+                            screenW to h
+                        }
+                        holder.setFixedSize(surfW, surfH)
+                    }
+
                     start()
                 }
             } catch (_: Exception) {
