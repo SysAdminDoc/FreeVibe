@@ -47,12 +47,16 @@ fun WallpaperDetailScreen(
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val wallpapers = state.wallpapers
     val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val wp = wallpaper ?: return
 
-    // Vertical pager for swiping between wallpapers
-    val initialIndex = remember(wp.id) {
+    // Use the list from the ViewModel, but only if our wallpaper is actually in it
+    val wallpapers = remember(state.wallpapers, wp.id) {
+        if (state.wallpapers.any { it.id == wp.id }) state.wallpapers
+        else listOf(wp) // Fallback: show just the selected wallpaper
+    }
+
+    val initialIndex = remember(wp.id, wallpapers) {
         wallpapers.indexOfFirst { it.id == wp.id }.coerceAtLeast(0)
     }
     val pagerState = rememberPagerState(initialPage = initialIndex) { wallpapers.size.coerceAtLeast(1) }
