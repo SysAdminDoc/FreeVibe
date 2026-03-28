@@ -308,6 +308,47 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
             }
 
+            // Reddit video wallpapers (r/livewallpapers, r/LiveWallpaper, etc.)
+            withContext(Dispatchers.IO) {
+                val subs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds")
+                for (sub in subs) {
+                    try {
+                        val url = "https://www.reddit.com/r/$sub/hot.json?limit=25&raw_json=1"
+                        val req = Request.Builder().url(url).header("User-Agent", "Aura/3.0.0 (Android)").build()
+                        val resp = okHttpClient.newCall(req).execute()
+                        if (!resp.isSuccessful) continue
+                        val body = resp.body?.string() ?: continue
+
+                        // Extract video posts with fallback_url (v.redd.it videos)
+                        val postRegex = Regex(""""title"\s*:\s*"([^"]{3,120})"[^}]*?"fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
+                        val thumbRegex = Regex(""""url_overridden_by_dest"\s*:\s*"(https://(?:preview\.redd\.it|i\.redd\.it)[^"]*\.(?:jpg|png)[^"]*)"""")
+                        val thumbs = thumbRegex.findAll(body).toList()
+
+                        postRegex.findAll(body).forEachIndexed { i, match ->
+                            val title = match.groupValues[1]
+                            val videoUrl = match.groupValues[2]
+                            val thumb = thumbs.getOrNull(i)?.groupValues?.getOrNull(1)?.replace("&amp;", "&") ?: ""
+
+                            if (junkPatterns.none { it.containsMatchIn(title) } && !title.contains("#")) {
+                                val item = VideoWallpaperItem(
+                                    id = "rd_${videoUrl.hashCode()}",
+                                    title = title,
+                                    thumbnailUrl = thumb,
+                                    source = "Reddit",
+                                    uploaderName = "r/$sub",
+                                    videoId = "",
+                                )
+                                results.add(item)
+                                // Reddit v.redd.it URLs are direct — add DASH_720.mp4 for playback
+                                val directUrl = videoUrl.trimEnd('/') + "/DASH_720.mp4"
+                                streamUrls[item.id] = directUrl
+                                _resolvedIds.value = _resolvedIds.value + item.id
+                            }
+                        }
+                    } catch (_: Exception) { continue }
+                }
+            }
+
             // Deduplicate
             val seen = mutableSetOf<String>()
             results.retainAll { seen.add(it.id) }
@@ -316,9 +357,10 @@ class VideoWallpapersViewModel @Inject constructor(
                 it.copy(items = results, isLoading = false, isRefreshing = false)
             }
 
-            // Pre-resolve video stream URLs in background for ExoPlayer playback
+            // Pre-resolve YouTube video stream URLs (Pexels + Reddit already have direct URLs)
+            val ytItems = results.filter { it.source == "YouTube" && it.videoId.isNotEmpty() && !streamUrls.containsKey(it.id) }
             val semaphore = kotlinx.coroutines.sync.Semaphore(5)
-            results.forEach { item ->
+            ytItems.forEach { item ->
                 launch {
                     semaphore.acquire()
                     try {
