@@ -100,6 +100,9 @@ class VideoWallpapersViewModel @Inject constructor(
         "i tested", "i tried", "i bought", "i found", "must have",
         "you need", "don.?t buy", "worth it", "honest",
         "\\bmake\\b", "\\bfor\\b", "\\byour\\b",
+        "3d live", "app demo", "free download", "link in",
+        "showing my", "on my phone", "on my android", "on my iphone",
+        "samsung galaxy", "\\bios\\b", "\\bsettings\\b",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     private val youtubeQueries = listOf(
@@ -269,6 +272,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             )
                             response.videos
                                 .filter { it.duration in 3..120 }
+                                .filter { it.height > it.width } // Portrait only
                                 .mapNotNull { video ->
                                     val bestFile = video.videoFiles
                                         .filter { it.fileType == "video/mp4" }
