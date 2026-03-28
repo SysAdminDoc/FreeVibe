@@ -125,16 +125,30 @@ class VideoWallpapersViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d("VideoWP", "Downloading video...")
+                Log.d("VideoWP", "Downloading video via yt-dlp with portrait crop...")
                 val file = withContext(Dispatchers.IO) {
                     val cacheFile = File(context.filesDir, "live_wallpaper.mp4")
-                    val request = Request.Builder().url(videoUrl).build()
-                    val response = okHttpClient.newCall(request).execute()
-                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                    response.body?.byteStream()?.use { input ->
-                        cacheFile.outputStream().use { output -> input.copyTo(output) }
+                    try {
+                        val ytUrl = "https://www.youtube.com/watch?v=${item.videoId}"
+                        val request = com.yausername.youtubedl_android.YoutubeDLRequest(ytUrl)
+                        request.addOption("-f", "bestvideo[ext=mp4][height<=1080]/best[ext=mp4]/best")
+                        request.addOption("-o", cacheFile.absolutePath)
+                        request.addOption("--recode-video", "mp4")
+                        // Crop to center 9:16 portrait via FFmpeg postprocessor
+                        request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=ih*9/16:ih -c:v libx264 -preset ultrafast")
+                        request.addOption("--force-overwrites")
+                        val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                        Log.d("VideoWP", "yt-dlp exit=${response.exitCode}, size=${cacheFile.length() / 1024}KB")
+                    } catch (e: Exception) {
+                        Log.e("VideoWP", "yt-dlp crop-download failed: ${e.message}")
+                        val req = Request.Builder().url(videoUrl).build()
+                        val resp = okHttpClient.newCall(req).execute()
+                        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                        resp.body?.byteStream()?.use { input ->
+                            cacheFile.outputStream().use { output -> input.copyTo(output) }
+                        }
                     }
-                    Log.d("VideoWP", "Downloaded ${cacheFile.length() / 1024}KB")
+                    Log.d("VideoWP", "Final file: ${cacheFile.length() / 1024}KB")
                     cacheFile
                 }
 
