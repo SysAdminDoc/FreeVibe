@@ -1,14 +1,11 @@
 package com.freevibe.service
 
+import android.media.MediaPlayer
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
-import androidx.media3.exoplayer.ExoPlayer
 
 /**
- * Live wallpaper service using ExoPlayer for better video scaling.
+ * Live wallpaper service that plays a video file on the home/lock screen.
  * Automatically reloads when a new video file is detected.
  */
 class VideoWallpaperService : WallpaperService() {
@@ -16,7 +13,7 @@ class VideoWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = VideoEngine()
 
     inner class VideoEngine : Engine() {
-        private var exoPlayer: ExoPlayer? = null
+        private var mediaPlayer: MediaPlayer? = null
         private var currentHolder: SurfaceHolder? = null
         private var lastModified: Long = 0
 
@@ -47,14 +44,14 @@ class VideoWallpaperService : WallpaperService() {
                         return
                     }
                 }
-                exoPlayer?.let {
+                mediaPlayer?.let {
                     if (!it.isPlaying) {
                         it.seekTo(0)
-                        it.play()
+                        it.start()
                     }
                 }
             } else {
-                exoPlayer?.pause()
+                mediaPlayer?.pause()
             }
         }
 
@@ -70,37 +67,16 @@ class VideoWallpaperService : WallpaperService() {
             try {
                 releasePlayer()
                 lastModified = file.lastModified()
-
-                val screenW = resources.displayMetrics.widthPixels
-                val screenH = resources.displayMetrics.heightPixels
-
-                exoPlayer = ExoPlayer.Builder(this@VideoWallpaperService).build().apply {
-                    setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
-                    repeatMode = Player.REPEAT_MODE_ALL
-                    volume = 0f
-
-                    // When video size is known, scale surface to fill screen
-                    addListener(object : Player.Listener {
-                        override fun onVideoSizeChanged(videoSize: VideoSize) {
-                            if (videoSize.width > 0 && videoSize.height > 0) {
-                                val videoRatio = videoSize.width.toFloat() / videoSize.height
-                                val screenRatio = screenW.toFloat() / screenH
-                                if (videoRatio > screenRatio) {
-                                    // Video wider than screen — scale by height, crop width
-                                    val surfW = (screenH * videoRatio).toInt()
-                                    holder.setFixedSize(surfW, screenH)
-                                } else {
-                                    // Video taller — scale by width, crop height
-                                    val surfH = (screenW / videoRatio).toInt()
-                                    holder.setFixedSize(screenW, surfH)
-                                }
-                            }
-                        }
-                    })
-
-                    setVideoSurfaceHolder(holder)
+                mediaPlayer = MediaPlayer().apply {
+                    setDataSource(path)
+                    val wrappedHolder = object : SurfaceHolder by holder {
+                        override fun setKeepScreenOn(screenOn: Boolean) {}
+                    }
+                    setDisplay(wrappedHolder)
+                    isLooping = true
+                    setVolume(0f, 0f)
                     prepare()
-                    play()
+                    start()
                 }
             } catch (_: Exception) {
                 releasePlayer()
@@ -108,10 +84,10 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         private fun releasePlayer() {
-            exoPlayer?.apply {
-                try { stop(); release() } catch (_: Exception) {}
+            mediaPlayer?.apply {
+                try { if (isPlaying) stop(); release() } catch (_: Exception) {}
             }
-            exoPlayer = null
+            mediaPlayer = null
         }
     }
 }
