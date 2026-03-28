@@ -252,6 +252,7 @@ fun SourceBadge(source: String, modifier: Modifier = Modifier) {
         "NASA" -> Color(0xFF0B3D91) to "NASA"
         "FREESOUND" -> Color(0xFF3DB2CE) to "Freesound" // Legacy favorites only
         "YOUTUBE" -> Color(0xFFFF0000) to "YouTube"
+        "PEXELS" -> Color(0xFF05A081) to "Pexels"
         else -> MaterialTheme.colorScheme.onSurfaceVariant to source
     }
 

@@ -6,7 +6,10 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.WallpaperCollectionEntity
+import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
@@ -20,6 +23,7 @@ import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,12 +43,13 @@ data class WallpapersUiState(
     val selectedColor: String? = null,       // #9: Color filter
 )
 
-enum class WallpaperTab { DISCOVER, REDDIT, WALLHAVEN, BING, UNSPLASH, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, PEXELS, REDDIT, WALLHAVEN, BING, UNSPLASH, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
+    private val pexelsApi: PexelsApi,
     private val favoritesRepo: FavoritesRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val downloadManager: DownloadManager,
@@ -54,7 +59,7 @@ class WallpapersViewModel @Inject constructor(
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
     private val searchHistoryRepo: SearchHistoryRepository,
-    prefs: PreferencesManager,
+    private val prefs: PreferencesManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
@@ -262,6 +267,31 @@ class WallpapersViewModel @Inject constructor(
             try {
                 val result = when (s.selectedTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(s.currentPage)
+                    WallpaperTab.PEXELS -> {
+                        val key = prefs.pexelsApiKey.first()
+                        if (key.isNotBlank()) {
+                            val response = pexelsApi.curatedPhotos(apiKey = key, page = s.currentPage)
+                            SearchResult(
+                                items = response.photos.map { photo ->
+                                    Wallpaper(
+                                        id = "px_${photo.id}",
+                                        source = ContentSource.PEXELS,
+                                        thumbnailUrl = photo.src.medium,
+                                        fullUrl = photo.src.original,
+                                        width = photo.width,
+                                        height = photo.height,
+                                        sourcePageUrl = photo.url,
+                                        uploaderName = photo.photographer,
+                                    )
+                                },
+                                totalCount = response.totalResults,
+                                currentPage = response.page,
+                                hasMore = response.nextPage != null,
+                            )
+                        } else {
+                            SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
+                        }
+                    }
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = s.currentPage)
                     WallpaperTab.BING -> wallpaperRepo.getBingDaily(s.currentPage)
