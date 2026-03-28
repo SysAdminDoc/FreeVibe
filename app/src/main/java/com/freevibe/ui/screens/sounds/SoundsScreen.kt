@@ -104,24 +104,26 @@ fun SoundsScreen(
         val visibleTabs = SoundTab.entries.filter {
             it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
         }
-        ScrollableTabRow(
-            selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.primary,
-            edgePadding = 16.dp,
-            divider = {},
-        ) {
-            visibleTabs.forEach { tab ->
-                Tab(
-                    selected = state.selectedTab == tab,
-                    onClick = { viewModel.selectTab(tab) },
-                    text = {
-                        Text(
-                            text = tab.name.lowercase().replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    },
-                )
+        key(visibleTabs.size) {
+            ScrollableTabRow(
+                selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 16.dp,
+                divider = {},
+            ) {
+                visibleTabs.forEach { tab ->
+                    Tab(
+                        selected = state.selectedTab == tab,
+                        onClick = { viewModel.selectTab(tab) },
+                        text = {
+                            Text(
+                                text = tab.name.lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        },
+                    )
+                }
             }
         }
 

@@ -181,29 +181,31 @@ fun WallpapersScreen(
                 it != WallpaperTab.COLOR || state.selectedTab == WallpaperTab.COLOR
             }
 
-            ScrollableTabRow(
-                selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                edgePadding = 16.dp,
-                divider = {},
-            ) {
-                visibleTabs.forEach { tab ->
-                    Tab(
-                        selected = state.selectedTab == tab,
-                        onClick = { viewModel.selectTab(tab) },
-                        text = {
-                            Text(
-                                text = when (tab) {
-                                    WallpaperTab.DISCOVER -> "Discover"
-                                    WallpaperTab.COLOR -> "Color"
-                                    else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        },
-                    )
+            key(visibleTabs.size) {
+                ScrollableTabRow(
+                    selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    edgePadding = 16.dp,
+                    divider = {},
+                ) {
+                    visibleTabs.forEach { tab ->
+                        Tab(
+                            selected = state.selectedTab == tab,
+                            onClick = { viewModel.selectTab(tab) },
+                            text = {
+                                Text(
+                                    text = when (tab) {
+                                        WallpaperTab.DISCOVER -> "Discover"
+                                        WallpaperTab.COLOR -> "Color"
+                                        else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            },
+                        )
                 }
+            }
             }
 
             // Download progress
