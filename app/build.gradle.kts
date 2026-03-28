@@ -119,6 +119,9 @@ dependencies {
     // DataStore
     implementation(libs.datastore)
 
+    // Palette (Material You color extraction)
+    implementation("androidx.palette:palette-ktx:1.0.0")
+
     // Coroutines
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
