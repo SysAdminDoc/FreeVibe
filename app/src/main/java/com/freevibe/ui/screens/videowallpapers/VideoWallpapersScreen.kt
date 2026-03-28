@@ -27,12 +27,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.remote.pexels.PexelsApi
+import com.freevibe.data.remote.pexels.PexelsVideo
 import com.freevibe.data.repository.YouTubeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,6 +72,8 @@ data class VideoWallpapersState(
 class VideoWallpapersViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val youtubeRepo: YouTubeRepository,
+    private val pexelsApi: PexelsApi,
+    private val prefs: PreferencesManager,
     private val okHttpClient: OkHttpClient,
 ) : ViewModel() {
 
@@ -94,6 +100,11 @@ class VideoWallpapersViewModel @Inject constructor(
         "AMOLED live wallpaper vertical phone loop",
         "vertical video wallpaper phone 4K loop",
         "live wallpaper android vertical abstract",
+    )
+
+    private val pexelsQueries = listOf(
+        "mobile wallpaper", "phone wallpaper", "abstract background",
+        "nature loop", "neon lights", "space", "ocean waves",
     )
 
     init { load() }
@@ -125,22 +136,29 @@ class VideoWallpapersViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d("VideoWP", "Downloading video via yt-dlp with portrait crop...")
+                Log.d("VideoWP", "Downloading video (source: ${item.source})...")
                 val file = withContext(Dispatchers.IO) {
                     val cacheFile = File(context.filesDir, "live_wallpaper.mp4")
-                    try {
-                        val ytUrl = "https://www.youtube.com/watch?v=${item.videoId}"
-                        val request = com.yausername.youtubedl_android.YoutubeDLRequest(ytUrl)
-                        request.addOption("-f", "bestvideo[ext=mp4][height<=1080]/best[ext=mp4]/best")
-                        request.addOption("-o", cacheFile.absolutePath)
-                        request.addOption("--recode-video", "mp4")
-                        // Crop to center 9:16 portrait via FFmpeg postprocessor
-                        request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=ih*9/16:ih -c:v libx264 -preset ultrafast")
-                        request.addOption("--force-overwrites")
-                        val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-                        Log.d("VideoWP", "yt-dlp exit=${response.exitCode}, size=${cacheFile.length() / 1024}KB")
-                    } catch (e: Exception) {
-                        Log.e("VideoWP", "yt-dlp crop-download failed: ${e.message}")
+                    if (item.source == "YouTube" && item.videoId.isNotEmpty()) {
+                        // YouTube: use yt-dlp for download
+                        try {
+                            val ytUrl = "https://www.youtube.com/watch?v=${item.videoId}"
+                            val request = com.yausername.youtubedl_android.YoutubeDLRequest(ytUrl)
+                            request.addOption("-f", "bestvideo[ext=mp4][height<=1080]/best[ext=mp4]/best")
+                            request.addOption("-o", cacheFile.absolutePath)
+                            request.addOption("--force-overwrites")
+                            com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                        } catch (e: Exception) {
+                            Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
+                            val req = Request.Builder().url(videoUrl).build()
+                            val resp = okHttpClient.newCall(req).execute()
+                            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                            resp.body?.byteStream()?.use { input ->
+                                cacheFile.outputStream().use { output -> input.copyTo(output) }
+                            }
+                        }
+                    } else {
+                        // Pexels / direct URL: simple download
                         val req = Request.Builder().url(videoUrl).build()
                         val resp = okHttpClient.newCall(req).execute()
                         if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
@@ -148,7 +166,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             cacheFile.outputStream().use { output -> input.copyTo(output) }
                         }
                     }
-                    Log.d("VideoWP", "Final file: ${cacheFile.length() / 1024}KB")
+                    Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
                     cacheFile
                 }
 
@@ -217,6 +235,49 @@ class VideoWallpapersViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = !it.isRefreshing, error = null) }
             val results = mutableListOf<VideoWallpaperItem>()
+
+            // Pexels — instant, direct MP4 URLs, no extraction needed
+            withContext(Dispatchers.IO) {
+                try {
+                    val key = prefs.pexelsApiKey.first()
+                    if (key.isNotBlank()) {
+                        val query = pexelsQueries.random()
+                        val response = pexelsApi.searchVideos(
+                            apiKey = key,
+                            query = query,
+                            orientation = "portrait",
+                            perPage = 20,
+                        )
+                        response.videos
+                            .filter { it.duration in 3..120 }
+                            .forEach { video ->
+                                val bestFile = video.videoFiles
+                                    .filter { it.fileType == "video/mp4" }
+                                    .sortedByDescending { it.height }
+                                    .firstOrNull { it.height <= 1920 }
+                                    ?: video.videoFiles.firstOrNull { it.fileType == "video/mp4" }
+
+                                if (bestFile != null) {
+                                    val item = VideoWallpaperItem(
+                                        id = "px_${video.id}",
+                                        title = "by ${video.user.name}",
+                                        thumbnailUrl = video.image,
+                                        source = "Pexels",
+                                        duration = video.duration.toLong(),
+                                        uploaderName = video.user.name,
+                                        videoId = "",
+                                    )
+                                    results.add(item)
+                                    // Direct URL — no extraction needed!
+                                    streamUrls[item.id] = bestFile.link
+                                    _resolvedIds.value = _resolvedIds.value + item.id
+                                }
+                            }
+                    }
+                } catch (e: Exception) {
+                    Log.d("VideoWP", "Pexels failed: ${e.message}")
+                }
+            }
 
             // YouTube search
             withContext(Dispatchers.IO) {
@@ -509,11 +570,16 @@ private fun VideoCard(
 
             // Source badge
             Surface(
-                color = Color(0xFFFF0000).copy(alpha = 0.85f),
+                color = when (item.source) {
+                    "Pexels" -> Color(0xFF05A081)
+                    "YouTube" -> Color(0xFFFF0000)
+                    "Reddit" -> Color(0xFFFF4500)
+                    else -> Color(0xFF7C5CFC)
+                }.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(4.dp),
                 modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
             ) {
-                Text("YouTube", Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+                Text(item.source, Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
         }
 

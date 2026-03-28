@@ -14,6 +14,7 @@ import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
+import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
@@ -112,6 +113,16 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(BingDailyApi::class.java)
+
+    @Provides
+    @Singleton
+    fun providePexelsApi(client: OkHttpClient, moshi: Moshi): PexelsApi =
+        Retrofit.Builder()
+            .baseUrl(PexelsApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(PexelsApi::class.java)
 
     // -- Database --
 
