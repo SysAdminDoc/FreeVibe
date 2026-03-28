@@ -321,16 +321,16 @@ fun SettingsScreen(
         SettingsSection("About") {
             SettingsItem(
                 icon = Icons.Default.Info,
-                title = "FreeVibe",
+                title = "Aura",
                 subtitle = "v3.0.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
                 icon = Icons.Default.Code,
                 title = "Source code",
-                subtitle = "github.com/SysAdminDoc/FreeVibe",
+                subtitle = "github.com/SysAdminDoc/Aura",
                 onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/FreeVibe")))
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/Aura")))
                 },
             )
             SettingsItem(
