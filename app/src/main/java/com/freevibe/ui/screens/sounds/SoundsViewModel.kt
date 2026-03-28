@@ -273,10 +273,12 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isLoadingMore = true) }
             }
 
-            val progressCallback: (Int, Int) -> Unit = { resolved, total ->
-                if (total > 0) {
-                    _state.update { it.copy(loadingProgress = "Fetching sounds... $resolved/$total") }
-                }
+            val progressCallback: ((Int, Int) -> Unit) = { resolved, total ->
+                try {
+                    if (total > 0) {
+                        _state.update { it.copy(loadingProgress = "Fetching sounds... $resolved/$total") }
+                    }
+                } catch (_: Exception) {}
             }
 
             try {
