@@ -5,14 +5,17 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.SearchResult
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toWallpaper
+import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 @HiltWorker
@@ -22,6 +25,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
     private val favoritesRepo: FavoritesRepository,
+    private val collectionRepo: CollectionRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val historyManager: WallpaperHistoryManager,
     private val prefs: PreferencesManager,
@@ -29,57 +33,121 @@ class AutoWallpaperWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            // #10: Read preferred source and target from settings
-            val source = prefs.autoWallpaperSource.first()
-            val targetStr = prefs.autoWallpaperTarget.first()
-            val target = WallpaperTarget.entries.find { it.name == targetStr }
-                ?: WallpaperTarget.BOTH
+            val schedulerEnabled = prefs.schedulerEnabled.first()
+            val legacyEnabled = prefs.autoWallpaperEnabled.first()
 
-            val result = when (source) {
-                "wallhaven" -> wallpaperRepo.getWallhaven(page = 1)
-                "unsplash" -> wallpaperRepo.getPicsum(page = 1)
-                "bing" -> wallpaperRepo.getBingDaily(page = 1)
-                "reddit" -> redditRepo.getMultiSubreddit()
-                "discover" -> wallpaperRepo.getDiscover(page = 1)
-                "favorites" -> {
-                    val favs = favoritesRepo.getWallpapers().first()
-                        .map { it.toWallpaper() }
-                    SearchResult(items = favs, totalCount = favs.size, currentPage = 1, hasMore = false)
-                }
-                else -> wallpaperRepo.getWallhaven(page = 1)
+            if (schedulerEnabled) {
+                doSchedulerWork()
+            } else if (legacyEnabled) {
+                doLegacyWork()
+            } else {
+                Result.success()
             }
-
-            val wallpaper = result.items.randomOrNull()
-                ?: return Result.retry()
-
-            wallpaperApplier.applyFromUrl(wallpaper.fullUrl, target)
-                .fold(
-                    onSuccess = {
-                        // #11: Record in history
-                        historyManager.record(wallpaper, target)
-                        Result.success()
-                    },
-                    onFailure = { Result.retry() },
-                )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Result.retry()
         }
+    }
+
+    /** Enhanced scheduler with separate home/lock, collections, day/night */
+    private suspend fun doSchedulerWork(): Result {
+        val homeEnabled = prefs.schedulerHomeEnabled.first()
+        val lockEnabled = prefs.schedulerLockEnabled.first()
+        val shuffle = prefs.schedulerShuffle.first()
+
+        // Determine source based on time-of-day if day/night sources are configured
+        val daySource = prefs.schedulerDaySource.first()
+        val nightSource = prefs.schedulerNightSource.first()
+        val source = if (daySource.isNotEmpty() && nightSource.isNotEmpty()) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            if (hour in 6..17) daySource else nightSource
+        } else {
+            prefs.schedulerSource.first()
+        }
+
+        val wallpapers = fetchWallpapers(source)
+        if (wallpapers.isEmpty()) return Result.retry()
+
+        val pick = if (shuffle) wallpapers.random() else wallpapers.first()
+
+        if (homeEnabled && lockEnabled) {
+            applyAndRecord(pick, WallpaperTarget.BOTH)
+        } else {
+            if (homeEnabled) applyAndRecord(pick, WallpaperTarget.HOME)
+            if (lockEnabled) {
+                // Pick a different wallpaper for lock if available
+                val lockPick = if (wallpapers.size > 1) wallpapers.filter { it.id != pick.id }.random() else pick
+                applyAndRecord(lockPick, WallpaperTarget.LOCK)
+            }
+        }
+        return Result.success()
+    }
+
+    /** Legacy auto-wallpaper (backward compatible) */
+    private suspend fun doLegacyWork(): Result {
+        val source = prefs.autoWallpaperSource.first()
+        val targetStr = prefs.autoWallpaperTarget.first()
+        val target = WallpaperTarget.entries.find { it.name == targetStr } ?: WallpaperTarget.BOTH
+
+        val wallpapers = fetchWallpapers(source)
+        val wallpaper = wallpapers.randomOrNull() ?: return Result.retry()
+
+        return applyAndRecord(wallpaper, target)
+    }
+
+    private suspend fun fetchWallpapers(source: String): List<Wallpaper> {
+        val collectionId = prefs.schedulerCollectionId.first()
+        return when (source) {
+            "collection" -> {
+                if (collectionId > 0) {
+                    collectionRepo.getItems(collectionId).first().map {
+                        Wallpaper(
+                            id = it.wallpaperId,
+                            source = try { com.freevibe.data.model.ContentSource.valueOf(it.source) }
+                                catch (_: Exception) { com.freevibe.data.model.ContentSource.WALLHAVEN },
+                            thumbnailUrl = it.thumbnailUrl,
+                            fullUrl = it.fullUrl,
+                            width = it.width,
+                            height = it.height,
+                        )
+                    }
+                } else emptyList()
+            }
+            "favorites" -> favoritesRepo.getWallpapers().first().map { it.toWallpaper() }
+            "wallhaven" -> wallpaperRepo.getWallhaven(page = (1..5).random()).items
+            "unsplash" -> wallpaperRepo.getPicsum(page = (1..10).random()).items
+            "bing" -> wallpaperRepo.getBingDaily(page = 1).items
+            "reddit" -> redditRepo.getMultiSubreddit().items
+            "pixabay" -> wallpaperRepo.getPixabay(page = (1..5).random()).items
+            "discover" -> wallpaperRepo.getDiscover(page = (1..3).random()).items
+            else -> wallpaperRepo.getDiscover(page = 1).items
+        }
+    }
+
+    private suspend fun applyAndRecord(wallpaper: Wallpaper, target: WallpaperTarget): Result {
+        return wallpaperApplier.applyFromUrl(wallpaper.fullUrl, target).fold(
+            onSuccess = {
+                historyManager.record(wallpaper, target)
+                Result.success()
+            },
+            onFailure = { Result.retry() },
+        )
     }
 
     companion object {
         const val WORK_NAME = "auto_wallpaper"
 
-        fun schedule(context: Context, intervalHours: Long = 12) {
+        /** Schedule with minute-based intervals (minimum 15 min due to WorkManager) */
+        fun schedule(context: Context, intervalMinutes: Long = 360) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .setRequiresBatteryNotLow(true)
                 .build()
 
             val request = PeriodicWorkRequestBuilder<AutoWallpaperWorker>(
-                intervalHours, TimeUnit.HOURS,
+                intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES,
             )
                 .setConstraints(constraints)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
@@ -87,6 +155,11 @@ class AutoWallpaperWorker @AssistedInject constructor(
                 ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
+        }
+
+        /** Legacy schedule for backward compatibility */
+        fun scheduleHours(context: Context, intervalHours: Long = 12) {
+            schedule(context, intervalHours * 60)
         }
 
         fun cancel(context: Context) {
