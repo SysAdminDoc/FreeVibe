@@ -193,9 +193,7 @@ fun FreeVibeRoot() {
                     onContactPicker = { soundId ->
                         navController.navigate(Screen.ContactPicker.createRoute(soundId))
                     },
-                    onSearchTag = { tag ->
-                        navController.popBackStack()
-                    },
+                    onSearchTag = { /* Tag search handled by SoundsViewModel directly */ },
                 )
             }
 

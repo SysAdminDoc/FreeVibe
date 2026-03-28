@@ -13,10 +13,8 @@ class WallpaperCacheManager @Inject constructor(
     companion object {
         const val TTL_DEFAULT = 6 * 60 * 60 * 1000L    // 6 hours
         const val TTL_REDDIT = 2 * 60 * 60 * 1000L     // 2 hours (fast-changing)
-        const val TTL_NASA = 12 * 60 * 60 * 1000L      // 12 hours
         const val TTL_PICSUM = 24 * 60 * 60 * 1000L    // 24 hours (static catalog)
         const val TTL_BING = 4 * 60 * 60 * 1000L       // 4 hours (daily rotation)
-        const val TTL_WIKIMEDIA = 12 * 60 * 60 * 1000L // 12 hours
     }
 
     /** Get cached wallpapers if fresh enough */
@@ -55,15 +53,13 @@ class WallpaperCacheManager @Inject constructor(
     private fun getTtl(source: ContentSource): Long = when (source) {
         ContentSource.PICSUM -> TTL_PICSUM
         ContentSource.BING -> TTL_BING
-        ContentSource.WIKIMEDIA -> TTL_WIKIMEDIA
         ContentSource.REDDIT -> TTL_REDDIT
-        ContentSource.NASA -> TTL_NASA
         else -> TTL_DEFAULT
     }
 
     private fun WallpaperCacheEntity.toWallpaper() = Wallpaper(
         id = id,
-        source = ContentSource.valueOf(source),
+        source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.WALLHAVEN },
         thumbnailUrl = thumbnailUrl,
         fullUrl = fullUrl,
         width = width,
