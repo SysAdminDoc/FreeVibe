@@ -41,6 +41,10 @@ data class EditorState(
     val contrast: Float = 1f,         // 0.5 to 2.0
     val saturation: Float = 1f,       // 0 to 2.0
     val blurRadius: Float = 0f,       // 0 to 25
+    val vignette: Float = 0f,         // 0 to 1.0
+    val grain: Float = 0f,            // 0 to 1.0
+    val amoledCrush: Float = 0f,      // 0 to 1.0 — pushes dark pixels to pure black
+    val warmth: Float = 0f,           // -50 to 50 — color temperature shift
     val isProcessing: Boolean = false,
     val isApplying: Boolean = false,
     val isLoadingImage: Boolean = false,
@@ -108,9 +112,16 @@ class WallpaperEditorViewModel @Inject constructor(
         applyFilters()
     }
 
-    fun applyPreset(brightness: Float, contrast: Float, saturation: Float, blur: Float) {
+    fun updateVignette(value: Float) { _state.update { it.copy(vignette = value) }; applyFilters() }
+    fun updateGrain(value: Float) { _state.update { it.copy(grain = value) }; applyFilters() }
+    fun updateAmoledCrush(value: Float) { _state.update { it.copy(amoledCrush = value) }; applyFilters() }
+    fun updateWarmth(value: Float) { _state.update { it.copy(warmth = value) }; applyFilters() }
+
+    fun applyPreset(brightness: Float, contrast: Float, saturation: Float, blur: Float,
+                    vignette: Float = 0f, grain: Float = 0f, amoledCrush: Float = 0f, warmth: Float = 0f) {
         _state.update {
-            it.copy(brightness = brightness, contrast = contrast, saturation = saturation, blurRadius = blur)
+            it.copy(brightness = brightness, contrast = contrast, saturation = saturation,
+                blurRadius = blur, vignette = vignette, grain = grain, amoledCrush = amoledCrush, warmth = warmth)
         }
         applyFilters()
     }
@@ -119,10 +130,8 @@ class WallpaperEditorViewModel @Inject constructor(
         _state.update {
             it.copy(
                 editedBitmap = it.originalBitmap,
-                brightness = 0f,
-                contrast = 1f,
-                saturation = 1f,
-                blurRadius = 0f,
+                brightness = 0f, contrast = 1f, saturation = 1f, blurRadius = 0f,
+                vignette = 0f, grain = 0f, amoledCrush = 0f, warmth = 0f,
             )
         }
     }
@@ -145,22 +154,24 @@ class WallpaperEditorViewModel @Inject constructor(
             _state.update { it.copy(isProcessing = true) }
             val s = _state.value
             val result = withContext(Dispatchers.Default) {
-                var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation)
-                if (s.blurRadius > 0.5f) {
-                    bmp = stackBlur(bmp, s.blurRadius.toInt().coerceIn(1, 25))
-                }
+                var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation, s.warmth)
+                if (s.blurRadius > 0.5f) bmp = stackBlur(bmp, s.blurRadius.toInt().coerceIn(1, 25))
+                if (s.amoledCrush > 0.01f) bmp = applyAmoledCrush(bmp, s.amoledCrush)
+                if (s.vignette > 0.01f) bmp = applyVignette(bmp, s.vignette)
+                if (s.grain > 0.01f) bmp = applyGrain(bmp, s.grain)
                 bmp
             }
             _state.update { it.copy(editedBitmap = result, isProcessing = false) }
         }
     }
 
-    /** Apply brightness, contrast, and saturation via ColorMatrix */
+    /** Apply brightness, contrast, saturation, and warmth via ColorMatrix */
     private fun applyColorMatrix(
         src: Bitmap,
         brightness: Float,
         contrast: Float,
         saturation: Float,
+        warmth: Float = 0f,
     ): Bitmap {
         val result = try {
             Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
@@ -198,11 +209,25 @@ class WallpaperEditorViewModel @Inject constructor(
             setSaturation(saturation)
         }
 
+        // Warmth (shift red/blue channels)
+        val warmthMatrix = ColorMatrix().apply {
+            if (warmth != 0f) {
+                val r = warmth.coerceIn(-50f, 50f)
+                set(floatArrayOf(
+                    1f, 0f, 0f, 0f, r,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, -r,
+                    0f, 0f, 0f, 1f, 0f,
+                ))
+            }
+        }
+
         // Combine all matrices
         val combined = ColorMatrix()
         combined.postConcat(brightnessMatrix)
         combined.postConcat(contrastMatrix)
         combined.postConcat(saturationMatrix)
+        if (warmth != 0f) combined.postConcat(warmthMatrix)
 
         paint.colorFilter = ColorMatrixColorFilter(combined)
         canvas.drawBitmap(src, 0f, 0f, paint)
@@ -218,6 +243,65 @@ class WallpaperEditorViewModel @Inject constructor(
         val small = Bitmap.createScaledBitmap(src, smallW, smallH, true)
         val result = Bitmap.createScaledBitmap(small, src.width, src.height, true)
         if (small !== result) small.recycle()
+        return result
+    }
+
+    /** AMOLED Crush — push dark pixels toward pure black for OLED battery savings */
+    private fun applyAmoledCrush(src: Bitmap, intensity: Float): Bitmap {
+        val result = src.copy(Bitmap.Config.ARGB_8888, true)
+        val pixels = IntArray(result.width * result.height)
+        result.getPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
+        val threshold = (intensity * 80).toInt() // 0-80 brightness threshold
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val lum = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+            if (lum < threshold) {
+                val factor = lum.toFloat() / threshold.coerceAtLeast(1)
+                val crush = factor * factor // quadratic falloff for smooth transition
+                pixels[i] = (c and 0xFF000000.toInt()) or
+                    (((r * crush).toInt().coerceIn(0, 255)) shl 16) or
+                    (((g * crush).toInt().coerceIn(0, 255)) shl 8) or
+                    ((b * crush).toInt().coerceIn(0, 255))
+            }
+        }
+        result.setPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
+        return result
+    }
+
+    /** Vignette — darken edges with radial gradient */
+    private fun applyVignette(src: Bitmap, intensity: Float): Bitmap {
+        val result = src.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(result)
+        val cx = src.width / 2f
+        val cy = src.height / 2f
+        val radius = Math.sqrt((cx * cx + cy * cy).toDouble()).toFloat()
+        val colors = intArrayOf(0x00000000, 0x00000000, android.graphics.Color.argb((intensity * 220).toInt(), 0, 0, 0))
+        val stops = floatArrayOf(0f, 0.4f, 1f)
+        val gradient = RadialGradient(cx, cy, radius, colors, stops, Shader.TileMode.CLAMP)
+        val paint = Paint().apply { shader = gradient }
+        canvas.drawRect(0f, 0f, src.width.toFloat(), src.height.toFloat(), paint)
+        return result
+    }
+
+    /** Film grain — random noise overlay */
+    private fun applyGrain(src: Bitmap, intensity: Float): Bitmap {
+        val result = src.copy(Bitmap.Config.ARGB_8888, true)
+        val pixels = IntArray(result.width * result.height)
+        result.getPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
+        val strength = (intensity * 40).toInt()
+        val random = java.util.Random(42) // Fixed seed for consistent preview
+        for (i in pixels.indices) {
+            val noise = random.nextInt(strength * 2 + 1) - strength
+            val c = pixels[i]
+            val r = ((c shr 16 and 0xFF) + noise).coerceIn(0, 255)
+            val g = ((c shr 8 and 0xFF) + noise).coerceIn(0, 255)
+            val b = ((c and 0xFF) + noise).coerceIn(0, 255)
+            pixels[i] = (c and 0xFF000000.toInt()) or (r shl 16) or (g shl 8) or b
+        }
+        result.setPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
         return result
     }
 }
@@ -239,29 +323,30 @@ fun WallpaperEditorScreen(
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearError() }
     }
 
-    data class EditorPreset(val name: String, val brightness: Float, val contrast: Float, val saturation: Float, val blur: Float)
+    data class EditorPreset(val name: String, val b: Float, val c: Float, val s: Float, val bl: Float,
+                             val v: Float = 0f, val g: Float = 0f, val a: Float = 0f, val w: Float = 0f)
     val presets = listOf(
-        EditorPreset("Warm", 15f, 1.1f, 1.3f, 0f),
-        EditorPreset("Cool", -10f, 1.1f, 0.8f, 0f),
+        EditorPreset("AMOLED", -20f, 1.3f, 1.1f, 0f, v = 0.3f, a = 0.7f),
+        EditorPreset("Warm", 15f, 1.1f, 1.3f, 0f, w = 25f),
+        EditorPreset("Cool", -10f, 1.1f, 0.8f, 0f, w = -20f),
         EditorPreset("Vivid", 5f, 1.3f, 1.6f, 0f),
-        EditorPreset("Cinematic", -5f, 1.4f, 0.7f, 0f),
-        EditorPreset("Dreamy", 20f, 0.9f, 1.1f, 8f),
+        EditorPreset("Cinematic", -5f, 1.4f, 0.7f, 0f, v = 0.4f, g = 0.15f, w = 10f),
+        EditorPreset("Dreamy", 20f, 0.9f, 1.1f, 8f, v = 0.2f),
         EditorPreset("B&W", 0f, 1.2f, 0f, 0f),
+        EditorPreset("Noir", -15f, 1.5f, 0f, 0f, v = 0.5f, g = 0.2f, a = 0.4f),
+        EditorPreset("Film", 5f, 1.1f, 0.9f, 0f, g = 0.25f, v = 0.15f, w = 8f),
+        EditorPreset("Moody", -10f, 1.2f, 0.6f, 2f, v = 0.35f, w = -10f),
     )
 
     val filters = listOf(
-        FilterControl("Brightness", Icons.Default.BrightnessHigh, state.brightness, -100f..100f) {
-            viewModel.updateBrightness(it)
-        },
-        FilterControl("Contrast", Icons.Default.Contrast, state.contrast, 0.5f..2f) {
-            viewModel.updateContrast(it)
-        },
-        FilterControl("Saturation", Icons.Default.ColorLens, state.saturation, 0f..2f) {
-            viewModel.updateSaturation(it)
-        },
-        FilterControl("Blur", Icons.Default.BlurOn, state.blurRadius, 0f..25f) {
-            viewModel.updateBlur(it)
-        },
+        FilterControl("Brightness", Icons.Default.BrightnessHigh, state.brightness, -100f..100f) { viewModel.updateBrightness(it) },
+        FilterControl("Contrast", Icons.Default.Contrast, state.contrast, 0.5f..2f) { viewModel.updateContrast(it) },
+        FilterControl("Saturation", Icons.Default.ColorLens, state.saturation, 0f..2f) { viewModel.updateSaturation(it) },
+        FilterControl("Warmth", Icons.Default.Thermostat, state.warmth, -50f..50f) { viewModel.updateWarmth(it) },
+        FilterControl("Blur", Icons.Default.BlurOn, state.blurRadius, 0f..25f) { viewModel.updateBlur(it) },
+        FilterControl("AMOLED", Icons.Default.DarkMode, state.amoledCrush, 0f..1f) { viewModel.updateAmoledCrush(it) },
+        FilterControl("Vignette", Icons.Default.Vignette, state.vignette, 0f..1f) { viewModel.updateVignette(it) },
+        FilterControl("Grain", Icons.Default.Grain, state.grain, 0f..1f) { viewModel.updateGrain(it) },
     )
 
     Scaffold(
@@ -342,7 +427,7 @@ fun WallpaperEditorScreen(
                 items(presets) { preset ->
                     SuggestionChip(
                         onClick = {
-                            viewModel.applyPreset(preset.brightness, preset.contrast, preset.saturation, preset.blur)
+                            viewModel.applyPreset(preset.b, preset.c, preset.s, preset.bl, preset.v, preset.g, preset.a, preset.w)
                         },
                         label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
                         shape = RoundedCornerShape(20.dp),
