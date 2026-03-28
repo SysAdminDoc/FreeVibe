@@ -50,16 +50,14 @@ fun WallpaperDetailScreen(
     val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val wp = wallpaper ?: return
 
-    // Use the list from the ViewModel, but only if our wallpaper is actually in it
+    // Always start with the selected wallpaper at position 0
+    // Build list: selected wallpaper first, then remaining from ViewModel if available
     val wallpapers = remember(state.wallpapers, wp.id) {
-        if (state.wallpapers.any { it.id == wp.id }) state.wallpapers
-        else listOf(wp) // Fallback: show just the selected wallpaper
+        val others = state.wallpapers.filter { it.id != wp.id }
+        listOf(wp) + others
     }
 
-    val initialIndex = remember(wp.id, wallpapers) {
-        wallpapers.indexOfFirst { it.id == wp.id }.coerceAtLeast(0)
-    }
-    val pagerState = rememberPagerState(initialPage = initialIndex) { wallpapers.size.coerceAtLeast(1) }
+    val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size.coerceAtLeast(1) }
 
     // Update selected wallpaper when page changes
     LaunchedEffect(pagerState.settledPage) {
