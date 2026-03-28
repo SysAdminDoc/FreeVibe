@@ -19,11 +19,17 @@ class VideoWallpaperService : WallpaperService() {
         private var mediaPlayer: MediaPlayer? = null
         private var videoPath: String? = null
 
+        private var cropX: Int = 0
+        private var cropW: Int = 0
+        private var fullVideoW: Int = 0
+
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            // Load video path from SharedPreferences
             val prefs = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
             videoPath = prefs.getString("video_path", null)
+            cropX = prefs.getInt("crop_x", 0)
+            cropW = prefs.getInt("crop_w", 0)
+            fullVideoW = prefs.getInt("video_w", 0)
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
