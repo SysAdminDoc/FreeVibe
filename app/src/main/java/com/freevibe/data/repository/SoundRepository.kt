@@ -56,8 +56,8 @@ class SoundRepository @Inject constructor(
 
     suspend fun searchRingtones(
         page: Int = 1,
-        maxDuration: Int = 240,
-        minDuration: Int = 3,
+        maxDuration: Int = 30,
+        minDuration: Int = 5,
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
@@ -67,7 +67,7 @@ class SoundRepository @Inject constructor(
 
     suspend fun searchNotifications(
         page: Int = 1,
-        maxDuration: Int = 5,
+        maxDuration: Int = 3,
         minDuration: Int = 0,
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
@@ -78,8 +78,8 @@ class SoundRepository @Inject constructor(
 
     suspend fun searchAlarms(
         page: Int = 1,
-        maxDuration: Int = 240,
-        minDuration: Int = 2,
+        maxDuration: Int = 40,
+        minDuration: Int = 5,
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
