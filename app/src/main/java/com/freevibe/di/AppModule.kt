@@ -50,7 +50,7 @@ object AppModule {
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "FreeVibe/2.1.0 (Android; Open Source)")
+                .header("User-Agent", "FreeVibe/2.2.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }

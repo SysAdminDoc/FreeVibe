@@ -2,7 +2,7 @@ package com.freevibe.widget
 
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
@@ -270,10 +270,20 @@ private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
     withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
-            val wp = ep.wallpaperRepository().getWallhaven(page = 1).items.randomOrNull() ?: return@withContext
+            val wp = ep.wallpaperRepository().getWallhaven(page = 1).items.randomOrNull()
+            if (wp == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "No wallpapers available", Toast.LENGTH_SHORT).show()
+                }
+                return@withContext
+            }
             ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target)
             ep.wallpaperHistoryManager().record(wp, target)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Shuffle failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
