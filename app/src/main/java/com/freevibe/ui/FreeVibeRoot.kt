@@ -109,7 +109,13 @@ fun FreeVibeRoot() {
                                     )
                                 }
                             },
-                            label = { Text(screen.title) },
+                            label = {
+                                Text(
+                                    screen.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
