@@ -63,15 +63,14 @@ class YouTubeRepository @Inject constructor() {
     suspend fun getAudioStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
-            val extractor = NewPipe.getService(ServiceList.YouTube.serviceId)
-                .getStreamExtractor(url)
-            extractor.fetchPage()
-
-            val streams = extractor.audioStreams
-            Log.d("YouTubeRepo", "Audio streams for $videoId: ${streams.size} found")
-            streams.sortedByDescending { it.averageBitrate }
-                .firstOrNull()
-                ?.content
+            Log.d("YouTubeRepo", "Extracting audio via yt-dlp for $videoId")
+            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+            request.addOption("-f", "bestaudio")
+            request.addOption("--get-url")
+            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+            val streamUrl = response.out?.trim()
+            Log.d("YouTubeRepo", "yt-dlp result: ${streamUrl?.take(80) ?: "NULL"}")
+            if (streamUrl.isNullOrBlank()) null else streamUrl
         } catch (e: Exception) {
             Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null
@@ -81,19 +80,12 @@ class YouTubeRepository @Inject constructor() {
     suspend fun getVideoStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
-            val extractor = NewPipe.getService(ServiceList.YouTube.serviceId)
-                .getStreamExtractor(url)
-            extractor.fetchPage()
-
-            extractor.videoOnlyStreams
-                .filter { it.height <= 1080 }
-                .sortedByDescending { it.height }
-                .firstOrNull()
-                ?.content
-                ?: extractor.videoStreams
-                    .sortedByDescending { it.resolution?.removeSuffix("p")?.toIntOrNull() ?: 0 }
-                    .firstOrNull()
-                    ?.content
+            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+            request.addOption("-f", "best[height<=1080]")
+            request.addOption("--get-url")
+            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+            val streamUrl = response.out?.trim()
+            if (streamUrl.isNullOrBlank()) null else streamUrl
         } catch (_: Exception) { null }
     }
 
