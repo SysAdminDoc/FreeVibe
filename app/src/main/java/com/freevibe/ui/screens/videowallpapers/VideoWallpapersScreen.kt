@@ -141,72 +141,42 @@ class VideoWallpapersViewModel @Inject constructor(
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
                     .edit().putString("video_path", file.absolutePath).apply()
 
-                val videoUri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file,
-                )
+                // Save video to Downloads so Gallery can access it and set as wallpaper
+                val savedUri = withContext(Dispatchers.IO) {
+                    try {
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, "FreeVibe_Wallpaper_${System.currentTimeMillis()}.mp4")
+                            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                            put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/FreeVibe")
+                        }
+                        val uri = context.contentResolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                        uri?.let { destUri ->
+                            context.contentResolver.openOutputStream(destUri)?.use { out ->
+                                file.inputStream().use { input -> input.copyTo(out) }
+                            }
+                        }
+                        uri
+                    } catch (e: Exception) {
+                        Log.e("VideoWP", "Failed to save to MediaStore: ${e.message}")
+                        null
+                    }
+                }
 
                 withContext(Dispatchers.Main) {
-                    // Try multiple intents in order until one works
-                    val intents = listOf(
-                        // 1. Samsung video wallpaper crop
-                        android.content.Intent("com.samsung.android.wallpaper.CROP_AND_SET").apply {
-                            setDataAndType(videoUri, "video/mp4")
-                            putExtra("SET_AS_TYPE", "BOTH")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                        // 2. Generic ATTACH_DATA (works on many OEMs for setting wallpaper)
-                        android.content.Intent(android.content.Intent.ACTION_ATTACH_DATA).apply {
-                            setDataAndType(videoUri, "video/mp4")
-                            putExtra("mimeType", "video/mp4")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                        // 3. Generic SET_WALLPAPER with video
-                        android.content.Intent(android.content.Intent.ACTION_SET_WALLPAPER).apply {
-                            setDataAndType(videoUri, "video/mp4")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                        // 4. Live wallpaper picker
-                        android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                            putExtra(
-                                android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                                android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
-                            )
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                        // 5. VIEW video (opens gallery/player which often has "Set as wallpaper")
-                        android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                            setDataAndType(videoUri, "video/mp4")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        },
-                    )
-
-                    var launched = false
-                    for (intent in intents) {
+                    if (savedUri != null) {
+                        // Open video in Gallery — user taps menu > "Set as wallpaper"
                         try {
-                            if (intent.resolveActivity(context.packageManager) != null) {
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Select 'Set as wallpaper' if prompted", Toast.LENGTH_LONG).show()
-                                launched = true
-                                break
-                            }
-                        } catch (_: Exception) { continue }
-                    }
-
-                    if (!launched) {
-                        // Last resort: just open the video file
-                        try {
-                            val viewIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                setDataAndType(videoUri, "video/*")
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(savedUri, "video/mp4")
                                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
-                            context.startActivity(android.content.Intent.createChooser(viewIntent, "Set as wallpaper").apply {
-                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            })
+                            context.startActivity(intent)
+                            Toast.makeText(context, "Video saved! Tap menu (three dots) > Set as wallpaper", Toast.LENGTH_LONG).show()
                         } catch (_: Exception) {
-                            Toast.makeText(context, "Video saved to ${file.absolutePath}", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Video saved to Movies/FreeVibe", Toast.LENGTH_LONG).show()
                         }
+                    } else {
+                        Toast.makeText(context, "Failed to save video", Toast.LENGTH_SHORT).show()
                     }
                 }
                 _state.update { it.copy(isApplying = null) }
