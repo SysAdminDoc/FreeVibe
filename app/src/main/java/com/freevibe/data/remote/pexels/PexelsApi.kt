@@ -115,9 +115,9 @@ data class PexelsUser(
 @JsonClass(generateAdapter = true)
 data class PexelsVideoFile(
     @Json(name = "id") val id: Int = 0,
-    @Json(name = "quality") val quality: String = "",
-    @Json(name = "file_type") val fileType: String = "",
-    @Json(name = "width") val width: Int = 0,
-    @Json(name = "height") val height: Int = 0,
+    @Json(name = "quality") val quality: String? = null,
+    @Json(name = "file_type") val fileType: String? = null,
+    @Json(name = "width") val width: Int? = 0,
+    @Json(name = "height") val height: Int? = 0,
     @Json(name = "link") val link: String = "",
 )
