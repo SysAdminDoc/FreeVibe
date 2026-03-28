@@ -107,7 +107,7 @@ fun Sound.toFavoriteEntity() = FavoriteEntity(
 
 fun FavoriteEntity.toWallpaper() = Wallpaper(
     id = id,
-    source = ContentSource.valueOf(source),
+    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.WALLHAVEN },
     thumbnailUrl = thumbnailUrl,
     fullUrl = fullUrl,
     width = width,
@@ -116,7 +116,7 @@ fun FavoriteEntity.toWallpaper() = Wallpaper(
 
 fun FavoriteEntity.toSound() = Sound(
     id = id,
-    source = ContentSource.valueOf(source),
+    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.INTERNET_ARCHIVE },
     name = name,
     previewUrl = fullUrl,
     downloadUrl = fullUrl,

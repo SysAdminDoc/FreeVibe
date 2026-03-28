@@ -12,7 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,20 +31,22 @@ class WallpaperApplier @Inject constructor(
         runCatching {
             val bitmap = downloadBitmap(url)
                 ?: throw IllegalStateException("Failed to decode wallpaper image")
+            try {
+                val flag = when (target) {
+                    WallpaperTarget.HOME -> WallpaperManager.FLAG_SYSTEM
+                    WallpaperTarget.LOCK -> WallpaperManager.FLAG_LOCK
+                    WallpaperTarget.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                }
 
-            val flag = when (target) {
-                WallpaperTarget.HOME -> WallpaperManager.FLAG_SYSTEM
-                WallpaperTarget.LOCK -> WallpaperManager.FLAG_LOCK
-                WallpaperTarget.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                if (cropRect != null) {
+                    wallpaperManager.setBitmap(bitmap, cropRect, true, flag)
+                } else {
+                    wallpaperManager.setBitmap(bitmap, null, true, flag)
+                }
+                Unit
+            } finally {
+                bitmap.recycle()
             }
-
-            if (cropRect != null) {
-                wallpaperManager.setBitmap(bitmap, cropRect, true, flag)
-            } else {
-                wallpaperManager.setBitmap(bitmap, null, true, flag)
-            }
-
-            bitmap.recycle()
         }
     }
 
@@ -80,8 +81,10 @@ class WallpaperApplier @Inject constructor(
     private suspend fun downloadBitmap(url: String): Bitmap? = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
-        response.body?.byteStream()?.use { stream ->
-            BitmapFactory.decodeStream(stream)
+        response.use { resp ->
+            resp.body?.byteStream()?.use { stream ->
+                BitmapFactory.decodeStream(stream)
+            }
         }
     }
 }

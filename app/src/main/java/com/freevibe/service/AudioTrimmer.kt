@@ -11,7 +11,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -125,8 +124,9 @@ class AudioTrimmer @Inject constructor(
      * short fades on compressed audio without requiring a full decode/encode cycle.
      */
     private fun applyFadeToMp3(path: String, fadeInMs: Long, fadeOutMs: Long, totalDurationMs: Long) {
+        var file: RandomAccessFile? = null
         try {
-            val file = RandomAccessFile(path, "rw")
+            file = RandomAccessFile(path, "rw")
             val fileSize = file.length()
 
             // Estimate byte positions based on proportional duration
@@ -190,9 +190,10 @@ class AudioTrimmer @Inject constructor(
                 }
             }
 
-            file.close()
         } catch (_: Exception) {
             // Fade failure is non-fatal — trimmed file still exists
+        } finally {
+            try { file?.close() } catch (_: Exception) {}
         }
     }
 

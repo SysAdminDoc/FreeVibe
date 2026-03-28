@@ -19,6 +19,10 @@ class SelectedContentHolder @Inject constructor() {
     private val _selectedWallpaper = MutableStateFlow<Wallpaper?>(null)
     val selectedWallpaper: StateFlow<Wallpaper?> = _selectedWallpaper.asStateFlow()
 
+    /** Wallpaper list from the source screen, for pager in detail screen */
+    private val _wallpaperList = MutableStateFlow<List<Wallpaper>>(emptyList())
+    val wallpaperList: StateFlow<List<Wallpaper>> = _wallpaperList.asStateFlow()
+
     private val _selectedSound = MutableStateFlow<Sound?>(null)
     val selectedSound: StateFlow<Sound?> = _selectedSound.asStateFlow()
 
@@ -26,8 +30,9 @@ class SelectedContentHolder @Inject constructor() {
     @Volatile
     var pendingCategoryQuery: String? = null
 
-    fun selectWallpaper(wallpaper: Wallpaper) {
+    fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper> = emptyList()) {
         _selectedWallpaper.value = wallpaper
+        if (wallpapers.isNotEmpty()) _wallpaperList.value = wallpapers
     }
 
     fun selectSound(sound: Sound) {

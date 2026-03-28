@@ -66,6 +66,7 @@ class WallpapersViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     val selectedWallpaper = selectedContent.selectedWallpaper
+    val sharedWallpaperList = selectedContent.wallpaperList
 
     val activeDownloads = downloadManager.activeDownloads
 
@@ -157,6 +158,11 @@ class WallpapersViewModel @Inject constructor(
     }
 
     fun selectWallpaper(wallpaper: Wallpaper) {
+        selectedContent.selectWallpaper(wallpaper, _state.value.wallpapers)
+    }
+
+    /** Update selected wallpaper without overwriting the shared list (used by detail pager) */
+    fun selectWallpaperOnly(wallpaper: Wallpaper) {
         selectedContent.selectWallpaper(wallpaper)
     }
 

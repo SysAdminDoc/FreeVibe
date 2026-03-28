@@ -276,7 +276,7 @@ private fun ContactRow(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        contact.name.first().uppercase(),
+                        contact.name.firstOrNull()?.uppercase() ?: "?",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )

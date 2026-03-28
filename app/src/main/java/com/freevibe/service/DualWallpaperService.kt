@@ -30,12 +30,13 @@ class DualWallpaperService @Inject constructor(
 
             val home = homeBitmap.await()
             val lock = lockBitmap.await()
-
-            // Apply each to respective screen
-            wallpaperApplier.applyFromBitmap(home, WallpaperTarget.HOME)
-                .getOrThrow()
-            wallpaperApplier.applyFromBitmap(lock, WallpaperTarget.LOCK)
-                .getOrThrow()
+            try {
+                wallpaperApplier.applyFromBitmap(home, WallpaperTarget.HOME).getOrThrow()
+                wallpaperApplier.applyFromBitmap(lock, WallpaperTarget.LOCK).getOrThrow()
+            } finally {
+                home.recycle()
+                lock.recycle()
+            }
         }
     }
 

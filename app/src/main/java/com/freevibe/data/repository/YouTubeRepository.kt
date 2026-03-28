@@ -146,36 +146,40 @@ class DownloaderImpl private constructor() : org.schabi.newpipe.extractor.downlo
     override fun execute(request: org.schabi.newpipe.extractor.downloader.Request): org.schabi.newpipe.extractor.downloader.Response {
         val url = java.net.URL(request.url())
         val conn = url.openConnection() as java.net.HttpURLConnection
-        conn.requestMethod = request.httpMethod()
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0")
-        conn.connectTimeout = 10000
-        conn.readTimeout = 15000
+        try {
+            conn.requestMethod = request.httpMethod()
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0")
+            conn.connectTimeout = 10000
+            conn.readTimeout = 15000
 
-        request.headers().forEach { (key, values) ->
-            values.forEach { conn.addRequestProperty(key, it) }
+            request.headers().forEach { (key, values) ->
+                values.forEach { conn.addRequestProperty(key, it) }
+            }
+
+            request.dataToSend()?.let { data ->
+                conn.doOutput = true
+                conn.outputStream.use { it.write(data) }
+            }
+
+            val responseCode = conn.responseCode
+            val responseHeaders = conn.headerFields
+                .filterKeys { it != null }
+                .mapValues { (_, v) -> v }
+            val responseBody = try {
+                (if (responseCode < 400) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.readText() ?: ""
+            } catch (_: Exception) { "" }
+
+            return org.schabi.newpipe.extractor.downloader.Response(
+                responseCode,
+                conn.responseMessage ?: "",
+                responseHeaders,
+                responseBody,
+                request.url(),
+            )
+        } finally {
+            conn.disconnect()
         }
-
-        request.dataToSend()?.let { data ->
-            conn.doOutput = true
-            conn.outputStream.use { it.write(data) }
-        }
-
-        val responseCode = conn.responseCode
-        val responseHeaders = conn.headerFields
-            .filterKeys { it != null }
-            .mapValues { (_, v) -> v }
-        val responseBody = try {
-            (if (responseCode < 400) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.readText() ?: ""
-        } catch (_: Exception) { "" }
-
-        return org.schabi.newpipe.extractor.downloader.Response(
-            responseCode,
-            conn.responseMessage ?: "",
-            responseHeaders,
-            responseBody,
-            request.url(),
-        )
     }
 
     companion object {

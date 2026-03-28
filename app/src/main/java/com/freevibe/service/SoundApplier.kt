@@ -160,20 +160,22 @@ class SoundApplier @Inject constructor(
     private suspend fun downloadBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            throw IllegalStateException("Download failed: HTTP ${response.code}")
+        response.use { resp ->
+            if (!resp.isSuccessful) {
+                throw IllegalStateException("Download failed: HTTP ${resp.code}")
+            }
+            resp.body?.bytes()
         }
-        response.body?.bytes()
     }
 
     private fun guessMimeType(url: String): String {
-        val lower = url.lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase()
         return when {
-            lower.contains(".mp3") -> "audio/mpeg"
-            lower.contains(".ogg") -> "audio/ogg"
-            lower.contains(".wav") -> "audio/wav"
-            lower.contains(".m4a") || lower.contains(".aac") -> "audio/mp4"
-            lower.contains(".flac") -> "audio/flac"
+            path.endsWith(".mp3") -> "audio/mpeg"
+            path.endsWith(".ogg") -> "audio/ogg"
+            path.endsWith(".wav") -> "audio/wav"
+            path.endsWith(".m4a") || path.endsWith(".aac") -> "audio/mp4"
+            path.endsWith(".flac") -> "audio/flac"
             else -> "audio/mpeg"
         }
     }
