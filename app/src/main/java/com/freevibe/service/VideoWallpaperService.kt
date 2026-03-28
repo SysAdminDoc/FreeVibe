@@ -1,44 +1,50 @@
 package com.freevibe.service
 
+import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 
 /**
  * Live wallpaper service that plays a video file on the home/lock screen.
- * Uses MediaPlayer with a WallpaperService Engine to render video frames
- * to the wallpaper surface.
- *
- * Battery optimization: video plays once on screen wake, then pauses on last frame.
+ * Automatically reloads when a new video is applied via SharedPreferences.
  */
 class VideoWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = VideoEngine()
 
-    inner class VideoEngine : Engine() {
+    inner class VideoEngine : Engine(), SharedPreferences.OnSharedPreferenceChangeListener {
         private var mediaPlayer: MediaPlayer? = null
         private var videoPath: String? = null
-
-        private var cropX: Int = 0
-        private var cropW: Int = 0
-        private var fullVideoW: Int = 0
+        private var currentHolder: SurfaceHolder? = null
+        private lateinit var prefs: SharedPreferences
 
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            val prefs = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
+            prefs = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
             videoPath = prefs.getString("video_path", null)
-            cropX = prefs.getInt("crop_x", 0)
-            cropW = prefs.getInt("crop_w", 0)
-            fullVideoW = prefs.getInt("video_w", 0)
+            prefs.registerOnSharedPreferenceChangeListener(this)
+        }
+
+        override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+            if (key == "video_path") {
+                val newPath = prefs.getString("video_path", null)
+                if (newPath != null && newPath != videoPath) {
+                    videoPath = newPath
+                    currentHolder?.let { initializePlayer(it) }
+                }
+            }
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
+            currentHolder = holder
             initializePlayer(holder)
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
+            currentHolder = null
             releasePlayer()
         }
 
@@ -58,6 +64,7 @@ class VideoWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             super.onDestroy()
+            prefs.unregisterOnSharedPreferenceChangeListener(this)
             releasePlayer()
         }
 
@@ -68,35 +75,23 @@ class VideoWallpaperService : WallpaperService() {
                 releasePlayer()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
-
-                    // Wrap surface holder to prevent setKeepScreenOn crash
                     val wrappedHolder = object : SurfaceHolder by holder {
-                        override fun setKeepScreenOn(screenOn: Boolean) {
-                            // No-op: WallpaperService surfaces don't support this
-                        }
+                        override fun setKeepScreenOn(screenOn: Boolean) {}
                     }
                     setDisplay(wrappedHolder)
-
-                    isLooping = false  // Play once per wake, battery optimization
-                    setVolume(0f, 0f)  // Silent
+                    isLooping = true
+                    setVolume(0f, 0f)
                     prepare()
                     start()
-
-                    setOnCompletionListener {
-                        // Freeze on last frame - don't loop to save battery
-                    }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 releasePlayer()
             }
         }
 
         private fun releasePlayer() {
             mediaPlayer?.apply {
-                try {
-                    if (isPlaying) stop()
-                    release()
-                } catch (_: Exception) {}
+                try { if (isPlaying) stop(); release() } catch (_: Exception) {}
             }
             mediaPlayer = null
         }
