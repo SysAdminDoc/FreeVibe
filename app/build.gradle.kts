@@ -130,6 +130,10 @@ dependencies {
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
 
-    // NewPipe Extractor (YouTube search + stream extraction without API key)
-    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.5")
+    // NewPipe Extractor (YouTube search without API key)
+    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
+
+    // yt-dlp for Android (YouTube stream URL extraction)
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 }

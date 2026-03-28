@@ -9,6 +9,7 @@ import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.local.PreferencesManager
+import android.util.Log
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.SoundRepository
@@ -178,9 +179,11 @@ class SoundsViewModel @Inject constructor(
         } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
             // YouTube: resolve audio stream URL first
             viewModelScope.launch {
-                _state.update { it.copy(playingId = sound.id) } // Show loading state
+                _state.update { it.copy(playingId = sound.id) }
                 val videoId = sound.id.removePrefix("yt_")
+                Log.d("SoundsVM", "Resolving YouTube audio for: $videoId")
                 val url = youtubeRepo.getAudioStreamUrl(videoId)
+                Log.d("SoundsVM", "YouTube audio URL: ${url?.take(80) ?: "NULL"}")
                 if (url != null) {
                     val resolved = sound.copy(previewUrl = url, downloadUrl = url)
                     startPlayback(resolved)
@@ -340,19 +343,23 @@ class SoundsViewModel @Inject constructor(
                 }
 
                 supervisorScope {
-                    // YouTube results come back fast (single API call)
-                    val ytJob = async {
-                        try {
-                            val ytResult = youtubeRepo.searchSounds(
-                                query = ytQuery,
-                                maxDuration = dur.maxSec,
-                                minDuration = dur.minSec,
-                            )
-                            ytResult.items.forEach { streamCallback(it) }
-                        } catch (_: Exception) {}
-                    }
+                    // YouTube results first — fast single API call
+                    try {
+                        val ytResult = youtubeRepo.searchSounds(
+                            query = ytQuery,
+                            maxDuration = dur.maxSec,
+                            minDuration = dur.minSec,
+                        )
+                        // Flush YouTube results to UI immediately
+                        if (ytResult.items.isNotEmpty()) {
+                            ytResult.items.forEach { allResults.add(it) }
+                            _state.update { st ->
+                                st.copy(sounds = allResults.toList(), isLoading = false)
+                            }
+                        }
+                    } catch (_: Exception) {}
 
-                    // IA results stream progressively
+                    // IA results stream progressively after YouTube
                     val iaJob = async {
                         try {
                             when {
@@ -389,7 +396,6 @@ class SoundsViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     }
 
-                    ytJob.await()
                     iaJob.await()
                 }
 
