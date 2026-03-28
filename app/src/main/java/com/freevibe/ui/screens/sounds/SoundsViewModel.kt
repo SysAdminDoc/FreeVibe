@@ -26,11 +26,12 @@ data class SoundsUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val isRefreshing: Boolean = false,
+    val loadingProgress: String? = null,
     val error: String? = null,
     val query: String = "",
     val currentPage: Int = 1,
     val hasMore: Boolean = true,
-    val selectedTab: SoundTab = SoundTab.TRENDING,
+    val selectedTab: SoundTab = SoundTab.RINGTONES,
     val durationFilter: DurationFilter = DurationFilter.ALL,
     val selectedCategory: SoundCategory? = null,
     val playingId: String? = null,
@@ -38,13 +39,13 @@ data class SoundsUiState(
     val applySuccess: String? = null,
 )
 
-enum class SoundTab { TRENDING, RINGTONES, NOTIFICATIONS, ALARMS, SEARCH }
+enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, SEARCH }
 
 enum class DurationFilter(val label: String, val minSec: Int, val maxSec: Int) {
-    ALL("All", 0, 300),
+    ALL("All", 0, 240),
     SHORT("< 5s", 0, 5),
-    MEDIUM("5-15s", 5, 15),
-    LONG("15-60s", 15, 60),
+    MEDIUM("5-30s", 5, 30),
+    LONG("30s-4m", 30, 240),
 }
 
 enum class SoundCategory(val label: String, val emoji: String, val query: String) {
@@ -267,50 +268,45 @@ class SoundsViewModel @Inject constructor(
         viewModelScope.launch {
             val s = _state.value
             if (!isRefresh && !loadMore) {
-                _state.update { it.copy(isLoading = true, error = null) }
+                _state.update { it.copy(isLoading = true, error = null, loadingProgress = null) }
             } else if (loadMore) {
                 _state.update { it.copy(isLoadingMore = true) }
             }
+
+            val progressCallback: (Int, Int) -> Unit = { resolved, total ->
+                if (total > 0) {
+                    _state.update { it.copy(loadingProgress = "Fetching sounds... $resolved/$total") }
+                }
+            }
+
             try {
                 val dur = s.durationFilter
                 val cat = s.selectedCategory
 
                 val result = when {
-                    // Category overrides tab behavior
                     cat != null -> soundRepo.search(
-                        query = cat.query,
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec,
-                        minDuration = dur.minSec,
-                    )
-                    // Tab-specific
-                    s.selectedTab == SoundTab.TRENDING -> soundRepo.getTrending(
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec,
-                        minDuration = dur.minSec,
+                        query = cat.query, page = s.currentPage,
+                        maxDuration = dur.maxSec, minDuration = dur.minSec,
+                        onProgress = progressCallback,
                     )
                     s.selectedTab == SoundTab.RINGTONES -> soundRepo.searchRingtones(
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec.coerceAtMost(30),
-                        minDuration = dur.minSec.coerceAtLeast(3),
+                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
+                        minDuration = dur.minSec.coerceAtLeast(3), onProgress = progressCallback,
                     )
                     s.selectedTab == SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec.coerceAtMost(8),
-                        minDuration = dur.minSec,
+                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(5),
+                        minDuration = dur.minSec, onProgress = progressCallback,
                     )
                     s.selectedTab == SoundTab.ALARMS -> soundRepo.searchAlarms(
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec.coerceAtMost(20),
-                        minDuration = dur.minSec.coerceAtLeast(2),
+                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
+                        minDuration = dur.minSec.coerceAtLeast(2), onProgress = progressCallback,
                     )
                     s.selectedTab == SoundTab.SEARCH -> soundRepo.search(
-                        query = s.query,
-                        page = s.currentPage,
-                        maxDuration = dur.maxSec,
-                        minDuration = dur.minSec,
+                        query = s.query, page = s.currentPage,
+                        maxDuration = dur.maxSec, minDuration = dur.minSec,
+                        onProgress = progressCallback,
                     )
-                    else -> soundRepo.getTrending(page = s.currentPage)
+                    else -> soundRepo.searchRingtones(page = s.currentPage, onProgress = progressCallback)
                 }
                 _state.update {
                     it.copy(
@@ -319,10 +315,11 @@ class SoundsViewModel @Inject constructor(
                         isLoadingMore = false,
                         isRefreshing = false,
                         hasMore = result.hasMore,
+                        loadingProgress = null,
                     )
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false, error = e.message) }
+                _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false, error = e.message, loadingProgress = null) }
             }
         }
     }

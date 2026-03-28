@@ -10,6 +10,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,45 +47,40 @@ class SoundRepository @Inject constructor(
         page: Int = 1,
         maxDuration: Int = 60,
         minDuration: Int = 0,
+        onProgress: ((Int, Int) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery(query)
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc")
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
     }
 
     suspend fun searchRingtones(
         page: Int = 1,
-        maxDuration: Int = 30,
+        maxDuration: Int = 240,
         minDuration: Int = 3,
+        onProgress: ((Int, Int) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("ringtone OR melody OR music OR tone OR jingle")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc")
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
     }
 
     suspend fun searchNotifications(
         page: Int = 1,
-        maxDuration: Int = 8,
+        maxDuration: Int = 5,
         minDuration: Int = 0,
+        onProgress: ((Int, Int) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("notification OR alert OR chime OR beep OR ding OR ping")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc")
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
     }
 
     suspend fun searchAlarms(
         page: Int = 1,
-        maxDuration: Int = 20,
+        maxDuration: Int = 240,
         minDuration: Int = 2,
+        onProgress: ((Int, Int) -> Unit)? = null,
     ): SearchResult<Sound> {
         val q = buildSoundQuery("alarm OR buzzer OR siren OR wake OR warning")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc")
-    }
-
-    suspend fun getTrending(
-        page: Int = 1,
-        maxDuration: Int = 30,
-        minDuration: Int = 0,
-    ): SearchResult<Sound> {
-        val q = buildSoundQuery("sound effect OR sfx OR ringtone OR notification")
-        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc")
+        return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress)
     }
 
     suspend fun searchSimilar(keywords: String, excludeId: String): List<Sound> {
@@ -104,6 +101,7 @@ class SoundRepository @Inject constructor(
      * - Max 5 concurrent metadata fetches (prevents overwhelming IA servers)
      * - 8 second timeout per metadata fetch (prevents hangs)
      * - Fetches extra items to compensate for duration-filtered rejects
+     * - Reports progress via onProgress callback for UI feedback
      */
     private suspend fun fetchSounds(
         query: String,
@@ -111,6 +109,7 @@ class SoundRepository @Inject constructor(
         maxDuration: Int,
         minDuration: Int,
         sort: String,
+        onProgress: ((resolved: Int, total: Int) -> Unit)? = null,
     ): SearchResult<Sound> = coroutineScope {
         val response = archiveApi.search(
             query = query,
@@ -127,6 +126,8 @@ class SoundRepository @Inject constructor(
             .associateBy { it.identifier }
 
         val semaphore = Semaphore(5) // Max 5 concurrent metadata fetches
+        val resolvedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val uncachedCount = docs.count { it.identifier !in cached || cached[it.identifier]?.let { e -> e.duration <= 0 || e.duration < minDuration || e.duration > maxDuration } == true }
 
         val sounds = docs.map { doc ->
             async {
@@ -139,15 +140,18 @@ class SoundRepository @Inject constructor(
                             fileSize = entry.fileSize,
                         )
                     }
-                    return@async null // Cached but wrong duration
+                    // Cached but wrong duration — still counts as resolved
                 }
 
                 // Fetch metadata with concurrency limit + timeout
                 semaphore.acquire()
                 try {
-                    withTimeoutOrNull(8000L) {
+                    val result = withTimeoutOrNull(8000L) {
                         resolveMetadata(doc, minDuration, maxDuration)
                     }
+                    val count = resolvedCount.incrementAndGet()
+                    onProgress?.invoke(count, uncachedCount)
+                    result
                 } finally {
                     semaphore.release()
                 }
