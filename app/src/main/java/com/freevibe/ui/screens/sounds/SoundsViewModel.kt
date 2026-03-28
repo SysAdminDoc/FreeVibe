@@ -86,6 +86,9 @@ class SoundsViewModel @Inject constructor(
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
 
+    private val _cachedYtIds = MutableStateFlow<Set<String>>(emptySet())
+    val cachedYtIds = _cachedYtIds.asStateFlow()
+
     val recentSearches = searchHistoryRepo.getRecentSoundSearches(8)
         .map { list -> list.map { it.query } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -356,13 +359,18 @@ class SoundsViewModel @Inject constructor(
                             _state.update { st ->
                                 st.copy(sounds = allResults.toList(), isLoading = false)
                             }
-                            // Pre-resolve first 3 YouTube audio URLs in background for instant playback
-                            ytResult.items.take(3).forEach { yt ->
+                            // Pre-resolve ALL YouTube audio URLs in background
+                            val preResolveSemaphore = kotlinx.coroutines.sync.Semaphore(5)
+                            ytResult.items.forEach { yt ->
                                 launch {
+                                    preResolveSemaphore.acquire()
                                     try {
                                         val vid = yt.id.removePrefix("yt_")
                                         youtubeRepo.getAudioPreviewUrl(vid)
-                                    } catch (_: Exception) {}
+                                        _cachedYtIds.value = _cachedYtIds.value + yt.id
+                                    } catch (_: Exception) {} finally {
+                                        preResolveSemaphore.release()
+                                    }
                                 }
                             }
                         }

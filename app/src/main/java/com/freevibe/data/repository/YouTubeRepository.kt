@@ -22,6 +22,9 @@ class YouTubeRepository @Inject constructor() {
     // Cache resolved stream URLs to avoid re-extracting on replay
     private val streamCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    /** Check if a video's audio URL is already cached (ready for instant playback) */
+    fun isCached(videoId: String): Boolean = streamCache.containsKey(videoId)
+
     init {
         try {
             NewPipe.init(DownloaderImpl.instance)
