@@ -5,9 +5,8 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,18 +16,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import com.freevibe.data.repository.YouTubeRepository
-import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -43,27 +42,26 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 data class VideoWallpaperItem(
     val id: String,
     val title: String,
     val thumbnailUrl: String,
-    val source: String, // "YouTube" or "Reddit"
+    val source: String,
     val duration: Long = 0,
     val uploaderName: String = "",
-    val sourceUrl: String = "",
-    val videoId: String = "", // YouTube video ID
-    val directVideoUrl: String = "", // Reddit direct video URL
+    val videoId: String = "",
+    val streamUrl: String = "", // Resolved stream URL for playback
 )
 
 data class VideoWallpapersState(
     val items: List<VideoWallpaperItem> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
-    val isApplying: String? = null, // ID of item being applied
+    val isApplying: String? = null,
     val error: String? = null,
-    val selectedTab: Int = 0, // 0=All, 1=YouTube, 2=Reddit
 )
 
 @HiltViewModel
@@ -76,19 +74,12 @@ class VideoWallpapersViewModel @Inject constructor(
     private val _state = MutableStateFlow(VideoWallpapersState())
     val state = _state.asStateFlow()
 
-    private val redditSubreddits = listOf(
-        "LiveWallpaper", "Amoledbackgrounds", "MobileWallpaper",
-        "wallpapers", "S24Ultra", "iPhoneWallpapers",
-    )
+    // Cache of resolved video stream URLs
+    private val streamUrls = ConcurrentHashMap<String, String>()
+    private val _resolvedIds = MutableStateFlow<Set<String>>(emptySet())
+    val resolvedIds = _resolvedIds.asStateFlow()
 
-    private val youtubeQueries = listOf(
-        "phone live wallpaper vertical loop no text",
-        "AMOLED live wallpaper vertical phone loop",
-        "vertical video wallpaper phone 4K loop",
-        "live wallpaper android vertical abstract",
-    )
-
-    private val junkTitlePatterns = listOf(
+    private val junkPatterns = listOf(
         "top \\d+", "\\d+ best", "how to", "tutorial", "review", "setup",
         "compilation", "reaction", "podcast", "interview", "unboxing",
         "FAQ", "help", "guide", "install", "download app", "engine",
@@ -98,33 +89,35 @@ class VideoWallpapersViewModel @Inject constructor(
         "you need", "don.?t buy", "worth it", "honest",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
-    init { load() }
+    private val youtubeQueries = listOf(
+        "phone live wallpaper vertical loop",
+        "AMOLED live wallpaper vertical phone loop",
+        "vertical video wallpaper phone 4K loop",
+        "live wallpaper android vertical abstract",
+    )
 
-    fun selectTab(tab: Int) {
-        _state.update { it.copy(selectedTab = tab) }
-        load()
-    }
+    init { load() }
 
     fun refresh() {
         _state.update { it.copy(isRefreshing = true) }
         load()
     }
 
+    fun getStreamUrl(id: String): String? = streamUrls[id]
+
     fun applyVideoWallpaper(item: VideoWallpaperItem) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = item.id) }
             try {
-                Log.d("VideoWP", "Applying: ${item.title} (${item.source})")
-
-                val videoUrl = if (item.source == "YouTube" && item.videoId.isNotEmpty()) {
-                    Log.d("VideoWP", "Extracting YouTube video URL via yt-dlp...")
-                    youtubeRepo.getVideoStreamUrl(item.videoId)
-                } else {
-                    item.directVideoUrl.ifEmpty { null }
+                // Get stream URL (cached or resolve)
+                val videoUrl = streamUrls[item.id] ?: run {
+                    Log.d("VideoWP", "Resolving stream URL for apply: ${item.videoId}")
+                    val url = youtubeRepo.getVideoStreamUrl(item.videoId)
+                    if (url != null) { streamUrls[item.id] = url }
+                    url
                 }
 
                 if (videoUrl == null) {
-                    Log.e("VideoWP", "Could not get video URL")
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "Could not get video URL", Toast.LENGTH_SHORT).show()
                     }
@@ -132,9 +125,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d("VideoWP", "Downloading video: ${videoUrl.take(80)}")
-
-                // Download video to internal storage
+                Log.d("VideoWP", "Downloading video...")
                 val file = withContext(Dispatchers.IO) {
                     val cacheFile = File(context.filesDir, "live_wallpaper.mp4")
                     val request = Request.Builder().url(videoUrl).build()
@@ -143,35 +134,33 @@ class VideoWallpapersViewModel @Inject constructor(
                     response.body?.byteStream()?.use { input ->
                         cacheFile.outputStream().use { output -> input.copyTo(output) }
                     }
-                    Log.d("VideoWP", "Downloaded ${cacheFile.length() / 1024}KB to ${cacheFile.absolutePath}")
+                    Log.d("VideoWP", "Downloaded ${cacheFile.length() / 1024}KB")
                     cacheFile
                 }
 
-                // Save path to SharedPreferences
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
                     .edit().putString("video_path", file.absolutePath).apply()
 
-                // Launch live wallpaper picker
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Video downloaded! Select FreeVibe in the wallpaper picker", Toast.LENGTH_LONG).show()
-                    val intent = android.content.Intent(
-                        android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
-                    ).apply {
-                        putExtra(
-                            android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                            android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
-                        )
-                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    try { context.startActivity(intent) } catch (e: Exception) {
-                        Log.e("VideoWP", "Could not launch wallpaper picker: ${e.message}")
+                    Toast.makeText(context, "Video downloaded! Select FreeVibe in wallpaper picker", Toast.LENGTH_LONG).show()
+                    try {
+                        val intent = android.content.Intent(
+                            android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
+                        ).apply {
+                            putExtra(
+                                android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
+                            )
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
                         Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers > FreeVibe", Toast.LENGTH_LONG).show()
                     }
                 }
-
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
-                Log.e("VideoWP", "Apply failed: ${e.message}", e)
+                Log.e("VideoWP", "Apply failed", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
@@ -183,122 +172,62 @@ class VideoWallpapersViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = !it.isRefreshing, error = null) }
-
             val results = mutableListOf<VideoWallpaperItem>()
-            val tab = _state.value.selectedTab
 
-            // YouTube results — search multiple queries for variety
-            if (tab == 0 || tab == 1) {
-                withContext(Dispatchers.IO) {
-                    val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-                    for (query in youtubeQueries) {
-                        try {
-                            val extractor = service.getSearchExtractor(query)
-                            extractor.fetchPage()
-                            val ytItems = extractor.initialPage.items
-                                .filterIsInstance<StreamInfoItem>()
-                                .filter { it.duration in 5..120 }
-                                .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.name) } }
-                                .filter { !it.name.contains("#") }
-                                .map { item ->
-                                    val vid = item.url.substringAfter("v=").substringBefore("&")
-                                    VideoWallpaperItem(
-                                        id = "yt_$vid",
-                                        title = item.name,
-                                        thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
-                                        source = "YouTube",
-                                        duration = item.duration,
-                                        uploaderName = item.uploaderName ?: "",
-                                        sourceUrl = item.url,
-                                        videoId = vid,
-                                    )
-                                }
-                            results.addAll(ytItems)
-                        } catch (_: Exception) { continue }
-                    }
+            // YouTube search
+            withContext(Dispatchers.IO) {
+                val service = NewPipe.getService(ServiceList.YouTube.serviceId)
+                for (query in youtubeQueries) {
+                    try {
+                        val extractor = service.getSearchExtractor(query)
+                        extractor.fetchPage()
+                        val items = extractor.initialPage.items
+                            .filterIsInstance<StreamInfoItem>()
+                            .filter { it.duration in 5..120 }
+                            .filter { item -> junkPatterns.none { it.containsMatchIn(item.name) } }
+                            .filter { !it.name.contains("#") }
+                            .map { item ->
+                                val vid = item.url.substringAfter("v=").substringBefore("&")
+                                VideoWallpaperItem(
+                                    id = "yt_$vid",
+                                    title = item.name,
+                                    thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
+                                    source = "YouTube",
+                                    duration = item.duration,
+                                    uploaderName = item.uploaderName ?: "",
+                                    videoId = vid,
+                                )
+                            }
+                        results.addAll(items)
+                    } catch (_: Exception) { continue }
                 }
-                // Deduplicate by video ID
-                val seen = mutableSetOf<String>()
-                results.retainAll { seen.add(it.id) }
             }
 
-            // Reddit results
-            if (tab == 0 || tab == 2) {
-                try {
-                    val redditResults = withContext(Dispatchers.IO) {
-                        fetchRedditVideos()
-                    }
-                    results.addAll(redditResults)
-                } catch (_: Exception) {}
-            }
+            // Deduplicate
+            val seen = mutableSetOf<String>()
+            results.retainAll { seen.add(it.id) }
 
-            // Shuffle combined results for variety
             _state.update {
-                it.copy(
-                    items = if (tab == 0) results.shuffled() else results,
-                    isLoading = false,
-                    isRefreshing = false,
-                )
+                it.copy(items = results, isLoading = false, isRefreshing = false)
+            }
+
+            // Pre-resolve video stream URLs in background for ExoPlayer playback
+            val semaphore = kotlinx.coroutines.sync.Semaphore(5)
+            results.forEach { item ->
+                launch {
+                    semaphore.acquire()
+                    try {
+                        val url = youtubeRepo.getVideoStreamUrl(item.videoId)
+                        if (url != null) {
+                            streamUrls[item.id] = url
+                            _resolvedIds.value = _resolvedIds.value + item.id
+                        }
+                    } catch (_: Exception) {} finally {
+                        semaphore.release()
+                    }
+                }
             }
         }
-    }
-
-    private fun fetchRedditVideos(): List<VideoWallpaperItem> {
-        val items = mutableListOf<VideoWallpaperItem>()
-        for (sub in redditSubreddits) {
-            try {
-                val url = "https://www.reddit.com/r/$sub/hot.json?limit=25&raw_json=1"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "FreeVibe/2.7.0 (Android)")
-                    .build()
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) continue
-                val body = response.body?.string() ?: continue
-
-                // Parse Reddit JSON for video posts
-                val adapter = com.squareup.moshi.Moshi.Builder()
-                    .addLast(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
-                    .build()
-
-                // Simple extraction: find reddit_video URLs
-                val videoUrlRegex = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
-                val titleRegex = Regex(""""title"\s*:\s*"([^"]{3,100})"""")
-                val thumbnailRegex = Regex(""""url_overridden_by_dest"\s*:\s*"(https://[^"]*(?:preview\.redd\.it|i\.redd\.it)[^"]*\.(?:jpg|png|gif)[^"]*)"""")
-                val permalinkRegex = Regex(""""permalink"\s*:\s*"([^"]+)"""")
-                val authorRegex = Regex(""""author"\s*:\s*"([^"]+)"""")
-
-                val videos = videoUrlRegex.findAll(body).toList()
-                val titles = titleRegex.findAll(body).toList()
-                val thumbnails = thumbnailRegex.findAll(body).toList()
-                val permalinks = permalinkRegex.findAll(body).toList()
-                val authors = authorRegex.findAll(body).toList()
-
-                for (i in videos.indices) {
-                    val videoUrl = videos[i].groupValues[1]
-                    val title = titles.getOrNull(i)?.groupValues?.getOrNull(1) ?: "Video from r/$sub"
-                    val thumb = thumbnails.getOrNull(i)?.groupValues?.getOrNull(1) ?: ""
-                    val permalink = permalinks.getOrNull(i)?.groupValues?.getOrNull(1) ?: ""
-                    val author = authors.getOrNull(i)?.groupValues?.getOrNull(1) ?: ""
-
-                    items.add(
-                        VideoWallpaperItem(
-                            id = "rd_${videoUrl.hashCode()}",
-                            title = title,
-                            thumbnailUrl = thumb.replace("&amp;", "&"),
-                            source = "Reddit",
-                            uploaderName = "u/$author in r/$sub",
-                            sourceUrl = "https://www.reddit.com$permalink",
-                            directVideoUrl = videoUrl,
-                        )
-                    )
-                }
-            } catch (_: Exception) { continue }
-        }
-        return items
-            .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.title) } }
-            .filter { !it.title.contains("#") }
-            .distinctBy { it.directVideoUrl }
     }
 }
 
@@ -310,24 +239,14 @@ fun VideoWallpapersScreen(
     viewModel: VideoWallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    val tabs = listOf("All", "YouTube", "Reddit")
+    val resolvedIds by viewModel.resolvedIds.collectAsState()
+    var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Video Wallpapers") },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
         )
-
-        TabRow(selectedTabIndex = state.selectedTab, containerColor = MaterialTheme.colorScheme.surface) {
-            tabs.forEachIndexed { i, title ->
-                Tab(
-                    selected = state.selectedTab == i,
-                    onClick = { viewModel.selectTab(i) },
-                    text = { Text(title, style = MaterialTheme.typography.labelLarge) },
-                )
-            }
-        }
 
         Box(Modifier.fillMaxSize()) {
             when {
@@ -340,28 +259,14 @@ fun VideoWallpapersScreen(
                         }
                     }
                 }
-                state.error != null -> {
-                    Column(
-                        Modifier.align(Alignment.Center).padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(Icons.Default.CloudOff, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
-                        Spacer(Modifier.height(12.dp))
-                        Text(state.error ?: "Error", color = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.height(16.dp))
-                        FilledTonalButton(onClick = { viewModel.refresh() }) {
-                            Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Retry")
-                        }
-                    }
-                }
                 state.items.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.VideoLibrary, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                             Spacer(Modifier.height(12.dp))
                             Text("No video wallpapers found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(12.dp))
+                            FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Retry") }
                         }
                     }
                 }
@@ -370,151 +275,157 @@ fun VideoWallpapersScreen(
                         isRefreshing = state.isRefreshing,
                         onRefresh = { viewModel.refresh() },
                     ) {
-                        var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
+                        LazyColumn(
                             contentPadding = PaddingValues(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             items(state.items, key = { it.id }) { item ->
-                                VideoWallpaperCard(
+                                val isResolved = item.id in resolvedIds
+                                VideoCard(
                                     item = item,
+                                    streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
                                     isApplying = state.isApplying == item.id,
                                     onApply = { confirmItem = item },
                                 )
                             }
-                        }
-
-                        // Confirmation dialog
-                        confirmItem?.let { item ->
-                            AlertDialog(
-                                onDismissRequest = { confirmItem = null },
-                                title = { Text("Apply Video Wallpaper") },
-                                text = {
-                                    Column {
-                                        Text(item.title, style = MaterialTheme.typography.bodyMedium)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            "This will download the video and set it as your live wallpaper.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    Button(onClick = {
-                                        viewModel.applyVideoWallpaper(item)
-                                        confirmItem = null
-                                    }) { Text("Apply") }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { confirmItem = null }) { Text("Cancel") }
-                                },
-                            )
                         }
                     }
                 }
             }
         }
     }
+
+    // Confirmation dialog
+    confirmItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { confirmItem = null },
+            title = { Text("Apply Video Wallpaper") },
+            text = {
+                Column {
+                    Text(item.title, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Text("This will download and set as your live wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = { Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") } },
+            dismissButton = { TextButton(onClick = { confirmItem = null }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
-private fun VideoWallpaperCard(
+private fun VideoCard(
     item: VideoWallpaperItem,
+    streamUrl: String?,
     isApplying: Boolean,
     onApply: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     Card(
-        onClick = onApply,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        enabled = !isApplying,
     ) {
         Box {
-            AsyncImage(
-                model = item.thumbnailUrl,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.56f) // Phone portrait ratio
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-            )
+            // ExoPlayer video or loading placeholder
+            if (streamUrl != null) {
+                val exoPlayer = remember(streamUrl) {
+                    ExoPlayer.Builder(context).build().apply {
+                        setMediaItem(MediaItem.fromUri(streamUrl))
+                        repeatMode = Player.REPEAT_MODE_ALL
+                        volume = 0f
+                        prepare()
+                        play()
+                    }
+                }
+
+                DisposableEffect(streamUrl) {
+                    onDispose { exoPlayer.release() }
+                }
+
+                AndroidView(
+                    factory = { ctx ->
+                        androidx.media3.ui.PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = false
+                            setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(9f / 16f)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
+                )
+            } else {
+                // Loading placeholder with thumbnail
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(9f / 16f)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    coil.compose.AsyncImage(
+                        model = item.thumbnailUrl,
+                        contentDescription = null,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Loading spinner overlay
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
+                        }
+                    }
+                }
+            }
 
             // Duration badge
             if (item.duration > 0) {
                 Surface(
                     color = Color.Black.copy(alpha = 0.7f),
                     shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                 ) {
-                    Text(
-                        "${item.duration}s",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                    )
+                    Text("${item.duration}s", Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
 
             // Source badge
             Surface(
-                color = when (item.source) {
-                    "YouTube" -> Color(0xFFFF0000)
-                    "Reddit" -> Color(0xFFFF4500)
-                    else -> MaterialTheme.colorScheme.primary
-                }.copy(alpha = 0.85f),
+                color = Color(0xFFFF0000).copy(alpha = 0.85f),
                 shape = RoundedCornerShape(4.dp),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
             ) {
-                Text(
-                    item.source,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                )
+                Text("YouTube", Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
+        }
 
-            // Apply overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                    .padding(8.dp),
+        // Title + Apply button
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(item.uploaderName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onApply,
+                enabled = !isApplying,
+                shape = RoundedCornerShape(12.dp),
             ) {
                 if (isApplying) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Applying...", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                    }
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                 } else {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.PlayCircle, null, Modifier.size(16.dp), tint = Color.White)
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            item.title,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    Icon(Icons.Default.Wallpaper, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Apply")
                 }
             }
         }
