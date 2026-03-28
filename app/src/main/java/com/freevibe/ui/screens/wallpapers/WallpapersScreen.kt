@@ -198,6 +198,7 @@ fun WallpapersScreen(
                                     text = when (tab) {
                                         WallpaperTab.DISCOVER -> "Discover"
                                         WallpaperTab.PEXELS -> "Pexels"
+                                        WallpaperTab.PIXABAY -> "Pixabay"
                                         WallpaperTab.COLOR -> "Color"
                                         else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
                                     },
