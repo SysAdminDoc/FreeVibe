@@ -1,40 +1,25 @@
 package com.freevibe.service
 
-import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 
 /**
  * Live wallpaper service that plays a video file on the home/lock screen.
- * Automatically reloads when a new video is applied via SharedPreferences.
+ * Detects when a new video is applied and auto-reloads on next visibility change.
  */
 class VideoWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = VideoEngine()
 
-    inner class VideoEngine : Engine(), SharedPreferences.OnSharedPreferenceChangeListener {
+    inner class VideoEngine : Engine() {
         private var mediaPlayer: MediaPlayer? = null
-        private var videoPath: String? = null
         private var currentHolder: SurfaceHolder? = null
-        private lateinit var prefs: SharedPreferences
+        private var lastModified: Long = 0
 
-        override fun onCreate(surfaceHolder: SurfaceHolder) {
-            super.onCreate(surfaceHolder)
-            prefs = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
-            videoPath = prefs.getString("video_path", null)
-            prefs.registerOnSharedPreferenceChangeListener(this)
-        }
-
-        override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-            if (key == "video_path") {
-                val newPath = prefs.getString("video_path", null)
-                if (newPath != null && newPath != videoPath) {
-                    videoPath = newPath
-                    currentHolder?.let { initializePlayer(it) }
-                }
-            }
-        }
+        private fun getVideoPath(): String? =
+            getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
+                .getString("video_path", null)
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
@@ -51,6 +36,17 @@ class VideoWallpaperService : WallpaperService() {
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             if (visible) {
+                // Check if video file changed (new video applied from app)
+                val path = getVideoPath()
+                if (path != null) {
+                    val file = java.io.File(path)
+                    if (file.exists() && file.lastModified() != lastModified) {
+                        // New video — reload
+                        currentHolder?.let { initializePlayer(it) }
+                        return
+                    }
+                }
+                // Resume existing playback
                 mediaPlayer?.let {
                     if (!it.isPlaying) {
                         it.seekTo(0)
@@ -64,15 +60,16 @@ class VideoWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             super.onDestroy()
-            prefs.unregisterOnSharedPreferenceChangeListener(this)
             releasePlayer()
         }
 
         private fun initializePlayer(holder: SurfaceHolder) {
-            val path = videoPath ?: return
-            if (!java.io.File(path).exists()) return
+            val path = getVideoPath() ?: return
+            val file = java.io.File(path)
+            if (!file.exists()) return
             try {
                 releasePlayer()
+                lastModified = file.lastModified()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
                     val wrappedHolder = object : SurfaceHolder by holder {
