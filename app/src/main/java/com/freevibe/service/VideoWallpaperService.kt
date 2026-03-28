@@ -1,19 +1,22 @@
 package com.freevibe.service
 
-import android.media.MediaPlayer
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
 
 /**
- * Live wallpaper service that plays a video file on the home/lock screen.
- * Detects when a new video is applied and auto-reloads on next visibility change.
+ * Live wallpaper service using ExoPlayer for better video scaling.
+ * Automatically reloads when a new video file is detected.
  */
 class VideoWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = VideoEngine()
 
     inner class VideoEngine : Engine() {
-        private var mediaPlayer: MediaPlayer? = null
+        private var exoPlayer: ExoPlayer? = null
         private var currentHolder: SurfaceHolder? = null
         private var lastModified: Long = 0
 
@@ -36,25 +39,22 @@ class VideoWallpaperService : WallpaperService() {
         override fun onVisibilityChanged(visible: Boolean) {
             super.onVisibilityChanged(visible)
             if (visible) {
-                // Check if video file changed (new video applied from app)
                 val path = getVideoPath()
                 if (path != null) {
                     val file = java.io.File(path)
                     if (file.exists() && file.lastModified() != lastModified) {
-                        // New video — reload
                         currentHolder?.let { initializePlayer(it) }
                         return
                     }
                 }
-                // Resume existing playback
-                mediaPlayer?.let {
+                exoPlayer?.let {
                     if (!it.isPlaying) {
                         it.seekTo(0)
-                        it.start()
+                        it.play()
                     }
                 }
             } else {
-                mediaPlayer?.pause()
+                exoPlayer?.pause()
             }
         }
 
@@ -70,38 +70,37 @@ class VideoWallpaperService : WallpaperService() {
             try {
                 releasePlayer()
                 lastModified = file.lastModified()
+
                 val screenW = resources.displayMetrics.widthPixels
                 val screenH = resources.displayMetrics.heightPixels
 
-                mediaPlayer = MediaPlayer().apply {
-                    setDataSource(path)
-                    val wrappedHolder = object : SurfaceHolder by holder {
-                        override fun setKeepScreenOn(screenOn: Boolean) {}
-                    }
-                    setDisplay(wrappedHolder)
-                    isLooping = true
-                    setVolume(0f, 0f)
-                    prepare()
+                exoPlayer = ExoPlayer.Builder(this@VideoWallpaperService).build().apply {
+                    setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+                    repeatMode = Player.REPEAT_MODE_ALL
+                    volume = 0f
 
-                    // Scale surface to fill screen (zoom-to-fill, crop excess)
-                    val vw = videoWidth
-                    val vh = videoHeight
-                    if (vw > 0 && vh > 0) {
-                        val videoRatio = vw.toFloat() / vh
-                        val screenRatio = screenW.toFloat() / screenH
-                        val (surfW, surfH) = if (videoRatio > screenRatio) {
-                            // Video is wider than screen — match height, overflow width
-                            val w = (screenH * videoRatio).toInt()
-                            w to screenH
-                        } else {
-                            // Video is taller — match width, overflow height
-                            val h = (screenW / videoRatio).toInt()
-                            screenW to h
+                    // When video size is known, scale surface to fill screen
+                    addListener(object : Player.Listener {
+                        override fun onVideoSizeChanged(videoSize: VideoSize) {
+                            if (videoSize.width > 0 && videoSize.height > 0) {
+                                val videoRatio = videoSize.width.toFloat() / videoSize.height
+                                val screenRatio = screenW.toFloat() / screenH
+                                if (videoRatio > screenRatio) {
+                                    // Video wider than screen — scale by height, crop width
+                                    val surfW = (screenH * videoRatio).toInt()
+                                    holder.setFixedSize(surfW, screenH)
+                                } else {
+                                    // Video taller — scale by width, crop height
+                                    val surfH = (screenW / videoRatio).toInt()
+                                    holder.setFixedSize(screenW, surfH)
+                                }
+                            }
                         }
-                        holder.setFixedSize(surfW, surfH)
-                    }
+                    })
 
-                    start()
+                    setVideoSurfaceHolder(holder)
+                    prepare()
+                    play()
                 }
             } catch (_: Exception) {
                 releasePlayer()
@@ -109,10 +108,10 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         private fun releasePlayer() {
-            mediaPlayer?.apply {
-                try { if (isPlaying) stop(); release() } catch (_: Exception) {}
+            exoPlayer?.apply {
+                try { stop(); release() } catch (_: Exception) {}
             }
-            mediaPlayer = null
+            exoPlayer = null
         }
     }
 }
