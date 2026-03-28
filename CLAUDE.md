@@ -17,12 +17,12 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v2.7.0** (versionCode 28)
+- **v3.0.0** (versionCode 29)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
 ```
-Compose UI (15 screens, 4 bottom nav tabs)
+Compose UI (16 screens, 5 bottom nav tabs)
   ViewModels (Hilt) + SelectedContentHolder singleton
     Wallpaper repos: Wallhaven, Picsum, Bing, Reddit
     Sound repos: Freesound (primary, 600K+ tagged), Internet Archive (secondary, duration-filtered)
@@ -90,6 +90,7 @@ DataStore: Settings, Onboarding
 - `CollectionRepository.kt` - CRUD for wallpaper collections (Room-backed)
 
 ## Version History
+- v3.0.0: YouTube integration (NewPipe Extractor search + yt-dlp stream extraction). Video Wallpapers tab with ExoPlayer auto-playing cards, crop editor for landscape-to-portrait conversion, yt-dlp FFmpeg crop. VideoWallpaperService: file timestamp hot-swap, looping. 5 bottom nav tabs. Wallpaper detail redesign (prominent Apply button). Search crash fix (ScrollableTabRow key). Sound duration limits (research-based: ringtones 5-30s, notifications 0-3s, alarms 5-40s). Progressive sound loading with throttled UI updates. YouTube result junk filtering. Pre-resolution of audio URLs with caching. FileProvider for video sharing. Samsung live wallpaper picker support.
 - v2.7.0: Sound loading progress indicator ("Fetching sounds... 12/50" bar during IA metadata resolution). Remove Trending tab (default to Ringtones). Fix duration limits: notifications max 5s, ringtones/alarms max 4min. Duration filter chips updated (All/< 5s/5-30s/30s-4m). Remove dead getTrending() from SoundRepository.
 - v2.6.0: Delete dead FreesoundApi.kt + FreesoundSound.toSound() mapper. Sync all version strings to v2.6.0 (README badge, root build.gradle.kts comment, Settings, User-Agent). Update README feature table with v2.1-2.5 additions (collections, shuffle FAB, parallax, haptic, auto-wallpaper from favorites, editor presets/undo, HTTP validation). Update README architecture (15 screens, Room v4, Collections). Clean stale Freesound comment from AppModule.
 - v2.5.0: Validate HTTP response codes across all network callers — SoundApplier, OfflineFavoritesManager, DownloadManager, WallpaperEditorVM, SoundEditorVM, WallpaperCropVM now check response.isSuccessful before processing body (prevents writing error pages as media). SoundRepository fetch rows increased from 30 to 50 for better fill rate after duration filtering.
