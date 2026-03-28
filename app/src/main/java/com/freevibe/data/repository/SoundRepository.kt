@@ -126,21 +126,22 @@ class SoundRepository @Inject constructor(
             .associateBy { it.identifier }
 
         val semaphore = Semaphore(5) // Max 5 concurrent metadata fetches
-        val resolvedCount = java.util.concurrent.atomic.AtomicInteger(0)
-        val uncachedCount = docs.count { it.identifier !in cached || cached[it.identifier]?.let { e -> e.duration <= 0 || e.duration < minDuration || e.duration > maxDuration } == true }
+        val total = docs.size
+        var resolved = 0
+        val mutex = Mutex()
 
         val sounds = docs.map { doc ->
             async {
                 // Use cache if available
                 cached[doc.identifier]?.let { entry ->
                     if (entry.duration in minDuration.toDouble()..maxDuration.toDouble() && entry.duration > 0) {
+                        mutex.withLock { resolved++; onProgress?.invoke(resolved, total) }
                         return@async doc.toSound(
                             audioUrl = entry.audioUrl,
                             duration = entry.duration,
                             fileSize = entry.fileSize,
                         )
                     }
-                    // Cached but wrong duration — still counts as resolved
                 }
 
                 // Fetch metadata with concurrency limit + timeout
@@ -149,8 +150,7 @@ class SoundRepository @Inject constructor(
                     val result = withTimeoutOrNull(8000L) {
                         resolveMetadata(doc, minDuration, maxDuration)
                     }
-                    val count = resolvedCount.incrementAndGet()
-                    onProgress?.invoke(count, uncachedCount)
+                    mutex.withLock { resolved++; onProgress?.invoke(resolved, total) }
                     result
                 } finally {
                     semaphore.release()
