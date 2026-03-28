@@ -42,6 +42,18 @@ class FreeVibeApp : Application(), Configuration.Provider {
         super.onCreate()
         setupCrashLogging()
         evictStaleCaches()
+        initYtDlp()
+    }
+
+    private fun initYtDlp() {
+        appScope.launch {
+            try {
+                com.yausername.youtubedl_android.YoutubeDL.getInstance().init(this@FreeVibeApp)
+                Log.d("FreeVibeApp", "yt-dlp initialized")
+            } catch (e: Exception) {
+                Log.e("FreeVibeApp", "yt-dlp init failed: ${e.message}")
+            }
+        }
     }
 
     private fun setupCrashLogging() {
