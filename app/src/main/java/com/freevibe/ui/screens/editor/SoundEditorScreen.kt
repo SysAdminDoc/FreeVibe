@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,6 +100,12 @@ class SoundEditorViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     private var player: android.media.MediaPlayer? = null
+    private var undoState: UndoSnapshot? = null
+
+    private data class UndoSnapshot(
+        val trimStart: Float, val trimEnd: Float,
+        val fadeIn: Long, val fadeOut: Long,
+    )
 
     init {
         selectedContent.selectedSound.value?.let { sound ->
@@ -152,18 +159,46 @@ class SoundEditorViewModel @Inject constructor(
         }
     }
 
+    private fun saveUndo() {
+        val s = _state.value
+        undoState = UndoSnapshot(s.trimStartFraction, s.trimEndFraction, s.fadeInMs, s.fadeOutMs)
+    }
+
+    fun undo() {
+        undoState?.let { snap ->
+            _state.update {
+                it.copy(
+                    trimStartFraction = snap.trimStart, trimEndFraction = snap.trimEnd,
+                    fadeInMs = snap.fadeIn, fadeOutMs = snap.fadeOut,
+                )
+            }
+            undoState = null
+        }
+    }
+
+    val canUndo: Boolean get() = undoState != null
+
     fun setTrimStart(fraction: Float) {
+        saveUndo()
         val clamped = fraction.coerceIn(0f, _state.value.trimEndFraction - 0.02f)
         _state.update { it.copy(trimStartFraction = clamped) }
     }
 
     fun setTrimEnd(fraction: Float) {
+        saveUndo()
         val clamped = fraction.coerceIn(_state.value.trimStartFraction + 0.02f, 1f)
         _state.update { it.copy(trimEndFraction = clamped) }
     }
 
-    fun setFadeIn(ms: Long) = _state.update { it.copy(fadeInMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
-    fun setFadeOut(ms: Long) = _state.update { it.copy(fadeOutMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
+    fun setFadeIn(ms: Long) {
+        saveUndo()
+        _state.update { it.copy(fadeInMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
+    }
+
+    fun setFadeOut(ms: Long) {
+        saveUndo()
+        _state.update { it.copy(fadeOutMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
+    }
 
     fun togglePlayback() {
         if (_state.value.isPlaying) stopPlayback() else startPlayback()
@@ -219,18 +254,20 @@ class SoundEditorViewModel @Inject constructor(
                 start()
                 _state.update { it.copy(isPlaying = true) }
 
-                viewModelScope.launch {
-                    try {
-                        while (isPlaying && currentPosition < endMs) {
-                            val pos = currentPosition.toFloat() / duration
-                            _state.update { it.copy(playbackPosition = pos) }
-                            kotlinx.coroutines.delay(50)
-                        }
-                    } catch (_: Exception) {}
-                    stopPlayback()
-                }
-
                 setOnCompletionListener { stopPlayback() }
+            }
+
+            viewModelScope.launch {
+                try {
+                    while (_state.value.isPlaying) {
+                        val p = player ?: break
+                        val pos = p.currentPosition
+                        if (pos >= endMs) break
+                        _state.update { it.copy(playbackPosition = pos.toFloat() / p.duration) }
+                        kotlinx.coroutines.delay(50)
+                    }
+                } catch (_: Exception) {}
+                stopPlayback()
             }
         } catch (_: Exception) {
             stopPlayback()
@@ -285,8 +322,8 @@ class SoundEditorViewModel @Inject constructor(
 
     private fun extractWaveform(path: String, numSamples: Int = 200): FloatArray {
         val amplitudes = FloatArray(numSamples)
+        val extractor = MediaExtractor()
         try {
-            val extractor = MediaExtractor()
             extractor.setDataSource(path)
 
             var audioTrack = -1
@@ -328,12 +365,12 @@ class SoundEditorViewModel @Inject constructor(
                 sampleIndex++
                 extractor.advance()
             }
-
-            extractor.release()
         } catch (_: Exception) {
             for (i in amplitudes.indices) {
                 amplitudes[i] = (Math.sin(i * 0.3) * 0.5 + 0.5).toFloat() * 0.7f
             }
+        } finally {
+            try { extractor.release() } catch (_: Exception) {}
         }
         return amplitudes
     }
@@ -384,7 +421,11 @@ fun SoundEditorScreen(
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 actions = {
-                    // Open local file button
+                    if (viewModel.canUndo) {
+                        IconButton(onClick = { viewModel.undo() }) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, "Undo")
+                        }
+                    }
                     IconButton(onClick = { filePicker.launch("audio/*") }) {
                         Icon(Icons.Default.FolderOpen, "Open file")
                     }
