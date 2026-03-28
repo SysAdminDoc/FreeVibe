@@ -46,10 +46,10 @@ data class SoundsUiState(
 enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, SEARCH }
 
 enum class DurationFilter(val label: String, val minSec: Int, val maxSec: Int) {
-    ALL("All", 0, 240),
+    ALL("All", 0, 60),
     SHORT("< 5s", 0, 5),
     MEDIUM("5-30s", 5, 30),
-    LONG("30s-4m", 30, 240),
+    LONG("30s-60s", 30, 60),
 }
 
 enum class SoundCategory(val label: String, val emoji: String, val query: String) {
@@ -335,14 +335,27 @@ class SoundsViewModel @Inject constructor(
                 val dur = s.durationFilter
                 val cat = s.selectedCategory
 
-                // Build query for each source
+                // Build specific YouTube queries that return actual sound clips, not compilations
                 val ytQuery = when {
-                    cat != null -> "${cat.label} sound effect"
-                    s.selectedTab == SoundTab.RINGTONES -> "ringtone sound"
-                    s.selectedTab == SoundTab.NOTIFICATIONS -> "notification sound short"
-                    s.selectedTab == SoundTab.ALARMS -> "alarm sound"
-                    s.selectedTab == SoundTab.SEARCH -> s.query
-                    else -> "ringtone sound"
+                    cat != null -> "${cat.label} sound effect free download"
+                    s.selectedTab == SoundTab.RINGTONES -> "ringtone sound effect free"
+                    s.selectedTab == SoundTab.NOTIFICATIONS -> "notification sound effect short"
+                    s.selectedTab == SoundTab.ALARMS -> "alarm sound effect free"
+                    s.selectedTab == SoundTab.SEARCH -> "${s.query} sound effect"
+                    else -> "ringtone sound effect free"
+                }
+
+                // Tab-specific YouTube duration caps
+                val ytMaxDur = when (s.selectedTab) {
+                    SoundTab.RINGTONES -> dur.maxSec.coerceAtMost(30)
+                    SoundTab.NOTIFICATIONS -> dur.maxSec.coerceAtMost(3)
+                    SoundTab.ALARMS -> dur.maxSec.coerceAtMost(40)
+                    else -> dur.maxSec.coerceAtMost(60)
+                }
+                val ytMinDur = when (s.selectedTab) {
+                    SoundTab.RINGTONES -> dur.minSec.coerceAtLeast(5)
+                    SoundTab.ALARMS -> dur.minSec.coerceAtLeast(5)
+                    else -> dur.minSec
                 }
 
                 supervisorScope {
@@ -350,8 +363,8 @@ class SoundsViewModel @Inject constructor(
                     try {
                         val ytResult = youtubeRepo.searchSounds(
                             query = ytQuery,
-                            maxDuration = dur.maxSec,
-                            minDuration = dur.minSec,
+                            maxDuration = ytMaxDur,
+                            minDuration = ytMinDur,
                         )
                         // Flush YouTube results to UI immediately
                         if (ytResult.items.isNotEmpty()) {
@@ -360,7 +373,7 @@ class SoundsViewModel @Inject constructor(
                                 st.copy(sounds = allResults.toList(), isLoading = false)
                             }
                             // Pre-resolve ALL YouTube audio URLs in background
-                            val preResolveSemaphore = kotlinx.coroutines.sync.Semaphore(5)
+                            val preResolveSemaphore = kotlinx.coroutines.sync.Semaphore(8)
                             ytResult.items.forEach { yt ->
                                 launch {
                                     preResolveSemaphore.acquire()
@@ -386,18 +399,18 @@ class SoundsViewModel @Inject constructor(
                                     onProgress = progressCallback, onSoundResolved = streamCallback,
                                 )
                                 s.selectedTab == SoundTab.RINGTONES -> soundRepo.searchRingtones(
-                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
-                                    minDuration = dur.minSec.coerceAtLeast(3),
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(30),
+                                    minDuration = dur.minSec.coerceAtLeast(5),
                                     onProgress = progressCallback, onSoundResolved = streamCallback,
                                 )
                                 s.selectedTab == SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(
-                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(5),
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(3),
                                     minDuration = dur.minSec,
                                     onProgress = progressCallback, onSoundResolved = streamCallback,
                                 )
                                 s.selectedTab == SoundTab.ALARMS -> soundRepo.searchAlarms(
-                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
-                                    minDuration = dur.minSec.coerceAtLeast(2),
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(40),
+                                    minDuration = dur.minSec.coerceAtLeast(5),
                                     onProgress = progressCallback, onSoundResolved = streamCallback,
                                 )
                                 s.selectedTab == SoundTab.SEARCH -> soundRepo.search(
