@@ -129,4 +129,7 @@ dependencies {
     // Glance Widgets
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+
+    // NewPipe Extractor (YouTube search + stream extraction without API key)
+    implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.5")
 }

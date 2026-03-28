@@ -12,13 +12,16 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.SoundRepository
+import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import javax.inject.Inject
 
 data class SoundsUiState(
@@ -65,6 +68,7 @@ enum class SoundCategory(val label: String, val emoji: String, val query: String
 class SoundsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val soundRepo: SoundRepository,
+    private val youtubeRepo: YouTubeRepository,
     private val favoritesRepo: FavoritesRepository,
     private val soundApplier: SoundApplier,
     private val downloadManager: DownloadManager,
@@ -171,6 +175,19 @@ class SoundsViewModel @Inject constructor(
     fun togglePlayback(sound: Sound) {
         if (_state.value.playingId == sound.id) {
             stopPlayback()
+        } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
+            // YouTube: resolve audio stream URL first
+            viewModelScope.launch {
+                _state.update { it.copy(playingId = sound.id) } // Show loading state
+                val videoId = sound.id.removePrefix("yt_")
+                val url = youtubeRepo.getAudioStreamUrl(videoId)
+                if (url != null) {
+                    val resolved = sound.copy(previewUrl = url, downloadUrl = url)
+                    startPlayback(resolved)
+                } else {
+                    _state.update { it.copy(playingId = null, applySuccess = "Could not load audio") }
+                }
+            }
         } else {
             startPlayback(sound)
         }
@@ -179,7 +196,11 @@ class SoundsViewModel @Inject constructor(
     fun applySound(sound: Sound, type: ContentType) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true, applySuccess = null) }
-            soundApplier.downloadAndApply(sound.downloadUrl, sound.name, type)
+            val url = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
+                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_"))
+                    ?: run { _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }; return@launch }
+            } else sound.downloadUrl
+            soundApplier.downloadAndApply(url, sound.name, type)
                 .onSuccess {
                     val label = when (type) {
                         ContentType.RINGTONE -> "ringtone"
@@ -197,10 +218,13 @@ class SoundsViewModel @Inject constructor(
 
     fun downloadSound(sound: Sound) {
         viewModelScope.launch {
+            val dlUrl = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
+                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_")) ?: return@launch
+            } else sound.downloadUrl
             val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3")
             downloadManager.downloadSound(
                 id = sound.id,
-                url = sound.downloadUrl,
+                url = dlUrl,
                 fileName = "FreeVibe_${sound.name.take(40)}.$ext",
                 type = ContentType.RINGTONE,
             )
@@ -281,42 +305,103 @@ class SoundsViewModel @Inject constructor(
                 } catch (_: Exception) {}
             }
 
+            val allResults = java.util.concurrent.CopyOnWriteArrayList<Sound>()
+            var lastUiUpdate = 0L
+
+            val streamCallback: ((Sound) -> Unit) = { sound ->
+                try {
+                    allResults.add(sound)
+                    val now = System.currentTimeMillis()
+                    if (now - lastUiUpdate > 300) {
+                        lastUiUpdate = now
+                        val snapshot = allResults.toList()
+                        _state.update { st ->
+                            st.copy(
+                                sounds = if (loadMore) st.sounds + snapshot.filter { snd -> st.sounds.none { it.id == snd.id } } else snapshot,
+                                isLoading = false,
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
             try {
                 val dur = s.durationFilter
                 val cat = s.selectedCategory
 
-                val result = when {
-                    cat != null -> soundRepo.search(
-                        query = cat.query, page = s.currentPage,
-                        maxDuration = dur.maxSec, minDuration = dur.minSec,
-                        onProgress = progressCallback,
-                    )
-                    s.selectedTab == SoundTab.RINGTONES -> soundRepo.searchRingtones(
-                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
-                        minDuration = dur.minSec.coerceAtLeast(3), onProgress = progressCallback,
-                    )
-                    s.selectedTab == SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(
-                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(5),
-                        minDuration = dur.minSec, onProgress = progressCallback,
-                    )
-                    s.selectedTab == SoundTab.ALARMS -> soundRepo.searchAlarms(
-                        page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
-                        minDuration = dur.minSec.coerceAtLeast(2), onProgress = progressCallback,
-                    )
-                    s.selectedTab == SoundTab.SEARCH -> soundRepo.search(
-                        query = s.query, page = s.currentPage,
-                        maxDuration = dur.maxSec, minDuration = dur.minSec,
-                        onProgress = progressCallback,
-                    )
-                    else -> soundRepo.searchRingtones(page = s.currentPage, onProgress = progressCallback)
+                // Build query for each source
+                val ytQuery = when {
+                    cat != null -> "${cat.label} sound effect"
+                    s.selectedTab == SoundTab.RINGTONES -> "ringtone sound"
+                    s.selectedTab == SoundTab.NOTIFICATIONS -> "notification sound short"
+                    s.selectedTab == SoundTab.ALARMS -> "alarm sound"
+                    s.selectedTab == SoundTab.SEARCH -> s.query
+                    else -> "ringtone sound"
                 }
+
+                supervisorScope {
+                    // YouTube results come back fast (single API call)
+                    val ytJob = async {
+                        try {
+                            val ytResult = youtubeRepo.searchSounds(
+                                query = ytQuery,
+                                maxDuration = dur.maxSec,
+                                minDuration = dur.minSec,
+                            )
+                            ytResult.items.forEach { streamCallback(it) }
+                        } catch (_: Exception) {}
+                    }
+
+                    // IA results stream progressively
+                    val iaJob = async {
+                        try {
+                            when {
+                                cat != null -> soundRepo.search(
+                                    query = cat.query, page = s.currentPage,
+                                    maxDuration = dur.maxSec, minDuration = dur.minSec,
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                                s.selectedTab == SoundTab.RINGTONES -> soundRepo.searchRingtones(
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
+                                    minDuration = dur.minSec.coerceAtLeast(3),
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                                s.selectedTab == SoundTab.NOTIFICATIONS -> soundRepo.searchNotifications(
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(5),
+                                    minDuration = dur.minSec,
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                                s.selectedTab == SoundTab.ALARMS -> soundRepo.searchAlarms(
+                                    page = s.currentPage, maxDuration = dur.maxSec.coerceAtMost(240),
+                                    minDuration = dur.minSec.coerceAtLeast(2),
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                                s.selectedTab == SoundTab.SEARCH -> soundRepo.search(
+                                    query = s.query, page = s.currentPage,
+                                    maxDuration = dur.maxSec, minDuration = dur.minSec,
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                                else -> soundRepo.searchRingtones(
+                                    page = s.currentPage,
+                                    onProgress = progressCallback, onSoundResolved = streamCallback,
+                                )
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    ytJob.await()
+                    iaJob.await()
+                }
+
+                // Final flush with all results
+                val combined = allResults.toList()
                 _state.update {
                     it.copy(
-                        sounds = if (loadMore) it.sounds + result.items else result.items,
+                        sounds = if (loadMore) it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } } else combined,
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
-                        hasMore = result.hasMore,
+                        hasMore = combined.size >= 10,
                         loadingProgress = null,
                     )
                 }
