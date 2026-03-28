@@ -1,6 +1,6 @@
 # FreeVibe
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.6.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -28,25 +28,29 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 | Ringtones & Sounds | Thousands of sounds from Internet Archive with duration filtering |
 | Sound Categories | Browse by Nature, Electronic, Funny, Scary, Sci-Fi, Musical, Ambient & more |
 | Duration Filters | Filter sounds by length: short (<5s), medium (5-15s), long (15-60s) |
-| More Like This | Discover acoustically similar sounds via Freesound |
-| Wallpaper Editor | Brightness, contrast, saturation, blur adjustments |
-| Sound Editor | Waveform visualization, lossless trim, fade in/out effects |
+| More Like This | Discover similar sounds via keyword search |
+| Wallpaper Editor | Brightness, contrast, saturation, blur + 6 presets (Warm/Cool/Vivid/Cinematic/Dreamy/B&W) |
+| Sound Editor | Waveform visualization, lossless trim, fade in/out, undo support |
 | Create from File | Open any audio file from your device to make a ringtone |
-| Crop & Position | Pinch-zoom + pan wallpaper before applying |
+| Crop & Position | Pinch-zoom + pan with aspect ratio presets (9:16, 16:9, 1:1) |
 | Per-Contact Ringtones | Assign custom ringtones to individual contacts |
 | Dual Wallpapers | Coordinated home + lock screen wallpaper pairs |
-| Home Widget | Glance-based widget for quick shuffle/apply |
-| Auto Wallpaper | Configurable rotation schedule + source selection via WorkManager |
+| Collections | Organize wallpapers into named folders, 2x2 cover previews |
+| Home Widget | Glance-based widget for quick shuffle/apply with error feedback |
+| Auto Wallpaper | Rotation schedule + source selection including favorites |
+| Shuffle FAB | One-tap random wallpaper from current tab |
 | Wallpaper History | Track and revisit previously applied wallpapers |
 | Video Wallpaper | Live wallpaper service for video files |
+| Parallax Detail | Smooth scale/translate/alpha effect when swiping between wallpapers |
 | Categories | 16 curated wallpaper categories with gradient cards |
-| Download Manager | MediaStore downloads with progress tracking |
+| Download Manager | MediaStore downloads with progress tracking + HTTP validation |
 | Batch Download | Concurrent multi-wallpaper download with throttling |
 | Offline Favorites | Favorited content cached locally for offline access |
 | Favorites Export | JSON export/import via Android SAF |
 | Search History | Recent queries with autocomplete |
 | Pull-to-Refresh | Swipe down to reload on all content screens |
 | Mini Waveform | Visual duration indicator on sound cards |
+| Haptic Feedback | Vibration on favorite toggle for tactile confirmation |
 | OLED Dark Theme | Deep blacks, zero burn-in, Material 3 dynamic color |
 
 ## Content Sources
@@ -62,17 +66,17 @@ Open in Android Studio Ladybug+ and run. Everything works out of the box.
 ## Architecture
 
 ```
-Jetpack Compose UI
+Jetpack Compose UI (15 screens, 4 bottom nav tabs)
   Wallpapers | Sounds | Favorites | Settings | Editors
-  Onboarding | Categories | Downloads | Glance Widget
+  Onboarding | Categories | Collections | Downloads | Glance Widget
 ViewModels (Hilt) + Cache Layer
-  Repositories: Wallhaven, Picsum, Bing, Reddit, Internet Archive
+  Repositories: Wallhaven, Picsum, Bing, Reddit, Internet Archive, Collections
   Services: WallpaperApplier, SoundApplier, DownloadManager,
             AudioTrimmer, DualWallpaper, BatchDownload,
             ContactRingtone, FavoritesExporter,
             OfflineFavorites, WallpaperHistory
-Room DB (Favorites, Downloads, Search History, Wallpaper Cache,
-         Wallpaper History, IA Audio Cache)
+Room DB v4 (Favorites, Downloads, Search History, Wallpaper Cache,
+            Wallpaper History, IA Audio Cache, Collections, Collection Items)
 DataStore (Settings, Onboarding)
 ```
 
