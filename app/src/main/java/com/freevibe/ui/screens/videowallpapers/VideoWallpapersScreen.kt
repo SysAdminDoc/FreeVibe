@@ -6,6 +6,8 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -70,10 +74,13 @@ data class VideoWallpapersState(
     val isRefreshing: Boolean = false,
     val isApplying: String? = null,
     val error: String? = null,
+    val searchQuery: String = "",
     val pexelsPage: Int = 1,
     val ytQueryIndex: Int = 0,
-    val redditAfter: String? = null,
+    val redditSubIndex: Int = 0, // Rotate through subreddits per loadMore
+    val redditAfters: Map<String, String?> = emptyMap(), // Per-subreddit pagination
     val hasMore: Boolean = true,
+    val emptyLoadCount: Int = 0, // Track consecutive empty loads
     val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
 )
 
@@ -123,8 +130,10 @@ class VideoWallpapersViewModel @Inject constructor(
 
     init { load() }
 
+    private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds", "wallpaperengine")
+
     fun refresh() {
-        _state.update { it.copy(isRefreshing = true, pexelsPage = 1, ytQueryIndex = 0, redditAfter = null, items = emptyList()) }
+        _state.update { it.copy(isRefreshing = true, pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), items = emptyList(), emptyLoadCount = 0) }
         streamUrls.clear()
         _resolvedIds.value = emptySet()
         load()
@@ -137,7 +146,14 @@ class VideoWallpapersViewModel @Inject constructor(
     }
 
     fun setOrientation(orientation: OrientationFilter) {
-        _state.update { it.copy(orientation = orientation, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0) }
+        _state.update { it.copy(orientation = orientation, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), emptyLoadCount = 0) }
+        streamUrls.clear()
+        _resolvedIds.value = emptySet()
+        load()
+    }
+
+    fun search(query: String) {
+        _state.update { it.copy(searchQuery = query, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), emptyLoadCount = 0) }
         streamUrls.clear()
         _resolvedIds.value = emptySet()
         load()
@@ -267,113 +283,92 @@ class VideoWallpapersViewModel @Inject constructor(
             }
 
             val s = _state.value
+            val searchQ = s.searchQuery.ifBlank { null }
             val newItems = mutableListOf<VideoWallpaperItem>()
 
-            // All three sources run in parallel
             kotlinx.coroutines.supervisorScope {
-                // 1. Pexels — instant direct MP4 URLs
+                // 1. Pexels
                 val pexelsJob = async(Dispatchers.IO) {
                     try {
                         val key = prefs.pexelsApiKey.first()
-                        if (key.isNotBlank()) {
-                            val query = pexelsQueries[s.pexelsPage % pexelsQueries.size]
-                            val pexelsOrientation = when (s.orientation) {
-                                OrientationFilter.PORTRAIT -> "portrait"
-                                OrientationFilter.LANDSCAPE -> "landscape"
-                                OrientationFilter.ALL -> ""
+                        if (key.isBlank()) return@async emptyList()
+                        val query = searchQ ?: pexelsQueries[s.pexelsPage % pexelsQueries.size]
+                        val orientation = when (s.orientation) {
+                            OrientationFilter.PORTRAIT -> "portrait"
+                            OrientationFilter.LANDSCAPE -> "landscape"
+                            OrientationFilter.ALL -> "portrait"
+                        }
+                        val response = pexelsApi.searchVideos(apiKey = key, query = query, orientation = orientation, perPage = 15, page = s.pexelsPage)
+                        response.videos.filter { it.duration in 3..120 }.mapNotNull { video ->
+                            val file = video.videoFiles
+                                .filter { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
+                                .sortedByDescending { it.height ?: 0 }
+                                .firstOrNull { (it.height ?: 0) <= 1920 }
+                                ?: video.videoFiles.firstOrNull { it.link.endsWith(".mp4") }
+                            file?.let {
+                                val item = VideoWallpaperItem(id = "px_${video.id}", title = "by ${video.user.name}", thumbnailUrl = video.image, source = "Pexels", duration = video.duration.toLong(), uploaderName = video.user.name)
+                                streamUrls[item.id] = it.link
+                                _resolvedIds.value = _resolvedIds.value + item.id
+                                item
                             }
-                            val response = pexelsApi.searchVideos(
-                                apiKey = key, query = query,
-                                orientation = pexelsOrientation.ifEmpty { "portrait" },
-                                perPage = 15, page = s.pexelsPage,
-                            )
-                            response.videos
-                                .filter { it.duration in 3..120 }
-                                .filter { when (s.orientation) {
-                                    OrientationFilter.PORTRAIT -> it.height > it.width
-                                    OrientationFilter.LANDSCAPE -> it.width > it.height
-                                    OrientationFilter.ALL -> true
-                                }}
-                                .mapNotNull { video ->
-                                    val bestFile = video.videoFiles
-                                        .filter { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
-                                        .sortedByDescending { it.height ?: 0 }
-                                        .firstOrNull { (it.height ?: 0) <= 1920 }
-                                        ?: video.videoFiles.firstOrNull { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
-                                    bestFile?.let { file ->
-                                        val item = VideoWallpaperItem(
-                                            id = "px_${video.id}", title = "by ${video.user.name}",
-                                            thumbnailUrl = video.image, source = "Pexels",
-                                            duration = video.duration.toLong(),
-                                            uploaderName = video.user.name, popularity = 0,
-                                        )
-                                        streamUrls[item.id] = file.link
-                                        _resolvedIds.value = _resolvedIds.value + item.id
-                                        item
-                                    }
-                                }
-                        } else emptyList()
-                    } catch (e: Throwable) {
-                        Log.e("VideoWP", "Pexels failed: ${e.message}")
-                        emptyList()
-                    }
+                        }
+                    } catch (e: Throwable) { Log.e("VideoWP", "Pexels: ${e.message}"); emptyList() }
                 }
 
-                // 2. Reddit — sorted by top/all time, direct v.redd.it URLs
+                // 2. Reddit — one subreddit per load, rotating, with per-sub pagination
                 val redditJob = async(Dispatchers.IO) {
                     val items = mutableListOf<VideoWallpaperItem>()
-                    val subs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds")
-                    for (sub in subs) {
+                    // Load 2 subreddits per call for variety
+                    for (offset in 0..1) {
+                        val subIdx = (s.redditSubIndex + offset) % redditSubs.size
+                        val sub = redditSubs[subIdx]
                         try {
-                            val url = "https://www.reddit.com/r/$sub/top.json?t=all&limit=25&raw_json=1" +
-                                (if (s.redditAfter != null) "&after=${s.redditAfter}" else "")
+                            val after = s.redditAfters[sub]
+                            val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
+                            val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
                             val req = Request.Builder().url(url).header("User-Agent", "Aura/3.0.0 (Android)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) continue
                             val body = resp.body?.string() ?: continue
 
-                            // Extract pagination token
-                            val afterMatch = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)
-                            if (afterMatch != null) {
-                                _state.update { it.copy(redditAfter = afterMatch.groupValues[1]) }
-                            }
+                            // Per-subreddit after token
+                            val afterToken = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
+                            _state.update { it.copy(redditAfters = it.redditAfters + (sub to afterToken)) }
 
-                            // Parse each post individually using children array pattern
-                            val postPattern = Regex(""""title"\s*:\s*"([^"]{2,200})".*?"ups"\s*:\s*(\d+).*?"fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
-                            val thumbPattern = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
-                            val allThumbs = thumbPattern.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
+                            // Extract video posts
+                            val videoRegex = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
+                            val titleRegex = Regex(""""title"\s*:\s*"([^"]{2,200})"""")
+                            val upsRegex = Regex(""""ups"\s*:\s*(\d+)""")
+                            val thumbRegex = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
 
-                            postPattern.findAll(body).forEachIndexed { i, match ->
-                                val title = match.groupValues[1]
-                                val upvotes = match.groupValues[2].toLongOrNull() ?: 0
-                                val videoUrl = match.groupValues[3]
-                                val thumb = allThumbs.getOrNull(i) ?: ""
+                            val videos = videoRegex.findAll(body).toList()
+                            val titles = titleRegex.findAll(body).toList()
+                            val upsList = upsRegex.findAll(body).toList()
+                            val thumbList = thumbRegex.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
+
+                            for (i in videos.indices) {
+                                val videoUrl = videos[i].groupValues[1]
+                                val title = titles.getOrNull(i + 1)?.groupValues?.getOrNull(1) ?: "Video from r/$sub" // +1 to skip subreddit title
+                                val ups = upsList.getOrNull(i)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0
+                                val thumb = thumbList.getOrNull(i) ?: ""
 
                                 if (junkPatterns.none { it.containsMatchIn(title) } && !title.contains("#")) {
-                                    val item = VideoWallpaperItem(
-                                        id = "rd_${videoUrl.hashCode()}", title = title,
-                                        thumbnailUrl = thumb, source = "Reddit",
-                                        uploaderName = "r/$sub", popularity = upvotes,
-                                    )
+                                    val item = VideoWallpaperItem(id = "rd_${videoUrl.hashCode()}", title = title, thumbnailUrl = thumb, source = "Reddit", uploaderName = "r/$sub", popularity = ups)
                                     items.add(item)
                                     streamUrls[item.id] = videoUrl.trimEnd('/') + "/DASH_720.mp4"
                                     _resolvedIds.value = _resolvedIds.value + item.id
                                 }
                             }
-                        } catch (e: Throwable) {
-                            Log.e("VideoWP", "Reddit $sub failed: ${e.message}")
-                            continue
-                        }
+                        } catch (e: Throwable) { Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
                     }
                     items
                 }
 
-                // 3. YouTube — sorted by view count
+                // 3. YouTube
                 val ytJob = async(Dispatchers.IO) {
                     try {
                         val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-                        val queryIdx = s.ytQueryIndex % youtubeQueries.size
-                        val query = youtubeQueries[queryIdx]
+                        val query = searchQ?.let { "$it vertical wallpaper" } ?: youtubeQueries[s.ytQueryIndex % youtubeQueries.size]
                         val extractor = service.getSearchExtractor(query)
                         extractor.fetchPage()
                         extractor.initialPage.items
@@ -384,18 +379,9 @@ class VideoWallpapersViewModel @Inject constructor(
                             .sortedByDescending { it.viewCount }
                             .map { item ->
                                 val vid = item.url.substringAfter("v=").substringBefore("&")
-                                VideoWallpaperItem(
-                                    id = "yt_$vid", title = item.name,
-                                    thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
-                                    source = "YouTube", duration = item.duration,
-                                    uploaderName = item.uploaderName ?: "",
-                                    videoId = vid, popularity = item.viewCount,
-                                )
+                                VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount)
                             }
-                    } catch (e: Throwable) {
-                        Log.e("VideoWP", "YouTube failed: ${e.message}")
-                        emptyList()
-                    }
+                    } catch (e: Throwable) { Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
                 }
 
                 newItems.addAll(pexelsJob.await())
@@ -403,49 +389,42 @@ class VideoWallpapersViewModel @Inject constructor(
                 newItems.addAll(ytJob.await())
             }
 
-            // Deduplicate
+            // Deduplicate against existing items
             val existingIds = s.items.map { it.id }.toSet()
-            val deduped = newItems.filter { it.id !in existingIds }
-                .distinctBy { it.id }
+            val deduped = newItems.filter { it.id !in existingIds }.distinctBy { it.id }
 
-            // Interleave sources: Pexels, Reddit, YouTube mixed together
-            val pexels = deduped.filter { it.source == "Pexels" }.toMutableList()
-            val reddit = deduped.filter { it.source == "Reddit" }.sortedByDescending { it.popularity }.toMutableList()
-            val youtube = deduped.filter { it.source == "YouTube" }.sortedByDescending { it.popularity }.toMutableList()
-
+            // Interleave: Pexels, Reddit, YouTube round-robin
+            val px = deduped.filter { it.source == "Pexels" }.toMutableList()
+            val rd = deduped.filter { it.source == "Reddit" }.sortedByDescending { it.popularity }.toMutableList()
+            val yt = deduped.filter { it.source == "YouTube" }.sortedByDescending { it.popularity }.toMutableList()
             val mixed = mutableListOf<VideoWallpaperItem>()
-            while (pexels.isNotEmpty() || reddit.isNotEmpty() || youtube.isNotEmpty()) {
-                if (pexels.isNotEmpty()) mixed.add(pexels.removeFirst())
-                if (reddit.isNotEmpty()) mixed.add(reddit.removeFirst())
-                if (youtube.isNotEmpty()) mixed.add(youtube.removeFirst())
+            while (px.isNotEmpty() || rd.isNotEmpty() || yt.isNotEmpty()) {
+                if (px.isNotEmpty()) mixed.add(px.removeFirst())
+                if (rd.isNotEmpty()) mixed.add(rd.removeFirst())
+                if (yt.isNotEmpty()) mixed.add(yt.removeFirst())
             }
+
+            val newEmptyCount = if (mixed.isEmpty()) s.emptyLoadCount + 1 else 0
 
             _state.update {
                 it.copy(
                     items = if (loadMore) it.items + mixed else mixed,
-                    isLoading = false,
-                    isLoadingMore = false,
-                    isRefreshing = false,
-                    hasMore = true, // Pexels has infinite pages
+                    isLoading = false, isLoadingMore = false, isRefreshing = false,
+                    hasMore = newEmptyCount < 3, // Stop after 3 consecutive empty loads
                     pexelsPage = it.pexelsPage + 1,
                     ytQueryIndex = it.ytQueryIndex + 1,
+                    redditSubIndex = it.redditSubIndex + 2,
+                    emptyLoadCount = newEmptyCount,
                 )
             }
 
-            // Pre-resolve YouTube stream URLs in background
-            val ytToResolve = mixed.filter { it.source == "YouTube" && !streamUrls.containsKey(it.id) }
-            val semaphore = kotlinx.coroutines.sync.Semaphore(5)
-            ytToResolve.forEach { item ->
-                launch {
-                    semaphore.acquire()
-                    try {
-                        val url = youtubeRepo.getVideoStreamUrl(item.videoId)
-                        if (url != null) {
-                            streamUrls[item.id] = url
-                            _resolvedIds.value = _resolvedIds.value + item.id
-                        }
-                    } catch (_: Throwable) {} finally {
-                        semaphore.release()
+            // Pre-resolve YouTube URLs
+            mixed.filter { it.source == "YouTube" && !streamUrls.containsKey(it.id) }.let { ytItems ->
+                val sem = kotlinx.coroutines.sync.Semaphore(5)
+                ytItems.forEach { item ->
+                    launch {
+                        sem.acquire()
+                        try { youtubeRepo.getVideoStreamUrl(item.videoId)?.let { streamUrls[item.id] = it; _resolvedIds.value = _resolvedIds.value + item.id } } catch (_: Throwable) {} finally { sem.release() }
                     }
                 }
             }
@@ -499,10 +478,36 @@ fun VideoWallpapersScreen(
         return
     }
 
+    var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Video Wallpapers") },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+        // Search bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("Search video wallpapers...") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = ""; viewModel.search(""); focusManager.clearFocus() }) {
+                        Icon(Icons.Default.Clear, "Clear")
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                viewModel.search(searchQuery); focusManager.clearFocus()
+            }),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = Color.Transparent,
+            ),
         )
 
         // Orientation filter
