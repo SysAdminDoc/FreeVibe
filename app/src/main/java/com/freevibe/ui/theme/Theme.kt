@@ -65,7 +65,7 @@ fun FreeVibeTheme(content: @Composable () -> Unit) {
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = Black.toArgb()
             window.navigationBarColor = Black.toArgb()
             WindowCompat.getInsetsController(window, view).apply {

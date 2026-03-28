@@ -140,6 +140,30 @@ data class IAAudioCacheEntity(
     val cachedAt: Long = System.currentTimeMillis(),
 )
 
+// -- Wallpaper collections --
+
+@Entity(tableName = "wallpaper_collections")
+data class WallpaperCollectionEntity(
+    @PrimaryKey(autoGenerate = true) val collectionId: Long = 0,
+    val name: String,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(
+    tableName = "wallpaper_collection_items",
+    primaryKeys = ["collectionId", "wallpaperId"],
+)
+data class WallpaperCollectionItemEntity(
+    val collectionId: Long,
+    val wallpaperId: String,
+    val thumbnailUrl: String,
+    val fullUrl: String,
+    val source: String,
+    val width: Int = 0,
+    val height: Int = 0,
+    val addedAt: Long = System.currentTimeMillis(),
+)
+
 // -- Dual wallpaper pair --
 
 data class WallpaperPair(

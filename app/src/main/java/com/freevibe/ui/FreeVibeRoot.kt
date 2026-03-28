@@ -15,6 +15,7 @@ import androidx.navigation.compose.*
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.screens.categories.CategoriesScreen
+import com.freevibe.ui.screens.collections.CollectionsScreen
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -173,6 +174,7 @@ fun FreeVibeRoot() {
                     onLicensesClick = { navController.navigate(Screen.Licenses.route) },
                     onCategoriesClick = { navController.navigate(Screen.Categories.route) },
                     onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) },
+                    onCollectionsClick = { navController.navigate(Screen.Collections.route) },
                 )
             }
 
@@ -238,6 +240,16 @@ fun FreeVibeRoot() {
             // ── Licenses ──────────────────────────────────────────
             composable(Screen.Licenses.route) {
                 LicensesScreen(onBack = { navController.popBackStack() })
+            }
+
+            // ── Collections ────────────────────────────────────
+            composable(Screen.Collections.route) {
+                CollectionsScreen(
+                    onBack = { navController.popBackStack() },
+                    onWallpaperClick = { wallpaperId ->
+                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaperId))
+                    },
+                )
             }
 
             // ── Wallpaper History ────────────────────────────────

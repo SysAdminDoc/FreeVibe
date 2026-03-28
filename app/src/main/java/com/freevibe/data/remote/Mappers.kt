@@ -5,13 +5,11 @@ import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.bing.BingImage
 import com.freevibe.data.remote.internetarchive.IASearchDoc
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
-import com.freevibe.data.remote.nasa.ApodResponse
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.picsum.PicsumPhoto
 import com.freevibe.data.remote.reddit.RedditPost
 import com.freevibe.data.remote.freesound.FreesoundSound
 import com.freevibe.data.remote.wallhaven.WallhavenWallpaper
-import com.freevibe.data.remote.wikimedia.WikimediaPage
 
 // -- Wallhaven -> Wallpaper --
 
@@ -62,39 +60,6 @@ fun BingImage.toWallpaper() = Wallpaper(
     uploaderName = copyright.substringAfter("(c) ", copyright)
         .substringAfter("(", copyright).substringBefore(")"),
 )
-
-// -- Wikimedia Commons -> Wallpaper --
-
-fun WikimediaPage.toWallpaper(): Wallpaper? {
-    val info = imageInfo?.firstOrNull() ?: return null
-    // Skip non-image files (SVG, PDF, etc.)
-    val url = info.url
-    if (!url.endsWith(".jpg", true) && !url.endsWith(".jpeg", true) &&
-        !url.endsWith(".png", true) && !url.endsWith(".webp", true)
-    ) return null
-
-    // #6: Skip low-res images (icons, logos, diagrams)
-    if (info.width < 1920 || info.height < 1080) return null
-
-    val desc = info.extMetadata?.description?.value
-        ?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
-    val license = info.extMetadata?.license?.value ?: "CC"
-    val cats = info.extMetadata?.categories?.value?.split("|") ?: emptyList()
-
-    return Wallpaper(
-        id = "wm_$pageId",
-        source = ContentSource.WIKIMEDIA,
-        thumbnailUrl = info.thumbUrl ?: url,
-        fullUrl = url,
-        width = info.width,
-        height = info.height,
-        category = cats.firstOrNull() ?: "commons",
-        tags = cats.take(5),
-        fileSize = info.size.toLong(),
-        sourcePageUrl = info.descriptionUrl,
-        uploaderName = info.user,
-    )
-}
 
 // -- Internet Archive -> Sound --
 
@@ -206,17 +171,3 @@ fun FreesoundSound.toSound(): Sound? {
     )
 }
 
-// -- NASA APOD -> Wallpaper --
-
-fun ApodResponse.toWallpaper() = Wallpaper(
-    id = "nasa_$date",
-    source = ContentSource.NASA,
-    thumbnailUrl = thumbOrUrl,
-    fullUrl = bestUrl,
-    width = 0,
-    height = 0,
-    category = "astronomy",
-    tags = listOf("nasa", "apod", "space", "astronomy"),
-    sourcePageUrl = "https://apod.nasa.gov/apod/ap${date.replace("-", "").drop(2)}.html",
-    uploaderName = copyright ?: "NASA",
-)

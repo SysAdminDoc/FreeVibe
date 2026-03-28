@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.freevibe.data.local.CollectionDao
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.local.FavoriteDao
 import com.freevibe.data.local.FreeVibeDatabase
@@ -14,11 +15,9 @@ import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
 // Freesound removed — no API key required
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
-import com.freevibe.data.remote.nasa.NasaApodApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
-import com.freevibe.data.remote.wikimedia.WikimediaApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -51,7 +50,7 @@ object AppModule {
         )
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "FreeVibe/2.0.0 (Android; Open Source)")
+                .header("User-Agent", "FreeVibe/2.1.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -115,26 +114,6 @@ object AppModule {
             .build()
             .create(BingDailyApi::class.java)
 
-    @Provides
-    @Singleton
-    fun provideWikimediaApi(client: OkHttpClient, moshi: Moshi): WikimediaApi =
-        Retrofit.Builder()
-            .baseUrl(WikimediaApi.BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(WikimediaApi::class.java)
-
-    @Provides
-    @Singleton
-    fun provideNasaApi(client: OkHttpClient, moshi: Moshi): NasaApodApi =
-        Retrofit.Builder()
-            .baseUrl(NasaApodApi.BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(NasaApodApi::class.java)
-
     // -- Database --
 
     // Migrations preserve user data (favorites, downloads, history) across schema changes.
@@ -153,11 +132,18 @@ object AppModule {
         }
     }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collections` (`collectionId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL DEFAULT 0)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collection_items` (`collectionId` INTEGER NOT NULL, `wallpaperId` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `source` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `addedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `wallpaperId`))")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -178,4 +164,7 @@ object AppModule {
 
     @Provides
     fun provideIAAudioCacheDao(db: FreeVibeDatabase): IAAudioCacheDao = db.iaAudioCacheDao()
+
+    @Provides
+    fun provideCollectionDao(db: FreeVibeDatabase): CollectionDao = db.collectionDao()
 }

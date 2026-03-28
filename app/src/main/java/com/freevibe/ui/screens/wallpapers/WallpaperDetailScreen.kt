@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.absoluteValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
+import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.ui.components.SourceBadge
 import java.text.SimpleDateFormat
@@ -64,9 +67,11 @@ fun WallpaperDetailScreen(
     }
 
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
+    val collections by viewModel.collections.collectAsState()
     var showApplyOptions by remember { mutableStateOf(false) }
     var showPhonePreview by remember { mutableStateOf(false) }
     var showDualOptions by remember { mutableStateOf(false) }
+    var showCollectionPicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -89,12 +94,21 @@ fun WallpaperDetailScreen(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
+                    val pageOffset = (pagerState.currentPage - page + pagerState.currentPageOffsetFraction)
                     val pageUrl = wallpapers.getOrNull(page)?.fullUrl ?: wp.fullUrl
                     SubcomposeAsyncImage(
                         model = pageUrl,
                         contentDescription = "Wallpaper preview",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val scale = 1f + (pageOffset.absoluteValue * 0.15f).coerceAtMost(0.15f)
+                                scaleX = scale
+                                scaleY = scale
+                                translationY = pageOffset * size.height * 0.06f
+                                alpha = 1f - (pageOffset.absoluteValue * 0.3f).coerceAtMost(0.3f)
+                            },
                     ) {
                         when (painter.state) {
                             is AsyncImagePainter.State.Loading -> {
@@ -297,6 +311,11 @@ fun WallpaperDetailScreen(
                         label = "Split crop for home & lock",
                         onClick = { showDualOptions = true },
                     )
+                    ActionCircle(
+                        icon = Icons.Default.CreateNewFolder,
+                        label = "Save to collection",
+                        onClick = { showCollectionPicker = true },
+                    )
 
                     Button(
                         onClick = { showApplyOptions = true },
@@ -331,6 +350,22 @@ fun WallpaperDetailScreen(
                     onApply = { target ->
                         showApplyOptions = false
                         viewModel.applyWallpaper(wp, target)
+                    },
+                )
+            }
+
+            // Collection picker
+            if (showCollectionPicker) {
+                CollectionPickerSheet(
+                    collections = collections,
+                    onDismiss = { showCollectionPicker = false },
+                    onSelectCollection = { collectionId ->
+                        showCollectionPicker = false
+                        viewModel.addToCollection(collectionId, wp)
+                    },
+                    onCreateNew = { name ->
+                        showCollectionPicker = false
+                        viewModel.createCollection(name, wp)
                     },
                 )
             }
@@ -559,6 +594,71 @@ private fun ApplyOption(
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(title, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CollectionPickerSheet(
+    collections: List<WallpaperCollectionEntity>,
+    onDismiss: () -> Unit,
+    onSelectCollection: (Long) -> Unit,
+    onCreateNew: (String) -> Unit,
+) {
+    var showCreateField by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+        tonalElevation = 12.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "Save to Collection",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+
+            collections.forEach { collection ->
+                ApplyOption(Icons.Default.Folder, collection.name) {
+                    onSelectCollection(collection.collectionId)
+                }
+            }
+
+            if (showCreateField) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Collection name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            if (newName.isNotBlank()) onCreateNew(newName.trim())
+                        },
+                        enabled = newName.isNotBlank(),
+                    ) {
+                        Text("Create")
+                    }
+                }
+            } else {
+                ApplyOption(Icons.Default.Add, "New collection") { showCreateField = true }
+            }
         }
     }
 }
