@@ -296,10 +296,10 @@ class VideoWallpapersViewModel @Inject constructor(
                                 }}
                                 .mapNotNull { video ->
                                     val bestFile = video.videoFiles
-                                        .filter { it.fileType == "video/mp4" }
-                                        .sortedByDescending { it.height }
-                                        .firstOrNull { it.height <= 1920 }
-                                        ?: video.videoFiles.firstOrNull { it.fileType == "video/mp4" }
+                                        .filter { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
+                                        .sortedByDescending { it.height ?: 0 }
+                                        .firstOrNull { (it.height ?: 0) <= 1920 }
+                                        ?: video.videoFiles.firstOrNull { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
                                     bestFile?.let { file ->
                                         val item = VideoWallpaperItem(
                                             id = "px_${video.id}", title = "by ${video.user.name}",
