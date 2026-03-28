@@ -15,6 +15,7 @@ import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.WallpaperRepository
+import com.freevibe.service.ColorExtractor
 import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.OfflineFavoritesManager
@@ -60,6 +61,7 @@ class WallpapersViewModel @Inject constructor(
     private val offlineFavorites: OfflineFavoritesManager,
     private val searchHistoryRepo: SearchHistoryRepository,
     private val prefs: PreferencesManager,
+    private val colorExtractor: ColorExtractor,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
@@ -245,6 +247,18 @@ class WallpapersViewModel @Inject constructor(
             val id = collectionRepo.create(name)
             wallpaper?.let { collectionRepo.addWallpaper(id, it) }
             _state.update { it.copy(applySuccess = "Created \"$name\"") }
+        }
+    }
+
+    // -- Color extraction (Material You preview) --
+
+    private val _colorPalette = MutableStateFlow<ColorExtractor.WallpaperPalette?>(null)
+    val colorPalette = _colorPalette.asStateFlow()
+
+    fun extractColors(wallpaperUrl: String) {
+        viewModelScope.launch {
+            _colorPalette.value = null
+            _colorPalette.value = colorExtractor.extractFromUrl(wallpaperUrl)
         }
     }
 
