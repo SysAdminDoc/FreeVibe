@@ -44,10 +44,12 @@ class OfflineFavoritesManager @Inject constructor(
 
                 val request = Request.Builder().url(url).build()
                 val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) return@withContext null
-                response.body?.byteStream()?.use { input ->
-                    file.outputStream().use { output ->
-                        input.copyTo(output)
+                response.use { resp ->
+                    if (!resp.isSuccessful) return@withContext null
+                    resp.body?.byteStream()?.use { input ->
+                        file.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
                 }
 
@@ -63,6 +65,7 @@ class OfflineFavoritesManager @Inject constructor(
         val safeId = id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
         offlineDir.listFiles()?.filter { it.name.startsWith("$safeId.") }
             ?.forEach { it.delete() }
+        favoriteDao.updateOfflinePath(id, null)
     }
 
     /** Get total cache size in bytes */

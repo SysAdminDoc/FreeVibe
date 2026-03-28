@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -96,8 +95,14 @@ class DownloadManager @Inject constructor(
         // Start HTTP download
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) throw IllegalStateException("Download failed: HTTP ${response.code}")
-        val body = response.body ?: throw IllegalStateException("Empty response body")
+        if (!response.isSuccessful) {
+            response.close()
+            throw IllegalStateException("Download failed: HTTP ${response.code}")
+        }
+        val body = response.body ?: run {
+            response.close()
+            throw IllegalStateException("Empty response body")
+        }
         val totalBytes = body.contentLength()
 
         // Create MediaStore entry
