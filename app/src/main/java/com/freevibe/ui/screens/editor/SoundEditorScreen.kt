@@ -301,6 +301,7 @@ class SoundEditorViewModel @Inject constructor(
         if (!file.exists()) {
             val request = Request.Builder().url(url).build()
             val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
             response.body?.byteStream()?.use { input ->
                 FileOutputStream(file).use { output -> input.copyTo(output) }
             }
