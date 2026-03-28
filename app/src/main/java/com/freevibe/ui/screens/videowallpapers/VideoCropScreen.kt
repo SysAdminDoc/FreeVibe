@@ -251,12 +251,12 @@ private suspend fun cropVideo(
 
         try {
             Log.d("VideoCrop", "Cropping via yt-dlp FFmpeg: ${cropW}x${cropH} at x=$cropX")
-            // Use yt-dlp to re-download with crop filter applied via --postprocessor-args
-            // yt-dlp bundles its own FFmpeg that handles linking properly
             val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
+            request.addOption("--enable-file-urls")
             request.addOption("-o", outputFile.absolutePath)
-            request.addOption("--postprocessor-args", "ffmpeg:-vf crop=$cropW:$cropH:$cropX:$cropY")
             request.addOption("--recode-video", "mp4")
+            request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
+            request.addOption("--force-overwrites")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             Log.d("VideoCrop", "yt-dlp crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
 
