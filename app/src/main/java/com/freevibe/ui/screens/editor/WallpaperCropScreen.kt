@@ -79,6 +79,7 @@ class WallpaperCropViewModel @Inject constructor(
                 val bitmap = withContext(Dispatchers.IO) {
                     val request = Request.Builder().url(url).build()
                     val response = okHttpClient.newCall(request).execute()
+                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
                     val bytes = response.body?.bytes() ?: throw Exception("Empty body")
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 }

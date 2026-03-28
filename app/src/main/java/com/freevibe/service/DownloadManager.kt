@@ -96,6 +96,7 @@ class DownloadManager @Inject constructor(
         // Start HTTP download
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) throw IllegalStateException("Download failed: HTTP ${response.code}")
         val body = response.body ?: throw IllegalStateException("Empty response body")
         val totalBytes = body.contentLength()
 

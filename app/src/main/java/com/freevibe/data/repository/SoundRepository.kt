@@ -114,7 +114,7 @@ class SoundRepository @Inject constructor(
     ): SearchResult<Sound> = coroutineScope {
         val response = archiveApi.search(
             query = query,
-            rows = 30, // Fetch extra to compensate for filtered-out items
+            rows = 50, // Fetch extra to compensate for duration-filtered rejects
             page = page,
             sort = sort,
         )
@@ -158,7 +158,7 @@ class SoundRepository @Inject constructor(
             items = sounds,
             totalCount = response.response.numFound,
             currentPage = page,
-            hasMore = docs.size >= 30 && sounds.isNotEmpty(),
+            hasMore = docs.size >= 50 && sounds.isNotEmpty(),
         )
     }
 
