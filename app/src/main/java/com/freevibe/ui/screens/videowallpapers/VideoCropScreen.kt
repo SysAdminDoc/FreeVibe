@@ -32,6 +32,9 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.onGloballyPositioned
 import java.io.File
 
+// Shared client avoids creating new connection pools per crop operation
+private val sharedHttpClient by lazy { okhttp3.OkHttpClient() }
+
 /**
  * Video crop editor for converting landscape videos to portrait phone wallpapers.
  * Shows the full video with a draggable 9:16 crop overlay.
@@ -222,12 +225,13 @@ private suspend fun cropVideo(
         // Download video first if it's a URL
         val inputFile = if (videoUrl.startsWith("http")) {
             val cacheFile = File(context.cacheDir, "crop_input.mp4")
-            val client = okhttp3.OkHttpClient()
             val request = okhttp3.Request.Builder().url(videoUrl).build()
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return@withContext null
-            response.body?.byteStream()?.use { input ->
-                cacheFile.outputStream().use { output -> input.copyTo(output) }
+            val response = sharedHttpClient.newCall(request).execute()
+            response.use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.byteStream()?.use { input ->
+                    cacheFile.outputStream().use { output -> input.copyTo(output) }
+                }
             }
             cacheFile
         } else {

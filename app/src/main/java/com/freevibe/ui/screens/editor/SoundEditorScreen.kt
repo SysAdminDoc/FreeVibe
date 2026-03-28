@@ -84,7 +84,18 @@ data class SoundEditorState(
             isLocalFile == other.isLocalFile && success == other.success && error == other.error
     }
 
-    override fun hashCode() = waveform.contentHashCode()
+    override fun hashCode(): Int {
+        var result = waveform.contentHashCode()
+        result = 31 * result + durationMs.hashCode()
+        result = 31 * result + trimStartFraction.hashCode()
+        result = 31 * result + trimEndFraction.hashCode()
+        result = 31 * result + isPlaying.hashCode()
+        result = 31 * result + fadeInMs.hashCode()
+        result = 31 * result + fadeOutMs.hashCode()
+        result = 31 * result + fileName.hashCode()
+        result = 31 * result + (error?.hashCode() ?: 0)
+        return result
+    }
 }
 
 @HiltViewModel

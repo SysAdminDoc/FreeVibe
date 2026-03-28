@@ -35,7 +35,7 @@ class BatchDownloadService @Inject constructor(
         job = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             val semaphore = kotlinx.coroutines.sync.Semaphore(concurrency)
 
-            wallpapers.mapIndexed { index, wp ->
+            wallpapers.map { wp ->
                 async {
                     semaphore.acquire()
                     try {

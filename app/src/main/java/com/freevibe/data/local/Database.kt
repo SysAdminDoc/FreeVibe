@@ -61,7 +61,7 @@ interface FavoriteDao {
     suspend fun deleteById(id: String)
 
     @Query("UPDATE favorites SET offlinePath = :path WHERE id = :id")
-    suspend fun updateOfflinePath(id: String, path: String)
+    suspend fun updateOfflinePath(id: String, path: String?)
 
     @Query("SELECT id FROM favorites")
     fun allIds(): Flow<List<String>>
