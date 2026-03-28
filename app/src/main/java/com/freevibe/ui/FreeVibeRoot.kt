@@ -16,6 +16,7 @@ import com.freevibe.service.SelectedContentHolder
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.screens.categories.CategoriesScreen
 import com.freevibe.ui.screens.collections.CollectionsScreen
+import com.freevibe.ui.screens.videowallpapers.VideoWallpapersScreen
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -150,6 +151,9 @@ fun FreeVibeRoot() {
                         navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper.id))
                     },
                 )
+            }
+            composable(Screen.VideoWallpapers.route) {
+                VideoWallpapersScreen()
             }
             composable(Screen.Sounds.route) {
                 SoundsScreen(

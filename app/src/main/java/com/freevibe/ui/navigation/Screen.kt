@@ -18,6 +18,12 @@ sealed class Screen(
         icon = Icons.Outlined.Wallpaper,
         selectedIcon = Icons.Filled.Wallpaper,
     )
+    data object VideoWallpapers : Screen(
+        route = "video_wallpapers",
+        title = "Videos",
+        icon = Icons.Outlined.VideoLibrary,
+        selectedIcon = Icons.Filled.VideoLibrary,
+    )
     data object Sounds : Screen(
         route = "sounds",
         title = "Sounds",
@@ -136,6 +142,6 @@ sealed class Screen(
     )
 
     companion object {
-        val bottomNavItems = listOf(Wallpapers, Sounds, Favorites, Settings)
+        val bottomNavItems = listOf(Wallpapers, VideoWallpapers, Sounds, Favorites, Settings)
     }
 }
