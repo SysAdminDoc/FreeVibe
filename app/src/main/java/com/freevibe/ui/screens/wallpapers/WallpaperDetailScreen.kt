@@ -3,6 +3,7 @@ package com.freevibe.ui.screens.wallpapers
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -72,6 +73,12 @@ fun WallpaperDetailScreen(
 
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
+    val colorPalette by viewModel.colorPalette.collectAsState()
+
+    // Extract colors when wallpaper changes
+    LaunchedEffect(wp.id) {
+        viewModel.extractColors(wp.thumbnailUrl.ifEmpty { wp.fullUrl })
+    }
     var showApplyOptions by remember { mutableStateOf(false) }
     var showPhonePreview by remember { mutableStateOf(false) }
     var showDualOptions by remember { mutableStateOf(false) }
@@ -257,6 +264,28 @@ fun WallpaperDetailScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Material You Color Palette Preview
+                colorPalette?.let { palette ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Theme colors", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                        Spacer(Modifier.width(6.dp))
+                        listOf(palette.dominantColor, palette.vibrantColor, palette.vibrantDark,
+                            palette.mutedColor, palette.mutedLight).filter { it != 0 }.take(5).forEach { color ->
+                            Box(
+                                Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(color))
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+                            )
+                        }
+                    }
+                }
+
                 // Tags
                 if (wp.tags.isNotEmpty()) {
                     Row(
