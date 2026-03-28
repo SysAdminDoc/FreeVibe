@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,12 +75,14 @@ fun WallpapersScreen(
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
+    val haptic = LocalHapticFeedback.current
     var showColorPicker by remember { mutableStateOf(false) }
     var showSearchHistory by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Search bar with color filter button
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -291,13 +295,30 @@ fun WallpapersScreen(
                                     viewModel.selectWallpaper(wp)
                                     onWallpaperClick(wp)
                                 },
-                                onLongPress = { wp -> viewModel.toggleFavorite(wp) },
+                                onLongPress = { wp ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.toggleFavorite(wp)
+                                },
                                 favoriteIds = favoriteIds,
                                 onLoadMore = { viewModel.loadMore() },
                             )
                         }
                     }
                 }
+            }
+        }
+
+        // Random wallpaper FAB
+        if (state.wallpapers.isNotEmpty() && !state.isLoading) {
+            SmallFloatingActionButton(
+                onClick = { viewModel.applyRandom() },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Icon(Icons.Default.Shuffle, contentDescription = "Random wallpaper")
             }
         }
     }

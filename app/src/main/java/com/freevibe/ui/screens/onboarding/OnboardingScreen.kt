@@ -175,9 +175,9 @@ private fun FeaturesPage() {
         Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing & Reddit"),
         Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "Thousands of sounds from Internet Archive"),
         Triple(Icons.Default.Edit, "Built-in Editors", "Crop, adjust, trim with presets & fade effects"),
+        Triple(Icons.Default.Folder, "Collections", "Organize wallpapers into folders and browse later"),
+        Triple(Icons.Default.AutoAwesome, "Auto-Wallpaper", "Rotate wallpapers on a schedule, even from favorites"),
         Triple(Icons.Default.Widgets, "Home Widget", "Quick shuffle from your home screen"),
-        Triple(Icons.Default.DarkMode, "OLED Dark Theme", "Deep blacks, zero burn-in"),
-        Triple(Icons.Default.Download, "Offline Ready", "Download and save your favorites"),
     )
 
     Column(
