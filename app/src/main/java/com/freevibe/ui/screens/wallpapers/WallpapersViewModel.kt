@@ -195,7 +195,7 @@ class WallpapersViewModel @Inject constructor(
             downloadManager.downloadWallpaper(
                 id = wallpaper.id,
                 url = wallpaper.fullUrl,
-                fileName = "FreeVibe_${wallpaper.id}.$ext",
+                fileName = "Aura_${wallpaper.id}.$ext",
             )
         }
     }

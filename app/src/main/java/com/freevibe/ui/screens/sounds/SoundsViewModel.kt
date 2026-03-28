@@ -231,7 +231,7 @@ class SoundsViewModel @Inject constructor(
             downloadManager.downloadSound(
                 id = sound.id,
                 url = dlUrl,
-                fileName = "FreeVibe_${sound.name.take(40)}.$ext",
+                fileName = "Aura_${sound.name.take(40)}.$ext",
                 type = ContentType.RINGTONE,
             )
             _state.update { it.copy(applySuccess = "Download started") }
