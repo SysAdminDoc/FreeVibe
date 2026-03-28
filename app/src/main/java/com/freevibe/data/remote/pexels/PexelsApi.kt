@@ -31,10 +31,58 @@ interface PexelsApi {
         @Query("page") page: Int = 1,
     ): PexelsVideoResponse
 
+    @GET("v1/search")
+    suspend fun searchPhotos(
+        @Header("Authorization") apiKey: String,
+        @Query("query") query: String,
+        @Query("orientation") orientation: String = "portrait",
+        @Query("size") size: String = "large",
+        @Query("per_page") perPage: Int = 30,
+        @Query("page") page: Int = 1,
+    ): PexelsPhotoResponse
+
+    @GET("v1/curated")
+    suspend fun curatedPhotos(
+        @Header("Authorization") apiKey: String,
+        @Query("per_page") perPage: Int = 30,
+        @Query("page") page: Int = 1,
+    ): PexelsPhotoResponse
+
     companion object {
         const val BASE_URL = "https://api.pexels.com/"
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PexelsPhotoResponse(
+    @Json(name = "total_results") val totalResults: Int = 0,
+    @Json(name = "page") val page: Int = 1,
+    @Json(name = "per_page") val perPage: Int = 30,
+    @Json(name = "photos") val photos: List<PexelsPhoto> = emptyList(),
+    @Json(name = "next_page") val nextPage: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PexelsPhoto(
+    @Json(name = "id") val id: Int = 0,
+    @Json(name = "width") val width: Int = 0,
+    @Json(name = "height") val height: Int = 0,
+    @Json(name = "url") val url: String = "",
+    @Json(name = "photographer") val photographer: String = "",
+    @Json(name = "photographer_url") val photographerUrl: String = "",
+    @Json(name = "src") val src: PexelsPhotoSrc = PexelsPhotoSrc(),
+)
+
+@JsonClass(generateAdapter = true)
+data class PexelsPhotoSrc(
+    @Json(name = "original") val original: String = "",
+    @Json(name = "large2x") val large2x: String = "",
+    @Json(name = "large") val large: String = "",
+    @Json(name = "medium") val medium: String = "",
+    @Json(name = "small") val small: String = "",
+    @Json(name = "portrait") val portrait: String = "",
+    @Json(name = "landscape") val landscape: String = "",
+)
 
 @JsonClass(generateAdapter = true)
 data class PexelsVideoResponse(
