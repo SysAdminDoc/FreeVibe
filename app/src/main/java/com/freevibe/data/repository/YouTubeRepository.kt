@@ -19,6 +19,9 @@ import javax.inject.Singleton
 @Singleton
 class YouTubeRepository @Inject constructor() {
 
+    // Cache resolved stream URLs to avoid re-extracting on replay
+    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     init {
         try {
             NewPipe.init(DownloaderImpl.instance)
@@ -60,16 +63,35 @@ class YouTubeRepository @Inject constructor() {
         }
     }
 
+    /** Fast preview URL — checks cache first, then extracts via yt-dlp with worstaudio for speed */
+    suspend fun getAudioPreviewUrl(videoId: String): String? = withContext(Dispatchers.IO) {
+        streamCache[videoId]?.let { return@withContext it }
+        try {
+            val url = "https://www.youtube.com/watch?v=$videoId"
+            Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
+            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+            request.addOption("-f", "worstaudio") // Fastest to resolve + smallest to buffer
+            request.addOption("--get-url")
+            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+            val streamUrl = response.out?.trim()
+            Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
+            streamUrl?.also { streamCache[videoId] = it }
+        } catch (e: Exception) {
+            Log.e("YouTubeRepo", "getAudioPreviewUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
+            null
+        }
+    }
+
+    /** High quality URL for download/apply — uses bestaudio */
     suspend fun getAudioStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
-            Log.d("YouTubeRepo", "Extracting audio via yt-dlp for $videoId")
+            Log.d("YouTubeRepo", "Extracting best audio via yt-dlp for $videoId")
             val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
             request.addOption("-f", "bestaudio")
             request.addOption("--get-url")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             val streamUrl = response.out?.trim()
-            Log.d("YouTubeRepo", "yt-dlp result: ${streamUrl?.take(80) ?: "NULL"}")
             if (streamUrl.isNullOrBlank()) null else streamUrl
         } catch (e: Exception) {
             Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
