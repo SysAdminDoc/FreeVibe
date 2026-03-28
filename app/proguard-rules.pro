@@ -25,8 +25,12 @@
 -keep class org.schabi.newpipe.extractor.** { *; }
 -keep class org.mozilla.javascript.** { *; }
 
-# yt-dlp / youtubedl-android
+# yt-dlp / youtubedl-android + Apache Commons Compress
 -keep class com.yausername.** { *; }
+-keepclassmembers class com.yausername.** { *; }
+-keep class org.apache.commons.compress.** { *; }
+-keep class org.apache.commons.io.** { *; }
+-dontwarn org.apache.commons.**
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}

@@ -49,9 +49,9 @@ class FreeVibeApp : Application(), Configuration.Provider {
         appScope.launch {
             try {
                 com.yausername.youtubedl_android.YoutubeDL.getInstance().init(this@FreeVibeApp)
-                Log.d("FreeVibeApp", "yt-dlp initialized")
-            } catch (e: Exception) {
-                Log.e("FreeVibeApp", "yt-dlp init failed: ${e.message}")
+                Log.d("AuraApp", "yt-dlp initialized")
+            } catch (e: Throwable) {
+                Log.e("AuraApp", "yt-dlp init failed: ${e.message}")
             }
         }
     }
