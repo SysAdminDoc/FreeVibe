@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -101,6 +103,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setPexelsKey(key: String) = viewModelScope.launch {
         prefs.setPexelsKey(key)
+    }
+
+    fun setVideoFpsLimit(fps: Int) = viewModelScope.launch {
+        prefs.setVideoFpsLimit(fps)
     }
 
     fun setVideoWallpaperPath(uri: Uri) {
@@ -305,6 +311,38 @@ fun SettingsScreen(
             }
         }
 
+        // Video Wallpapers
+        SettingsSection("Video Wallpapers") {
+            var showFpsPicker by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Speed,
+                title = "FPS limit",
+                subtitle = "Controls battery usage for video wallpapers",
+                onClick = { showFpsPicker = true },
+            )
+            if (showFpsPicker) {
+                AlertDialog(
+                    onDismissRequest = { showFpsPicker = false },
+                    title = { Text("Video FPS limit") },
+                    text = {
+                        Column {
+                            listOf(15 to "15 FPS (battery saver)", 30 to "30 FPS (balanced)", 60 to "60 FPS (smooth)").forEach { (fps, label) ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = false, onClick = {
+                                        viewModel.setVideoFpsLimit(fps)
+                                        showFpsPicker = false
+                                    })
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showFpsPicker = false }) { Text("Cancel") } },
+                )
+            }
+        }
+
         // API Keys
         SettingsSection("API Keys") {
             var showPexelsKey by remember { mutableStateOf(false) }
@@ -497,8 +535,10 @@ fun SettingsScreen(
                         maxLines = 3,
                     )
                     // Quick add chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("EarthPorn", "spaceporn", "CityPorn").forEach { sub ->
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("EarthPorn", "spaceporn", "CityPorn", "ImaginaryLandscapes",
+                            "MinimalWallpaper", "phonewallpapers", "WidescreenWallpaper").forEach { sub ->
                             if (!subsText.contains(sub, ignoreCase = true)) {
                                 SuggestionChip(
                                     onClick = { subsText = if (subsText.isBlank()) sub else "$subsText,$sub" },
@@ -656,6 +696,7 @@ private fun SourcePickerDialog(
         "favorites" to "My Favorites",
         "reddit" to "Reddit",
         "wallhaven" to "Wallhaven",
+        "pixabay" to "Pixabay",
         "bing" to "Bing Daily",
         "unsplash" to "Unsplash",
     )
