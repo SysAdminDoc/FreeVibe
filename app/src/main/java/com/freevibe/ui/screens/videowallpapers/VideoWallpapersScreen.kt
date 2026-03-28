@@ -319,34 +319,35 @@ class VideoWallpapersViewModel @Inject constructor(
                     }
                 }
 
-                // 2. Reddit — sorted by top (most upvoted), direct v.redd.it URLs
+                // 2. Reddit — sorted by top/all time, direct v.redd.it URLs
                 val redditJob = async(Dispatchers.IO) {
                     val items = mutableListOf<VideoWallpaperItem>()
                     val subs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds")
                     for (sub in subs) {
                         try {
-                            val url = "https://www.reddit.com/r/$sub/top.json?t=month&limit=15&raw_json=1" +
+                            val url = "https://www.reddit.com/r/$sub/top.json?t=all&limit=25&raw_json=1" +
                                 (if (s.redditAfter != null) "&after=${s.redditAfter}" else "")
                             val req = Request.Builder().url(url).header("User-Agent", "Aura/3.0.0 (Android)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) continue
                             val body = resp.body?.string() ?: continue
 
-                            val upsRegex = Regex(""""ups"\s*:\s*(\d+)""")
-                            val titleRegex = Regex(""""title"\s*:\s*"([^"]{3,120})"""")
-                            val videoRegex = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
-                            val thumbRegex = Regex(""""url_overridden_by_dest"\s*:\s*"(https://(?:preview\.redd\.it|i\.redd\.it)[^"]*\.(?:jpg|png)[^"]*)"""")
+                            // Extract pagination token
+                            val afterMatch = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)
+                            if (afterMatch != null) {
+                                _state.update { it.copy(redditAfter = afterMatch.groupValues[1]) }
+                            }
 
-                            val ups = upsRegex.findAll(body).toList()
-                            val titles = titleRegex.findAll(body).toList()
-                            val videos = videoRegex.findAll(body).toList()
-                            val thumbs = thumbRegex.findAll(body).toList()
+                            // Parse each post individually using children array pattern
+                            val postPattern = Regex(""""title"\s*:\s*"([^"]{2,200})".*?"ups"\s*:\s*(\d+).*?"fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
+                            val thumbPattern = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
+                            val allThumbs = thumbPattern.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
 
-                            for (i in videos.indices) {
-                                val title = titles.getOrNull(i)?.groupValues?.getOrNull(1) ?: continue
-                                val videoUrl = videos[i].groupValues[1]
-                                val upvotes = ups.getOrNull(i)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0
-                                val thumb = thumbs.getOrNull(i)?.groupValues?.getOrNull(1)?.replace("&amp;", "&") ?: ""
+                            postPattern.findAll(body).forEachIndexed { i, match ->
+                                val title = match.groupValues[1]
+                                val upvotes = match.groupValues[2].toLongOrNull() ?: 0
+                                val videoUrl = match.groupValues[3]
+                                val thumb = allThumbs.getOrNull(i) ?: ""
 
                                 if (junkPatterns.none { it.containsMatchIn(title) } && !title.contains("#")) {
                                     val item = VideoWallpaperItem(
@@ -359,7 +360,10 @@ class VideoWallpapersViewModel @Inject constructor(
                                     _resolvedIds.value = _resolvedIds.value + item.id
                                 }
                             }
-                        } catch (_: Throwable) { continue }
+                        } catch (e: Throwable) {
+                            Log.e("VideoWP", "Reddit $sub failed: ${e.message}")
+                            continue
+                        }
                     }
                     items
                 }
