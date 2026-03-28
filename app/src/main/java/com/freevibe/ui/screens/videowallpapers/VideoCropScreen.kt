@@ -250,19 +250,35 @@ private suspend fun cropVideo(
         val ffmpegCmd = "-y -i ${inputFile.absolutePath} -vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast -crf 23 -an ${outputFile.absolutePath}"
 
         try {
-            // Use Android MediaExtractor + MediaMuxer to crop (no FFmpeg needed)
-            // For simplicity, crop by adjusting the VideoWallpaperService to use viewport
-            // Store crop metadata and copy the video as-is
-            val prefs = context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putInt("crop_x", cropX)
-                .putInt("crop_w", cropW)
-                .putInt("video_w", videoWidth)
-                .putInt("video_h", videoHeight)
-                .apply()
-            inputFile.copyTo(outputFile, overwrite = true)
+            Log.d("VideoCrop", "Running FFmpeg crop: ${cropW}x${cropH} at x=$cropX")
+            // Init FFmpeg binary extraction
+            com.yausername.ffmpeg.FFmpeg.getInstance().init(context)
+            // Find ffmpeg binary in app's native lib dir or packages dir
+            val ffmpegBin = File(context.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+                .takeIf { it.exists() }
+                ?: File(context.filesDir, "packages/ffmpeg/bin/ffmpeg")
+                    .takeIf { it.exists() }
+
+            if (ffmpegBin != null) {
+                val process = ProcessBuilder(
+                    ffmpegBin.absolutePath,
+                    "-y", "-i", inputFile.absolutePath,
+                    "-vf", "crop=$cropW:$cropH:$cropX:$cropY",
+                    "-c:v", "mpeg4", "-q:v", "5", "-an",
+                    outputFile.absolutePath,
+                ).redirectErrorStream(true).start()
+                val exitCode = process.waitFor()
+                Log.d("VideoCrop", "FFmpeg exit=$exitCode, output=${outputFile.length() / 1024}KB")
+                if (exitCode != 0 || !outputFile.exists() || outputFile.length() == 0L) {
+                    Log.w("VideoCrop", "FFmpeg failed, copying original")
+                    inputFile.copyTo(outputFile, overwrite = true)
+                }
+            } else {
+                Log.w("VideoCrop", "FFmpeg binary not found, copying original")
+                inputFile.copyTo(outputFile, overwrite = true)
+            }
         } catch (e: Exception) {
-            Log.e("VideoCrop", "Copy failed: ${e.message}")
+            Log.e("VideoCrop", "FFmpeg crop failed: ${e.message}, copying original")
             inputFile.copyTo(outputFile, overwrite = true)
         }
 
