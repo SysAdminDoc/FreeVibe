@@ -70,6 +70,7 @@ fun WallpapersScreen(
     val downloads by viewModel.activeDownloads.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
+    val favoriteIds by viewModel.favoriteIds.collectAsState()
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     var showColorPicker by remember { mutableStateOf(false) }
@@ -291,7 +292,7 @@ fun WallpapersScreen(
                                     onWallpaperClick(wp)
                                 },
                                 onLongPress = { wp -> viewModel.toggleFavorite(wp) },
-                                isFavoriteCheck = { id -> viewModel.isFavorite(id) },
+                                favoriteIds = favoriteIds,
                                 onLoadMore = { viewModel.loadMore() },
                             )
                         }
@@ -358,7 +359,7 @@ private fun WallpaperGrid(
     columns: Int = 2,
     onWallpaperClick: (Wallpaper) -> Unit,
     onLongPress: ((Wallpaper) -> Unit)? = null,
-    isFavoriteCheck: ((String) -> kotlinx.coroutines.flow.Flow<Boolean>)? = null,
+    favoriteIds: Set<String> = emptySet(),
     onLoadMore: () -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -383,8 +384,7 @@ private fun WallpaperGrid(
         verticalItemSpacing = 8.dp,
     ) {
         items(wallpapers, key = { it.id }) { wallpaper ->
-            val isFav by isFavoriteCheck?.invoke(wallpaper.id)?.collectAsState(initial = false)
-                ?: remember { mutableStateOf(false) }
+            val isFav = wallpaper.id in favoriteIds
             WallpaperCard(
                 wallpaper = wallpaper,
                 isFavorite = isFav,

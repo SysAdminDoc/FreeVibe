@@ -9,7 +9,6 @@ import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
-import com.freevibe.data.remote.wikimedia.WikimediaApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
@@ -21,7 +20,6 @@ class WallpaperRepository @Inject constructor(
     private val wallhavenApi: WallhavenApi,
     private val picsumApi: PicsumApi,
     private val bingApi: BingDailyApi,
-    private val wikimediaApi: WikimediaApi,
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
 ) {
@@ -110,34 +108,6 @@ class WallpaperRepository @Inject constructor(
                 totalCount = marketsCount * 8 * 2,
                 currentPage = page,
                 hasMore = idx < 1, // Bing supports ~16 days back
-            )
-        }
-
-    // -- Wikimedia Commons (Featured Pictures) --
-    // Per-page continue tokens to avoid race conditions between Discover and tab browsing
-    private val wikimediaContinueTokens = mutableMapOf<Int, String?>()
-
-    suspend fun getWikimedia(page: Int = 1): SearchResult<Wallpaper> =
-        withCacheFallback("wikimedia_$page", ContentSource.WIKIMEDIA) {
-            val continueToken = if (page == 1) null else wikimediaContinueTokens[page]
-            val response = wikimediaApi.getCategoryImages(
-                continueToken = continueToken,
-                limit = 50, // request more since we filter by resolution
-            )
-            // Store token for the *next* page
-            response.continueData?.gcmContinue?.let { token ->
-                wikimediaContinueTokens[page + 1] = token
-            }
-
-            val wallpapers = response.query?.pages?.values
-                ?.mapNotNull { it.toWallpaper() }
-                ?: emptyList()
-
-            SearchResult(
-                items = wallpapers,
-                totalCount = 10000,
-                currentPage = page,
-                hasMore = response.continueData?.gcmContinue != null,
             )
         }
 

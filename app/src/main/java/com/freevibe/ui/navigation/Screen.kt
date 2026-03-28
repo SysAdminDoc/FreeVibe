@@ -119,6 +119,14 @@ sealed class Screen(
         selectedIcon = Icons.Filled.Description,
     )
 
+    // ── Collections ─────────────────────────────────────────────
+    data object Collections : Screen(
+        route = "collections",
+        title = "Collections",
+        icon = Icons.Filled.Folder,
+        selectedIcon = Icons.Filled.Folder,
+    )
+
     // ── Wallpaper History ───────────────────────────────────────
     data object WallpaperHistory : Screen(
         route = "wallpaper_history",

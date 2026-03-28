@@ -6,6 +6,8 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.model.WallpaperCollectionEntity
+import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
@@ -47,6 +49,7 @@ class WallpapersViewModel @Inject constructor(
     private val wallpaperApplier: WallpaperApplier,
     private val downloadManager: DownloadManager,
     private val dualWallpaperService: DualWallpaperService,
+    private val collectionRepo: CollectionRepository,
     private val selectedContent: SelectedContentHolder,
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
@@ -67,6 +70,9 @@ class WallpapersViewModel @Inject constructor(
     val recentSearches = searchHistoryRepo.getRecentWallpaperSearches(8)
         .map { list -> list.map { it.query } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val favoriteIds = favoritesRepo.allIds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     init {
         // Check for pending category query from CategoriesScreen
@@ -217,6 +223,26 @@ class WallpapersViewModel @Inject constructor(
 
     fun clearError() = _state.update { it.copy(error = null, errorSource = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
+
+    // -- Collections --
+
+    val collections = collectionRepo.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun createCollection(name: String, wallpaper: Wallpaper? = null) {
+        viewModelScope.launch {
+            val id = collectionRepo.create(name)
+            wallpaper?.let { collectionRepo.addWallpaper(id, it) }
+            _state.update { it.copy(applySuccess = "Created \"$name\"") }
+        }
+    }
+
+    fun addToCollection(collectionId: Long, wallpaper: Wallpaper) {
+        viewModelScope.launch {
+            collectionRepo.addWallpaper(collectionId, wallpaper)
+            _state.update { it.copy(applySuccess = "Added to collection") }
+        }
+    }
 
     private fun loadWallpapers(loadMore: Boolean = false, isRefresh: Boolean = false) {
         viewModelScope.launch {
