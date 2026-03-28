@@ -43,7 +43,7 @@ data class WallpapersUiState(
     val selectedColor: String? = null,       // #9: Color filter
 )
 
-enum class WallpaperTab { DISCOVER, PEXELS, REDDIT, WALLHAVEN, BING, UNSPLASH, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, PEXELS, REDDIT, WALLHAVEN, UNSPLASH, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
@@ -294,7 +294,6 @@ class WallpapersViewModel @Inject constructor(
                     }
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = s.currentPage)
-                    WallpaperTab.BING -> wallpaperRepo.getBingDaily(s.currentPage)
                     WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(s.currentPage)
                     WallpaperTab.SEARCH -> wallpaperRepo.searchWallhaven(s.query, page = s.currentPage)
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(s.selectedColor ?: "", s.currentPage)

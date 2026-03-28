@@ -61,6 +61,8 @@ data class VideoWallpaperItem(
     val popularity: Long = 0, // Views (YouTube), upvotes (Reddit), or 0 (Pexels)
 )
 
+enum class OrientationFilter { ALL, PORTRAIT, LANDSCAPE }
+
 data class VideoWallpapersState(
     val items: List<VideoWallpaperItem> = emptyList(),
     val isLoading: Boolean = false,
@@ -72,6 +74,7 @@ data class VideoWallpapersState(
     val ytQueryIndex: Int = 0,
     val redditAfter: String? = null,
     val hasMore: Boolean = true,
+    val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
 )
 
 @HiltViewModel
@@ -102,7 +105,8 @@ class VideoWallpapersViewModel @Inject constructor(
         "\\bmake\\b", "\\bfor\\b", "\\byour\\b",
         "3d live", "app demo", "free download", "link in",
         "showing my", "on my phone", "on my android", "on my iphone",
-        "samsung galaxy", "\\bios\\b", "\\bsettings\\b",
+        "samsung galaxy", "\\bios\\b", "\\bsettings\\b", "\\bidea\\b",
+        "\\bbackgrounds\\b",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     private val youtubeQueries = listOf(
@@ -130,6 +134,13 @@ class VideoWallpapersViewModel @Inject constructor(
         if (_state.value.isLoadingMore || !_state.value.hasMore) return
         _state.update { it.copy(isLoadingMore = true) }
         load(loadMore = true)
+    }
+
+    fun setOrientation(orientation: OrientationFilter) {
+        _state.update { it.copy(orientation = orientation, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0) }
+        streamUrls.clear()
+        _resolvedIds.value = emptySet()
+        load()
     }
 
     fun getStreamUrl(id: String): String? = streamUrls[id]
@@ -266,13 +277,23 @@ class VideoWallpapersViewModel @Inject constructor(
                         val key = prefs.pexelsApiKey.first()
                         if (key.isNotBlank()) {
                             val query = pexelsQueries[s.pexelsPage % pexelsQueries.size]
+                            val pexelsOrientation = when (s.orientation) {
+                                OrientationFilter.PORTRAIT -> "portrait"
+                                OrientationFilter.LANDSCAPE -> "landscape"
+                                OrientationFilter.ALL -> ""
+                            }
                             val response = pexelsApi.searchVideos(
                                 apiKey = key, query = query,
-                                orientation = "portrait", perPage = 15, page = s.pexelsPage,
+                                orientation = pexelsOrientation.ifEmpty { "portrait" },
+                                perPage = 15, page = s.pexelsPage,
                             )
                             response.videos
                                 .filter { it.duration in 3..120 }
-                                .filter { it.height > it.width } // Portrait only
+                                .filter { when (s.orientation) {
+                                    OrientationFilter.PORTRAIT -> it.height > it.width
+                                    OrientationFilter.LANDSCAPE -> it.width > it.height
+                                    OrientationFilter.ALL -> true
+                                }}
                                 .mapNotNull { video ->
                                     val bestFile = video.videoFiles
                                         .filter { it.fileType == "video/mp4" }
@@ -401,7 +422,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     isLoading = false,
                     isLoadingMore = false,
                     isRefreshing = false,
-                    hasMore = mixed.isNotEmpty(),
+                    hasMore = true, // Pexels has infinite pages
                     pexelsPage = it.pexelsPage + 1,
                     ytQueryIndex = it.ytQueryIndex + 1,
                 )
@@ -479,6 +500,31 @@ fun VideoWallpapersScreen(
             title = { Text("Video Wallpapers") },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
         )
+
+        // Orientation filter
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OrientationFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = state.orientation == filter,
+                    onClick = { viewModel.setOrientation(filter) },
+                    label = {
+                        Text(when (filter) {
+                            OrientationFilter.PORTRAIT -> "Portrait"
+                            OrientationFilter.LANDSCAPE -> "Landscape"
+                            OrientationFilter.ALL -> "All"
+                        })
+                    },
+                    leadingIcon = if (state.orientation == filter) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                    } else null,
+                )
+            }
+        }
 
         Box(Modifier.fillMaxSize()) {
             when {
