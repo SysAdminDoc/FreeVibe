@@ -47,22 +47,26 @@ class DualWallpaperService @Inject constructor(
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val bitmap = downloadBitmap(wallpaper.fullUrl)
-            val height = bitmap.height
-            val width = bitmap.width
-            val cropHeight = (height * 0.7f).toInt().coerceIn(1, height)
+            var homeCrop: Bitmap? = null
+            var lockCrop: Bitmap? = null
+            try {
+                val height = bitmap.height
+                val width = bitmap.width
+                val cropHeight = (height * 0.7f).toInt().coerceIn(1, height)
 
-            val homeY = (height * homeCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
-            val lockY = (height * lockCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
+                val homeY = (height * homeCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
+                val lockY = (height * lockCropTop).toInt().coerceIn(0, (height - cropHeight).coerceAtLeast(0))
 
-            val homeCrop = Bitmap.createBitmap(bitmap, 0, homeY, width, cropHeight)
-            val lockCrop = Bitmap.createBitmap(bitmap, 0, lockY, width, cropHeight)
+                homeCrop = Bitmap.createBitmap(bitmap, 0, homeY, width, cropHeight)
+                lockCrop = Bitmap.createBitmap(bitmap, 0, lockY, width, cropHeight)
 
-            wallpaperApplier.applyFromBitmap(homeCrop, WallpaperTarget.HOME).getOrThrow()
-            wallpaperApplier.applyFromBitmap(lockCrop, WallpaperTarget.LOCK).getOrThrow()
-
-            homeCrop.recycle()
-            lockCrop.recycle()
-            bitmap.recycle()
+                wallpaperApplier.applyFromBitmap(homeCrop, WallpaperTarget.HOME).getOrThrow()
+                wallpaperApplier.applyFromBitmap(lockCrop, WallpaperTarget.LOCK).getOrThrow()
+            } finally {
+                homeCrop?.recycle()
+                lockCrop?.recycle()
+                bitmap.recycle()
+            }
         }
     }
 

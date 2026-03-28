@@ -107,6 +107,13 @@ class WallpaperEditorViewModel @Inject constructor(
         applyFilters()
     }
 
+    fun applyPreset(brightness: Float, contrast: Float, saturation: Float, blur: Float) {
+        _state.update {
+            it.copy(brightness = brightness, contrast = contrast, saturation = saturation, blurRadius = blur)
+        }
+        applyFilters()
+    }
+
     fun resetAll() {
         _state.update {
             it.copy(
@@ -334,10 +341,7 @@ fun WallpaperEditorScreen(
                 items(presets) { preset ->
                     SuggestionChip(
                         onClick = {
-                            viewModel.updateBrightness(preset.brightness)
-                            viewModel.updateContrast(preset.contrast)
-                            viewModel.updateSaturation(preset.saturation)
-                            viewModel.updateBlur(preset.blur)
+                            viewModel.applyPreset(preset.brightness, preset.contrast, preset.saturation, preset.blur)
                         },
                         label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
                         shape = RoundedCornerShape(20.dp),

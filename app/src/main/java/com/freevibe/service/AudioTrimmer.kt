@@ -41,69 +41,73 @@ class AudioTrimmer @Inject constructor(
             val outputFile = File(outputDir, "${outputFileName.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.$ext")
 
             val extractor = MediaExtractor()
-            extractor.setDataSource(inputPath)
+            var muxer: MediaMuxer? = null
+            try {
+                extractor.setDataSource(inputPath)
 
-            // Find audio track
-            var audioTrackIndex = -1
-            var audioFormat: MediaFormat? = null
-            for (i in 0 until extractor.trackCount) {
-                val format = extractor.getTrackFormat(i)
-                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
-                if (mime.startsWith("audio/")) {
-                    audioTrackIndex = i
-                    audioFormat = format
-                    break
+                // Find audio track
+                var audioTrackIndex = -1
+                var audioFormat: MediaFormat? = null
+                for (i in 0 until extractor.trackCount) {
+                    val format = extractor.getTrackFormat(i)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                    if (mime.startsWith("audio/")) {
+                        audioTrackIndex = i
+                        audioFormat = format
+                        break
+                    }
                 }
-            }
-            require(audioTrackIndex >= 0 && audioFormat != null) { "No audio track found" }
+                require(audioTrackIndex >= 0 && audioFormat != null) { "No audio track found" }
 
-            extractor.selectTrack(audioTrackIndex)
+                extractor.selectTrack(audioTrackIndex)
 
-            val muxerFormat = when (ext.lowercase()) {
-                "mp4", "m4a", "aac" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-                "webm", "ogg" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
-                else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-            }
-
-            val muxer = MediaMuxer(outputFile.absolutePath, muxerFormat)
-            val muxerTrackIndex = muxer.addTrack(audioFormat)
-            muxer.start()
-
-            val startUs = startMs * 1000L
-            val endUs = endMs * 1000L
-
-            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-
-            val bufferSize = audioFormat.getInteger(
-                MediaFormat.KEY_MAX_INPUT_SIZE,
-                256 * 1024,
-            )
-            val buffer = ByteBuffer.allocate(bufferSize)
-            val bufferInfo = MediaCodec.BufferInfo()
-
-            while (true) {
-                val sampleSize = extractor.readSampleData(buffer, 0)
-                if (sampleSize < 0) break
-
-                val sampleTime = extractor.sampleTime
-                if (sampleTime > endUs) break
-
-                if (sampleTime >= startUs) {
-                    bufferInfo.offset = 0
-                    bufferInfo.size = sampleSize
-                    bufferInfo.presentationTimeUs = sampleTime - startUs
-                    bufferInfo.flags = extractor.sampleFlags
-
-                    muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                val muxerFormat = when (ext.lowercase()) {
+                    "mp4", "m4a", "aac" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
+                    "webm", "ogg" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
+                    else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                 }
 
-                extractor.advance()
-                buffer.clear()
-            }
+                muxer = MediaMuxer(outputFile.absolutePath, muxerFormat)
+                val muxerTrackIndex = muxer.addTrack(audioFormat)
+                muxer.start()
 
-            muxer.stop()
-            muxer.release()
-            extractor.release()
+                val startUs = startMs * 1000L
+                val endUs = endMs * 1000L
+
+                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+                val bufferSize = audioFormat.getInteger(
+                    MediaFormat.KEY_MAX_INPUT_SIZE,
+                    256 * 1024,
+                )
+                val buffer = ByteBuffer.allocate(bufferSize)
+                val bufferInfo = MediaCodec.BufferInfo()
+
+                while (true) {
+                    val sampleSize = extractor.readSampleData(buffer, 0)
+                    if (sampleSize < 0) break
+
+                    val sampleTime = extractor.sampleTime
+                    if (sampleTime > endUs) break
+
+                    if (sampleTime >= startUs) {
+                        bufferInfo.offset = 0
+                        bufferInfo.size = sampleSize
+                        bufferInfo.presentationTimeUs = sampleTime - startUs
+                        bufferInfo.flags = extractor.sampleFlags
+
+                        muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    }
+
+                    extractor.advance()
+                    buffer.clear()
+                }
+
+                muxer.stop()
+            } finally {
+                try { muxer?.release() } catch (_: Exception) {}
+                try { extractor.release() } catch (_: Exception) {}
+            }
 
             // Apply fade effects if requested (post-process for MP3)
             if ((fadeInMs > 0 || fadeOutMs > 0) && ext.lowercase() == "mp3") {
@@ -156,7 +160,7 @@ class AudioTrimmer @Inject constructor(
                     for (i in 0 until read) {
                         val progress = ((pos + i - headerOffset).toFloat() / fadeInBytes).coerceIn(0f, 1f)
                         val gain = progress * progress // Quadratic ease-in
-                        chunk[i] = (chunk[i] * gain).toInt().toByte()
+                        chunk[i] = ((chunk[i].toInt() and 0xFF) * gain).toInt().toByte()
                     }
 
                     file.seek(pos)
@@ -177,7 +181,7 @@ class AudioTrimmer @Inject constructor(
                     for (i in 0 until read) {
                         val progress = ((pos + i - fadeOutStartByte).toFloat() / fadeOutLength).coerceIn(0f, 1f)
                         val gain = (1f - progress) * (1f - progress) // Quadratic ease-out
-                        chunk[i] = (chunk[i] * gain).toInt().toByte()
+                        chunk[i] = ((chunk[i].toInt() and 0xFF) * gain).toInt().toByte()
                     }
 
                     file.seek(pos)
