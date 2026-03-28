@@ -374,6 +374,24 @@ fun VideoWallpapersScreen(
         }
     }
 
+    // Applying overlay
+    if (state.isApplying != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(16.dp))
+                Text("Downloading & applying...", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("This may take a moment", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
     // Confirmation dialog with crop option
     confirmItem?.let { item ->
         val streamUrl = viewModel.getStreamUrl(item.id)
