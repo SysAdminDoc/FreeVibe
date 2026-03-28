@@ -114,10 +114,10 @@ class YouTubeRepository @Inject constructor() {
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
             val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
-            request.addOption("-f", "best[height<=1080]")
+            request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
             request.addOption("--get-url")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            val streamUrl = response.out?.trim()
+            val streamUrl = response.out?.trim()?.lines()?.firstOrNull()
             if (streamUrl.isNullOrBlank()) null else streamUrl
         } catch (_: Exception) { null }
     }

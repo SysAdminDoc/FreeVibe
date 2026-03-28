@@ -270,7 +270,42 @@ fun VideoWallpapersScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val resolvedIds by viewModel.resolvedIds.collectAsState()
+    val context = LocalContext.current
     var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
+    var cropItem by remember { mutableStateOf<Pair<VideoWallpaperItem, String>?>(null) }
+    val appContext = context.applicationContext
+
+    // Video crop editor
+    cropItem?.let { (item, streamUrl) ->
+        VideoCropScreen(
+            videoUrl = streamUrl,
+            videoTitle = item.title,
+            onBack = { cropItem = null },
+            onCropped = { croppedFile ->
+                cropItem = null
+                appContext.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
+                    .edit().putString("video_path", croppedFile.absolutePath).apply()
+                try {
+                    val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                        setComponent(android.content.ComponentName(
+                            "com.android.wallpaper.livepicker",
+                            "com.android.wallpaper.livepicker.LiveWallpaperActivity",
+                        ))
+                        putExtra(
+                            android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                            android.content.ComponentName(appContext, com.freevibe.service.VideoWallpaperService::class.java),
+                        )
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    appContext.startActivity(intent)
+                    Toast.makeText(appContext, "Tap 'FreeVibe Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
+                } catch (_: Exception) {
+                    Toast.makeText(appContext, "Cropped video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
+                }
+            },
+        )
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -325,19 +360,34 @@ fun VideoWallpapersScreen(
         }
     }
 
-    // Confirmation dialog
+    // Confirmation dialog with crop option
     confirmItem?.let { item ->
+        val streamUrl = viewModel.getStreamUrl(item.id)
         AlertDialog(
             onDismissRequest = { confirmItem = null },
-            title = { Text("Apply Video Wallpaper") },
+            title = { Text("Video Wallpaper") },
             text = {
                 Column {
                     Text(item.title, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(4.dp))
-                    Text("This will download and set as your live wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Choose how to apply this video wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            confirmButton = { Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") } },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (streamUrl != null) {
+                        OutlinedButton(onClick = {
+                            confirmItem = null
+                            cropItem = item to streamUrl
+                        }) {
+                            Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Crop")
+                        }
+                    }
+                    Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
+                }
+            },
             dismissButton = { TextButton(onClick = { confirmItem = null }) { Text("Cancel") } },
         )
     }
