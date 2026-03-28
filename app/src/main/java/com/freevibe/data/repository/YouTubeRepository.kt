@@ -3,11 +3,11 @@ package com.freevibe.data.repository
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.services.youtube.YoutubeService
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -22,7 +22,10 @@ class YouTubeRepository @Inject constructor() {
     init {
         try {
             NewPipe.init(DownloaderImpl.instance)
-        } catch (_: Exception) {}
+            Log.d("YouTubeRepo", "NewPipe Extractor initialized")
+        } catch (e: Exception) {
+            Log.e("YouTubeRepo", "Failed to init NewPipe: ${e.message}", e)
+        }
     }
 
     suspend fun searchSounds(
@@ -31,9 +34,13 @@ class YouTubeRepository @Inject constructor() {
         minDuration: Int = 0,
     ): SearchResult<Sound> = withContext(Dispatchers.IO) {
         try {
+            Log.d("YouTubeRepo", "Searching YouTube for: $query")
             val service = NewPipe.getService(ServiceList.YouTube.serviceId)
+            Log.d("YouTubeRepo", "Got YouTube service")
             val searchExtractor = service.getSearchExtractor(query)
+            Log.d("YouTubeRepo", "Created search extractor, fetching page...")
             searchExtractor.fetchPage()
+            Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
 
             val sounds = searchExtractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
@@ -48,6 +55,7 @@ class YouTubeRepository @Inject constructor() {
                 hasMore = searchExtractor.initialPage.hasNextPage(),
             )
         } catch (e: Exception) {
+            Log.e("YouTubeRepo", "Search failed for '$query': ${e.javaClass.simpleName}: ${e.message}")
             SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
         }
     }
@@ -59,11 +67,15 @@ class YouTubeRepository @Inject constructor() {
                 .getStreamExtractor(url)
             extractor.fetchPage()
 
-            extractor.audioStreams
-                .sortedByDescending { it.averageBitrate }
+            val streams = extractor.audioStreams
+            Log.d("YouTubeRepo", "Audio streams for $videoId: ${streams.size} found")
+            streams.sortedByDescending { it.averageBitrate }
                 .firstOrNull()
                 ?.content
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
+            null
+        }
     }
 
     suspend fun getVideoStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
