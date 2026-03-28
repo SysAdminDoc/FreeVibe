@@ -60,8 +60,56 @@ class PreferencesManager @Inject constructor(
     // ── Reddit settings ───────────────────────────────────────────
 
     val redditSubreddits: Flow<String> = get(Keys.REDDIT_SUBS, "wallpapers,Amoledbackgrounds,MobileWallpaper")
+    val redditVideoSubreddits: Flow<String> = get(Keys.REDDIT_VIDEO_SUBS, "livewallpapers,LiveWallpaper,Amoledbackgrounds,Cinemagraphs,perfectloops")
 
     suspend fun setRedditSubreddits(subs: String) = set(Keys.REDDIT_SUBS, subs)
+    suspend fun setRedditVideoSubreddits(subs: String) = set(Keys.REDDIT_VIDEO_SUBS, subs)
+
+    // ── Wallpaper scheduler ─────────────────────────────────────
+
+    val schedulerEnabled: Flow<Boolean> = get(Keys.SCHEDULER_ENABLED, false)
+    val schedulerIntervalMinutes: Flow<Long> = get(Keys.SCHEDULER_INTERVAL, 360L) // 6hr default
+    val schedulerSource: Flow<String> = get(Keys.SCHEDULER_SOURCE, "discover")
+    val schedulerHomeEnabled: Flow<Boolean> = get(Keys.SCHEDULER_HOME, true)
+    val schedulerLockEnabled: Flow<Boolean> = get(Keys.SCHEDULER_LOCK, true)
+    val schedulerShuffle: Flow<Boolean> = get(Keys.SCHEDULER_SHUFFLE, true)
+    val schedulerCollectionId: Flow<Long> = get(Keys.SCHEDULER_COLLECTION, -1L)
+    val schedulerDaySource: Flow<String> = get(Keys.SCHEDULER_DAY_SOURCE, "")
+    val schedulerNightSource: Flow<String> = get(Keys.SCHEDULER_NIGHT_SOURCE, "")
+
+    suspend fun setSchedulerEnabled(enabled: Boolean) = set(Keys.SCHEDULER_ENABLED, enabled)
+    suspend fun setSchedulerInterval(minutes: Long) = set(Keys.SCHEDULER_INTERVAL, minutes)
+    suspend fun setSchedulerSource(source: String) = set(Keys.SCHEDULER_SOURCE, source)
+    suspend fun setSchedulerHome(enabled: Boolean) = set(Keys.SCHEDULER_HOME, enabled)
+    suspend fun setSchedulerLock(enabled: Boolean) = set(Keys.SCHEDULER_LOCK, enabled)
+    suspend fun setSchedulerShuffle(shuffle: Boolean) = set(Keys.SCHEDULER_SHUFFLE, shuffle)
+    suspend fun setSchedulerCollection(id: Long) = set(Keys.SCHEDULER_COLLECTION, id)
+    suspend fun setSchedulerDaySource(source: String) = set(Keys.SCHEDULER_DAY_SOURCE, source)
+    suspend fun setSchedulerNightSource(source: String) = set(Keys.SCHEDULER_NIGHT_SOURCE, source)
+
+    // ── Video wallpaper settings ────────────────────────────────
+
+    val videoFpsLimit: Flow<Int> = get(Keys.VIDEO_FPS_LIMIT, 30)
+    val videoPlaybackSpeed: Flow<Float> = get(Keys.VIDEO_PLAYBACK_SPEED, 1.0f)
+
+    suspend fun setVideoFpsLimit(fps: Int) = set(Keys.VIDEO_FPS_LIMIT, fps)
+    suspend fun setVideoPlaybackSpeed(speed: Float) = set(Keys.VIDEO_PLAYBACK_SPEED, speed)
+
+    // ── Effects / adaptive settings ─────────────────────────────
+
+    val adaptiveTintEnabled: Flow<Boolean> = get(Keys.ADAPTIVE_TINT, false)
+    val adaptiveTintIntensity: Flow<Float> = get(Keys.ADAPTIVE_TINT_INTENSITY, 0.3f)
+    val weatherEffectsEnabled: Flow<Boolean> = get(Keys.WEATHER_EFFECTS, false)
+    val darkModeAutoSwitch: Flow<Boolean> = get(Keys.DARK_MODE_SWITCH, false)
+    val darkModeWallpaperId: Flow<String> = get(Keys.DARK_WALLPAPER_ID, "")
+    val lightModeWallpaperId: Flow<String> = get(Keys.LIGHT_WALLPAPER_ID, "")
+
+    suspend fun setAdaptiveTintEnabled(enabled: Boolean) = set(Keys.ADAPTIVE_TINT, enabled)
+    suspend fun setAdaptiveTintIntensity(intensity: Float) = set(Keys.ADAPTIVE_TINT_INTENSITY, intensity)
+    suspend fun setWeatherEffectsEnabled(enabled: Boolean) = set(Keys.WEATHER_EFFECTS, enabled)
+    suspend fun setDarkModeAutoSwitch(enabled: Boolean) = set(Keys.DARK_MODE_SWITCH, enabled)
+    suspend fun setDarkModeWallpaperId(id: String) = set(Keys.DARK_WALLPAPER_ID, id)
+    suspend fun setLightModeWallpaperId(id: String) = set(Keys.LIGHT_WALLPAPER_ID, id)
 
     // ── Generic helpers ───────────────────────────────────────────
 
@@ -85,5 +133,26 @@ class PreferencesManager @Inject constructor(
         val SHOW_NSFW = booleanPreferencesKey("show_nsfw")
         val PREF_RESOLUTION = stringPreferencesKey("pref_resolution")
         val REDDIT_SUBS = stringPreferencesKey("reddit_subreddits")
+        val REDDIT_VIDEO_SUBS = stringPreferencesKey("reddit_video_subreddits")
+        // Scheduler
+        val SCHEDULER_ENABLED = booleanPreferencesKey("scheduler_enabled")
+        val SCHEDULER_INTERVAL = longPreferencesKey("scheduler_interval_min")
+        val SCHEDULER_SOURCE = stringPreferencesKey("scheduler_source")
+        val SCHEDULER_HOME = booleanPreferencesKey("scheduler_home")
+        val SCHEDULER_LOCK = booleanPreferencesKey("scheduler_lock")
+        val SCHEDULER_SHUFFLE = booleanPreferencesKey("scheduler_shuffle")
+        val SCHEDULER_COLLECTION = longPreferencesKey("scheduler_collection_id")
+        val SCHEDULER_DAY_SOURCE = stringPreferencesKey("scheduler_day_source")
+        val SCHEDULER_NIGHT_SOURCE = stringPreferencesKey("scheduler_night_source")
+        // Video wallpaper
+        val VIDEO_FPS_LIMIT = intPreferencesKey("video_fps_limit")
+        val VIDEO_PLAYBACK_SPEED = floatPreferencesKey("video_playback_speed")
+        // Effects / adaptive
+        val ADAPTIVE_TINT = booleanPreferencesKey("adaptive_tint_enabled")
+        val ADAPTIVE_TINT_INTENSITY = floatPreferencesKey("adaptive_tint_intensity")
+        val WEATHER_EFFECTS = booleanPreferencesKey("weather_effects_enabled")
+        val DARK_MODE_SWITCH = booleanPreferencesKey("dark_mode_auto_switch")
+        val DARK_WALLPAPER_ID = stringPreferencesKey("dark_mode_wallpaper_id")
+        val LIGHT_WALLPAPER_ID = stringPreferencesKey("light_mode_wallpaper_id")
     }
 }

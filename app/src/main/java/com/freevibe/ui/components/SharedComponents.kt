@@ -253,6 +253,8 @@ fun SourceBadge(source: String, modifier: Modifier = Modifier) {
         "FREESOUND" -> Color(0xFF3DB2CE) to "Freesound" // Legacy favorites only
         "YOUTUBE" -> Color(0xFFFF0000) to "YouTube"
         "PEXELS" -> Color(0xFF05A081) to "Pexels"
+        "PIXABAY" -> Color(0xFF00AB6C) to "Pixabay"
+        "KLIPY" -> Color(0xFFE040FB) to "Klipy"
         else -> MaterialTheme.colorScheme.onSurfaceVariant to source
     }
 

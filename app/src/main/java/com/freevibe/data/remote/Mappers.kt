@@ -5,6 +5,7 @@ import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.bing.BingImage
 import com.freevibe.data.remote.internetarchive.IASearchDoc
 import com.freevibe.data.remote.internetarchive.InternetArchiveApi
+import com.freevibe.data.remote.pixabay.PixabayPhoto
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.picsum.PicsumPhoto
 import com.freevibe.data.remote.reddit.RedditPost
@@ -58,6 +59,23 @@ fun BingImage.toWallpaper() = Wallpaper(
     sourcePageUrl = copyrightLink,
     uploaderName = copyright.substringAfter("(c) ", copyright)
         .substringAfter("(", copyright).substringBefore(")"),
+)
+
+// -- Pixabay -> Wallpaper --
+
+fun PixabayPhoto.toWallpaper() = Wallpaper(
+    id = "pb_$id",
+    source = ContentSource.PIXABAY,
+    thumbnailUrl = webformatUrl,
+    fullUrl = largeImageUrl,
+    width = imageWidth,
+    height = imageHeight,
+    tags = tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+    fileSize = imageSize,
+    sourcePageUrl = pageUrl,
+    uploaderName = user,
+    views = views,
+    favorites = likes,
 )
 
 // -- Internet Archive -> Sound --

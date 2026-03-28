@@ -43,7 +43,7 @@ data class WallpapersUiState(
     val selectedColor: String? = null,       // #9: Color filter
 )
 
-enum class WallpaperTab { DISCOVER, PEXELS, REDDIT, WALLHAVEN, UNSPLASH, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, UNSPLASH, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
@@ -273,6 +273,7 @@ class WallpapersViewModel @Inject constructor(
             try {
                 val result = when (s.selectedTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(s.currentPage)
+                    WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(s.currentPage)
                     WallpaperTab.PEXELS -> {
                         val key = prefs.pexelsApiKey.first()
                         if (key.isNotBlank()) {
