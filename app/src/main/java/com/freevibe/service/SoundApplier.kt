@@ -160,6 +160,9 @@ class SoundApplier @Inject constructor(
     private suspend fun downloadBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Download failed: HTTP ${response.code}")
+        }
         response.body?.bytes()
     }
 

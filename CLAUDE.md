@@ -17,7 +17,7 @@ Open-source Android app for device personalization - wallpapers, ringtones, soun
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v2.4.0** (versionCode 25)
+- **v2.5.0** (versionCode 26)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
@@ -90,6 +90,7 @@ DataStore: Settings, Onboarding
 - `CollectionRepository.kt` - CRUD for wallpaper collections (Room-backed)
 
 ## Version History
+- v2.5.0: Validate HTTP response codes across all network callers — SoundApplier, OfflineFavoritesManager, DownloadManager, WallpaperEditorVM, SoundEditorVM, WallpaperCropVM now check response.isSuccessful before processing body (prevents writing error pages as media). SoundRepository fetch rows increased from 30 to 50 for better fill rate after duration filtering.
 - v2.4.0: Fix VideoWallpaperService crash on missing video file (existence check before setDataSource). Fix WallpaperCacheManager valueOf crash on unknown source (try-catch fallback). Remove dead onSearchTag callback from FreeVibeRoot. Collections: long-press to remove wallpapers from collection (snackbar feedback). Clean stale NASA/Wikimedia TTL constants from WallpaperCacheManager. Remove unused imports from FavoritesScreen.
 - v2.3.0: Fix WallpaperCropScreen aspect ratio preset math (proper viewport-relative scaling). Add "Favorites" as auto-wallpaper source (AutoWallpaperWorker + SettingsScreen picker). Fix FavoritesExporter import crash on malformed JSON (catch + user-friendly error). Haptic feedback on wallpaper favorite toggle. Updated onboarding features page (Collections + Auto-Wallpaper replace Dark Theme + Offline Ready). Fix DownloadsScreen silent catch on file open failure (snackbar). Random wallpaper shuffle FAB on WallpapersScreen.
 - v2.2.0: Fix AudioTrimmer resource leak (try-finally for extractor/muxer) + unsigned byte fade. Fix SoundEditor extractWaveform resource leak + playback race condition (state-based loop instead of player-based). Fix DualWallpaperService bitmap leak on exception (try-finally recycle). Batch WallpaperEditor preset application (single applyPreset() instead of 4 separate filter calls). Sound editor undo (one-level snapshot of trim/fade state, Undo button in top bar). Widget shuffle error feedback (Toast on failure instead of silent catch).

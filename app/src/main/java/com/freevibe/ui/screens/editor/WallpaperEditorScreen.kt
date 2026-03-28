@@ -66,6 +66,7 @@ class WallpaperEditorViewModel @Inject constructor(
                     val bitmap = withContext(Dispatchers.IO) {
                         val request = okhttp3.Request.Builder().url(wp.fullUrl).build()
                         val response = okHttpClient.newCall(request).execute()
+                        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
                         val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             ?: throw Exception("Failed to decode image")
