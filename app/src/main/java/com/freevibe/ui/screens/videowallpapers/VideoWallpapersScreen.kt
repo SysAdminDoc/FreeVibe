@@ -81,10 +81,19 @@ class VideoWallpapersViewModel @Inject constructor(
     )
 
     private val youtubeQueries = listOf(
-        "phone live wallpaper vertical loop",
-        "AMOLED live wallpaper phone",
-        "4K vertical video wallpaper loop",
+        "phone live wallpaper vertical loop no text",
+        "AMOLED live wallpaper vertical phone loop",
+        "vertical video wallpaper phone 4K loop",
+        "live wallpaper android vertical abstract",
     )
+
+    private val junkTitlePatterns = listOf(
+        "top \\d+", "\\d+ best", "how to", "tutorial", "review", "setup",
+        "compilation", "reaction", "podcast", "interview", "unboxing",
+        "FAQ", "help", "guide", "install", "download app", "engine",
+        "ranked", "tier list", "vs\\.", "comparison", "explained",
+        "official", "trailer", "teaser", "behind the scenes",
+    ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     init { load() }
 
@@ -170,8 +179,8 @@ class VideoWallpapersViewModel @Inject constructor(
                         extractor.fetchPage()
                         extractor.initialPage.items
                             .filterIsInstance<StreamInfoItem>()
-                            .filter { it.duration in 5..120 } // 5s-2min video clips
-                            .filter { !it.name.contains("top ", ignoreCase = true) }
+                            .filter { it.duration in 5..120 }
+                            .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.name) } }
                             .filter { !it.name.contains("#") }
                             .map { item ->
                                 val vid = item.url.substringAfter("v=").substringBefore("&")
@@ -264,7 +273,10 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
             } catch (_: Exception) { continue }
         }
-        return items.distinctBy { it.directVideoUrl }
+        return items
+            .filter { item -> junkTitlePatterns.none { it.containsMatchIn(item.title) } }
+            .filter { !it.title.contains("#") }
+            .distinctBy { it.directVideoUrl }
     }
 }
 
@@ -336,6 +348,8 @@ fun VideoWallpapersScreen(
                         isRefreshing = state.isRefreshing,
                         onRefresh = { viewModel.refresh() },
                     ) {
+                        var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
+
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
                             contentPadding = PaddingValues(8.dp),
@@ -346,9 +360,37 @@ fun VideoWallpapersScreen(
                                 VideoWallpaperCard(
                                     item = item,
                                     isApplying = state.isApplying == item.id,
-                                    onApply = { viewModel.applyVideoWallpaper(item) },
+                                    onApply = { confirmItem = item },
                                 )
                             }
+                        }
+
+                        // Confirmation dialog
+                        confirmItem?.let { item ->
+                            AlertDialog(
+                                onDismissRequest = { confirmItem = null },
+                                title = { Text("Apply Video Wallpaper") },
+                                text = {
+                                    Column {
+                                        Text(item.title, style = MaterialTheme.typography.bodyMedium)
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "This will download the video and set it as your live wallpaper.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        viewModel.applyVideoWallpaper(item)
+                                        confirmItem = null
+                                    }) { Text("Apply") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { confirmItem = null }) { Text("Cancel") }
+                                },
+                            )
                         }
                     }
                 }
