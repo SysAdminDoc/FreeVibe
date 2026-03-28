@@ -78,6 +78,7 @@ class VideoWallpaperService : WallpaperService() {
                     setDisplay(wrappedHolder)
                     isLooping = true
                     setVolume(0f, 0f)
+                    setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
                     prepare()
                     start()
                 }
