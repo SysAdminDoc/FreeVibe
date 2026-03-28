@@ -64,7 +64,7 @@ data class PexelsPhotoResponse(
 
 @JsonClass(generateAdapter = true)
 data class PexelsPhoto(
-    @Json(name = "id") val id: Int = 0,
+    @Json(name = "id") val id: Long = 0,
     @Json(name = "width") val width: Int = 0,
     @Json(name = "height") val height: Int = 0,
     @Json(name = "url") val url: String = "",
@@ -95,7 +95,7 @@ data class PexelsVideoResponse(
 
 @JsonClass(generateAdapter = true)
 data class PexelsVideo(
-    @Json(name = "id") val id: Int = 0,
+    @Json(name = "id") val id: Long = 0,
     @Json(name = "width") val width: Int = 0,
     @Json(name = "height") val height: Int = 0,
     @Json(name = "duration") val duration: Int = 0,
@@ -107,14 +107,14 @@ data class PexelsVideo(
 
 @JsonClass(generateAdapter = true)
 data class PexelsUser(
-    @Json(name = "id") val id: Int = 0,
+    @Json(name = "id") val id: Long = 0,
     @Json(name = "name") val name: String = "",
     @Json(name = "url") val url: String = "",
 )
 
 @JsonClass(generateAdapter = true)
 data class PexelsVideoFile(
-    @Json(name = "id") val id: Int = 0,
+    @Json(name = "id") val id: Long = 0,
     @Json(name = "quality") val quality: String? = null,
     @Json(name = "file_type") val fileType: String? = null,
     @Json(name = "width") val width: Int? = 0,
