@@ -410,14 +410,14 @@ class SoundsViewModel @Inject constructor(
                 val dur = s.durationFilter
                 val cat = s.selectedCategory
 
-                // Build specific YouTube queries — precise terms to avoid music/compilations
+                // Build YouTube queries — find the best sounds, no copyright filtering
                 val ytQuery = when {
-                    cat != null -> "${cat.label} sound effect short free download"
-                    s.selectedTab == SoundTab.RINGTONES -> "phone ringtone tone free download no copyright"
-                    s.selectedTab == SoundTab.NOTIFICATIONS -> "notification sound effect beep chime short"
-                    s.selectedTab == SoundTab.ALARMS -> "alarm clock sound effect wake up tone free"
-                    s.selectedTab == SoundTab.SEARCH -> "${s.query} sound effect free"
-                    else -> "phone ringtone tone free download"
+                    cat != null -> "${cat.label} sound effect download"
+                    s.selectedTab == SoundTab.RINGTONES -> "best ringtone 2025 2026 download"
+                    s.selectedTab == SoundTab.NOTIFICATIONS -> "notification sound effect chime beep"
+                    s.selectedTab == SoundTab.ALARMS -> "alarm tone clock buzzer wake up"
+                    s.selectedTab == SoundTab.SEARCH -> "${s.query} sound"
+                    else -> "best ringtone 2025 download"
                 }
 
                 // Tab-specific YouTube duration caps
@@ -431,15 +431,6 @@ class SoundsViewModel @Inject constructor(
                     SoundTab.RINGTONES -> dur.minSec.coerceAtLeast(5)
                     SoundTab.ALARMS -> dur.minSec.coerceAtLeast(3)
                     else -> dur.minSec
-                }
-
-                // Stock Android sounds — instant, perfectly categorized, no API call needed
-                if (s.currentPage == 1 && cat == null && s.query.isEmpty()) {
-                    val stockSounds = getStockSounds(s.selectedTab)
-                    if (stockSounds.isNotEmpty()) {
-                        stockSounds.forEach { allResults.add(it) }
-                        _state.update { st -> st.copy(sounds = allResults.toList(), isLoading = false) }
-                    }
                 }
 
                 supervisorScope {
@@ -552,73 +543,4 @@ class SoundsViewModel @Inject constructor(
         }
     }
 
-    /** Stock Android sounds from AOSP — perfectly categorized, instant load */
-    private fun getStockSounds(tab: SoundTab): List<Sound> {
-        val base = "https://raw.githubusercontent.com/AospExtended/platform_frameworks_base/12.0/data/sounds"
-        fun stock(id: String, name: String, path: String, dur: Double) = Sound(
-            id = "aosp_$id", source = com.freevibe.data.model.ContentSource.LOCAL,
-            name = name, previewUrl = "$base/$path", downloadUrl = "$base/$path",
-            duration = dur, fileType = "OGG", license = "Apache 2.0", uploaderName = "Android",
-        )
-        return when (tab) {
-            SoundTab.RINGTONES -> listOf(
-                stock("ring_andromeda", "Andromeda", "ringtones/ogg/Andromeda.ogg", 14.0),
-                stock("ring_aquila", "Aquila", "ringtones/ogg/Aquila.ogg", 15.0),
-                stock("ring_carina", "Carina", "ringtones/ogg/Carina.ogg", 10.0),
-                stock("ring_centaurus", "Centaurus", "ringtones/ogg/Centaurus.ogg", 14.0),
-                stock("ring_cygnus", "Cygnus", "ringtones/ogg/Cygnus.ogg", 14.0),
-                stock("ring_draco", "Draco", "ringtones/ogg/Draco.ogg", 15.0),
-                stock("ring_girtab", "Girtab", "ringtones/ogg/Girtab.ogg", 14.0),
-                stock("ring_hydra", "Hydra", "ringtones/ogg/Hydra.ogg", 14.0),
-                stock("ring_kuma", "Kuma", "ringtones/ogg/Kuma.ogg", 10.0),
-                stock("ring_lebes", "Lebes", "ringtones/ogg/Lebes.ogg", 14.0),
-                stock("ring_lyra", "Lyra", "ringtones/ogg/Lyra.ogg", 10.0),
-                stock("ring_machina", "Machina", "ringtones/ogg/Machina.ogg", 10.0),
-                stock("ring_orion", "Orion", "ringtones/ogg/Orion.ogg", 15.0),
-                stock("ring_pegasus", "Pegasus", "ringtones/ogg/Pegasus.ogg", 14.0),
-                stock("ring_perseus", "Perseus", "ringtones/ogg/Perseus.ogg", 15.0),
-                stock("ring_pyxis", "Pyxis", "ringtones/ogg/Pyxis.ogg", 14.0),
-                stock("ring_rigel", "Rigel", "ringtones/ogg/Rigel.ogg", 14.0),
-                stock("ring_scarabaeus", "Scarabaeus", "ringtones/ogg/Scarabaeus.ogg", 14.0),
-                stock("ring_sceptrum", "Sceptrum", "ringtones/ogg/Sceptrum.ogg", 15.0),
-                stock("ring_solarium", "Solarium", "ringtones/ogg/Solarium.ogg", 15.0),
-                stock("ring_themos", "Themos", "ringtones/ogg/Themos.ogg", 14.0),
-                stock("ring_titania", "Titania", "ringtones/ogg/Titania.ogg", 14.0),
-                stock("ring_triton", "Triton", "ringtones/ogg/Triton.ogg", 10.0),
-            )
-            SoundTab.NOTIFICATIONS -> listOf(
-                stock("notif_ariel", "Ariel", "notifications/ogg/Ariel.ogg", 1.0),
-                stock("notif_carme", "Carme", "notifications/ogg/Carme.ogg", 1.0),
-                stock("notif_ceres", "Ceres", "notifications/ogg/Ceres.ogg", 1.0),
-                stock("notif_elara", "Elara", "notifications/ogg/Elara.ogg", 1.0),
-                stock("notif_europa", "Europa", "notifications/ogg/Europa.ogg", 1.0),
-                stock("notif_iapetus", "Iapetus", "notifications/ogg/Iapetus.ogg", 1.0),
-                stock("notif_io", "Io", "notifications/ogg/Io.ogg", 1.0),
-                stock("notif_lalande", "Lalande", "notifications/ogg/Lalande.ogg", 1.0),
-                stock("notif_mira", "Mira", "notifications/ogg/Mira.ogg", 1.0),
-                stock("notif_polaris", "Polaris", "notifications/ogg/Polaris.ogg", 1.0),
-                stock("notif_procyon", "Procyon", "notifications/ogg/Procyon.ogg", 1.0),
-                stock("notif_proxima", "Proxima", "notifications/ogg/Proxima.ogg", 1.0),
-                stock("notif_shaula", "Shaula", "notifications/ogg/Shaula.ogg", 1.0),
-                stock("notif_spica", "Spica", "notifications/ogg/Spica.ogg", 1.0),
-                stock("notif_styx", "Styx", "notifications/ogg/Styx.ogg", 1.0),
-                stock("notif_talitha", "Talitha", "notifications/ogg/Talitha.ogg", 1.0),
-                stock("notif_tejat", "Tejat", "notifications/ogg/Tejat.ogg", 1.0),
-                stock("notif_tethys", "Tethys", "notifications/ogg/Tethys.ogg", 1.0),
-            )
-            SoundTab.ALARMS -> listOf(
-                stock("alarm_argon", "Argon", "alarms/ogg/Argon.ogg", 7.0),
-                stock("alarm_carbon", "Carbon", "alarms/ogg/Carbon.ogg", 10.0),
-                stock("alarm_helium", "Helium", "alarms/ogg/Helium.ogg", 7.0),
-                stock("alarm_krypton", "Krypton", "alarms/ogg/Krypton.ogg", 7.0),
-                stock("alarm_neon", "Neon", "alarms/ogg/Neon.ogg", 7.0),
-                stock("alarm_noble", "Noble", "alarms/ogg/Noble.ogg", 8.0),
-                stock("alarm_osmium", "Osmium", "alarms/ogg/Osmium.ogg", 10.0),
-                stock("alarm_platinum", "Platinum", "alarms/ogg/Platinum.ogg", 7.0),
-                stock("alarm_promethium", "Promethium", "alarms/ogg/Promethium.ogg", 8.0),
-                stock("alarm_scandium", "Scandium", "alarms/ogg/Scandium.ogg", 10.0),
-            )
-            else -> emptyList()
-        }
-    }
 }
