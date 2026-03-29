@@ -268,7 +268,7 @@ class WallpaperRepository @Inject constructor(
             items = interleaved,
             totalCount = interleaved.size * 5,
             currentPage = page,
-            hasMore = interleaved.size >= 10 && results.any { it?.hasMore == true },
+            hasMore = interleaved.isNotEmpty(),
         )
     }
 

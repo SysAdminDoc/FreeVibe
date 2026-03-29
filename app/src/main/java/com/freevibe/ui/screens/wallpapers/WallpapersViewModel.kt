@@ -104,14 +104,28 @@ class WallpapersViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val topIds = voteRepo.getTopVotedIds(50)
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Top voted IDs from Firebase: ${topIds.size} entries, first=${topIds.firstOrNull()}")
                 if (topIds.isEmpty()) return@launch
-                val wallpapers = cacheManager.getByIds(topIds.map { it.first })
+
+                // Firebase stores sanitized keys — try both original and sanitized IDs
+                val allIds = topIds.flatMap { (id, _) -> listOf(id, id.replace("_", "."), id.replace("_", "/")) }.distinct()
+                val wallpapers = cacheManager.getByIds(allIds)
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Resolved ${wallpapers.size} wallpapers from cache for ${allIds.size} ID variants")
+
                 val voteMap = topIds.toMap()
                 val sorted = wallpapers
-                    .mapNotNull { wp -> voteMap[wp.id]?.let { wp to it } ?: voteMap[voteRepo.sanitizeKey(wp.id)]?.let { wp to it } }
+                    .mapNotNull { wp ->
+                        val sanitized = voteRepo.sanitizeKey(wp.id)
+                        voteMap[wp.id]?.let { wp to it }
+                            ?: voteMap[sanitized]?.let { wp to it }
+                    }
+                    .distinctBy { it.first.id }
                     .sortedByDescending { it.second }
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Final top voted: ${sorted.size} wallpapers, top=${sorted.firstOrNull()?.let { "${it.first.id}=${it.second}" }}")
                 _topVoted.value = sorted
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("WallpapersVM", "fetchTopVoted failed: ${e.message}", e)
+            }
         }
     }
 

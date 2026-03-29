@@ -89,7 +89,7 @@ class RedditRepository @Inject constructor(
             items = allWallpapers.distinctBy { it.id },
             totalCount = -1,
             currentPage = 0,
-            hasMore = anyHasMore,
+            hasMore = true,
         )
     }
 

@@ -201,13 +201,16 @@ class VoteRepository @Inject constructor(
     /** Get top upvoted content IDs globally, sorted by vote count descending */
     suspend fun getTopVotedIds(limit: Int = 50): List<Pair<String, Int>> {
         return try {
-            val snapshot = votesRef.orderByChild("upvotes").limitToLast(limit).get().await()
+            val snapshot = votesRef.get().await()
             snapshot.children.mapNotNull { child ->
                 val key = child.key ?: return@mapNotNull null
                 val upvotes = child.child("upvotes").getValue(Int::class.java) ?: 0
                 if (upvotes > 0) key to upvotes else null
-            }.sortedByDescending { it.second }
-        } catch (_: Exception) { emptyList() }
+            }.sortedByDescending { it.second }.take(limit)
+        } catch (e: Exception) {
+            if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("VoteRepo", "getTopVotedIds failed: ${e.message}")
+            emptyList()
+        }
     }
 
     fun sanitizeKey(id: String): String =
