@@ -7,7 +7,8 @@ Open-source Android app for device personalization. 21+ content sources across w
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
 - Hilt 2.53.1 DI, Room 2.6.1 DB, Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
-- NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop via bundled libffmpeg.so)
+- NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop + audio fade/convert/normalize)
+- Freesound.org API v2 (500K+ CC-licensed sounds, token auth)
 - Firebase Realtime Database (community voting + moderation)
 - Palette API (Material You color extraction), Open-Meteo (weather)
 - Min SDK 26, Target SDK 35, JDK 17
@@ -28,7 +29,7 @@ Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorite
   ViewModels (Hilt) + SelectedContentHolder singleton (bridges state between screens)
     Wallpaper sources: Wallhaven, Picsum, Pexels, Pixabay, Bing Daily, Reddit (7 subs)
     Video sources: Pexels, YouTube, Reddit (r/livewallpapers, r/LiveWallpaper, r/Cinemagraphs, r/perfectloops), Pixabay
-    Sound sources: YouTube (NewPipe + yt-dlp), Internet Archive (duration-filtered)
+    Sound sources: Freesound.org (primary, 500K+ sounds), YouTube (NewPipe + yt-dlp), Internet Archive (duration-filtered)
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
@@ -58,10 +59,20 @@ DataStore: Settings, Onboarding
 - **Playback**: VideoWallpaperService uses `setFixedSize(screenW, screenH)` + `SCALE_TO_FIT_WITH_CROPPING`. Screen size via WindowMetrics API with legacy fallback.
 - **Portrait/Landscape badges** on video cards. Landscape videos promote Crop as primary action in confirm dialog.
 
+## Sounds System
+- **Sources**: Freesound.org (primary, instant metadata), YouTube (NewPipe + yt-dlp), Internet Archive (per-item metadata fetch)
+- **Tabs**: Ringtones, Notifications, Alarms, Search — each with duration-specific queries per source
+- **Discovery**: Sound of the Day hero card, Popular Sounds trending carousel (both from Freesound downloads_desc)
+- **Playback**: Single reusable ExoPlayer instance, real-time position tracking (50ms polling), seekable waveform
+- **Detail screen**: Seekable waveform (tap to seek, playhead indicator), format badges, license badges, tag chips, similar sounds
+- **Audio tools**: Lossless trim (MediaMuxer), fade in/out (FFmpeg afade), volume normalization (FFmpeg loudnorm), format conversion (FFmpeg: MP3/OGG/WAV/FLAC/M4A)
+- **Apply**: SoundApplier downloads to MediaStore, sets via RingtoneManager. Contact-specific assignment via ContactRingtoneService.
+- **Freesound integration**: FreesoundApi (Retrofit) + FreesoundRepository. Token auth via `FREESOUND_API_KEY` in BuildConfig. Tab-specific queries (ringtones=melody+tone, notifications=beep+chime, alarms=buzzer+bell). Preview via `preview-hq-mp3` URL.
+
 ## API Keys
 - Pexels/Pixabay keys provided via BuildConfig (defaults baked in, overridable via local.properties)
 - `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
-- Freesound API was removed in v2.6.0
+- `FREESOUND_API_KEY` - Required for Freesound.org source (get from freesound.org/apiv2/apply/). Without it, YouTube + IA still work.
 
 ## Database Migrations
 - v1->2: Added wallpaper_cache + wallpaper_history tables
@@ -79,8 +90,12 @@ DataStore: Settings, Onboarding
 - WallpaperDetailScreen gets its OWN WallpapersViewModel (different nav destination) — must use SelectedContentHolder for state
 - Sound tabs use duration-specific queries: Ringtones 5-30s, Notifications 0-3s, Alarms 5-40s
 - DurationFilter and SoundCategory enums are in SoundsViewModel.kt, not Models.kt
-- AudioTrimmer fade is a lossy byte-level approximation on compressed MP3
-- NASA/Wikimedia/Freesound enum values kept in ContentSource for legacy favorites compatibility
+- AudioTrimmer fade now uses FFmpeg afade filter (was broken byte-level MP3 manipulation that corrupted 30-50% of files)
+- NASA/Wikimedia enum values kept in ContentSource for legacy favorites compatibility. FREESOUND now actively used again.
+- **Freesound API key** must be set by user (freesound.org/apiv2/apply/) — without it, Freesound source returns empty gracefully
+- **YouTube stream cache TTL** is 6 hours (was 3h, matching actual YouTube token lifetime)
+- **IA metadata timeout** is 8 seconds (was 4s, reduced failure rate on slow connections)
+- **ExoPlayer for sounds** is a single reusable instance — do NOT create new per sound (was a memory leak)
 - NavHost uses animated transitions (fade+slide) in FreeVibeRoot
 - Package is `com.freevibe` (cannot rename without breaking updates), display name is "Aura"
 - Signing credentials in local.properties (not committed), build.gradle.kts reads from localProps
@@ -101,6 +116,12 @@ DataStore: Settings, Onboarding
 - `VideoWallpapersScreen.kt` - Video browsing (Pexels + YouTube + Reddit + Pixabay), orientation filter, category chips, single ExoPlayer
 - `VideoCropScreen.kt` - Screen-ratio-constrained crop via FFmpeg direct call with LD_LIBRARY_PATH reflection
 - `VideoWallpaperService.kt` - WallpaperService, center-crop via SCALE_TO_FIT_WITH_CROPPING + screen-sized surface
+- `SoundsViewModel.kt` - Sound state, 3 sources (Freesound+YouTube+IA), single ExoPlayer, playback position, trending, SOTD
+- `SoundsScreen.kt` - Sound list with SOTD hero card, trending carousel, format/license badges, seekable waveform
+- `SoundDetailScreen.kt` - Seekable waveform (tap to seek), format badges, apply as ringtone/notification/alarm
+- `FreesoundApi.kt` - Retrofit interface for Freesound.org API v2 (search, getSound)
+- `FreesoundRepository.kt` - Freesound source: search, getRingtones, getNotifications, getAlarms, getTrending
+- `AudioTrimmer.kt` - Lossless trim (MediaMuxer) + FFmpeg fade/normalize/convert
 - `VoteRepository.kt` - Firebase community votes, getTopVotedIds (client-side sort), admin moderation
 - `WallpaperRepository.kt` - Aggregates all wallpaper sources, findSimilar (Wallhaven like:), getRandomWallhaven, searchByColor
 - `RedditRepository.kt` - 7 wallpaper subs, after-token pagination, getDailyTopWallpaper
@@ -117,7 +138,7 @@ DataStore: Settings, Onboarding
 - Community Favorites only shows wallpapers that exist in local Room cache (browsed before)
 
 ## Version History
-- v4.5.0: Major discovery overhaul + video wallpaper fixes. 7 discovery features (Find Similar, curated collections, Match My Theme, video categories, tag chips, trending, shuffle). WOTD hero card. Wallhaven toplist time filters. Community Favorites section (Firebase top voted). Video orientation detection from API dimensions + thumbnail proxy. Video crop: FFmpeg.init() fix, direct FFmpeg via ProcessBuilder with LD_LIBRARY_PATH, screen-ratio-constrained viewport. VideoWallpaperService: center-crop via SCALE_TO_FIT_WITH_CROPPING + screen-sized surface. 7 Reddit wallpaper subs (was 2). Removed r/Amoledbackgrounds. Endless scroll on all tabs. Color palette dots + tag chips on detail screen.
+- v4.5.0: Major discovery + sounds overhaul + video wallpaper fixes. Sounds: Freesound.org API (500K+ sounds), Sound of the Day, trending carousel, seekable waveform, format badges, FFmpeg fade/normalize/convert, ExoPlayer leak fix, YouTube TTL 3h→6h, IA timeout 4s→8s. Wallpapers: 7 discovery features, WOTD hero card, Community Favorites, Wallhaven time filters, 7 Reddit subs, endless scroll. Videos: orientation detection, FFmpeg crop fix, screen-ratio viewport.
 - v4.4.0: WallpaperCropScreen: response leak fixed, cropped bitmap recycled on apply failure. VideoCropScreen: video dimension polling (was fixed 1s delay, now polls 3s), cache input file cleaned up after crop. SoundDetailScreen: DisposableEffect stops playback on screen exit, SimilarSoundsSection resets on soundId change. WallpaperEditorScreen response leak fixed.
 - v4.3.0: Bitmap memory leaks fixed in WallpaperEditorScreen. VfxParticleRenderer: complete particle state reset. WeatherUpdateWorker: proper location permission check. FreeVibeApp: crash log trim. WallpaperEditorScreen: HTTP response leak fixed.
 - v4.2.0: API keys moved to BuildConfig. Signing to local.properties. DB v6 FK CASCADE. Single ExoPlayer for video cards.
