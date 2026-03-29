@@ -72,7 +72,7 @@ class VoteRepository @Inject constructor(
                 _moderatedIds.value = snapshot.children.mapNotNull { it.key }.toSet()
             }
             override fun onCancelled(error: DatabaseError) {
-                Log.w("VoteRepo", "Moderation listener cancelled: ${error.message}")
+                if (com.freevibe.BuildConfig.DEBUG) Log.w("VoteRepo", "Moderation listener cancelled: ${error.message}")
             }
         })
     }
@@ -124,7 +124,7 @@ class VoteRepository @Inject constructor(
 
     /** Regular user: hide locally. Admin: hide globally for everyone. */
     suspend fun downvote(contentId: String) {
-        Log.d("VoteRepo", "downvote($contentId) deviceId=$deviceId isAdmin=$isAdmin")
+        if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "downvote($contentId) deviceId=$deviceId isAdmin=$isAdmin")
         if (isAdmin) {
             moderateHide(contentId)
         } else {
@@ -143,12 +143,12 @@ class VoteRepository @Inject constructor(
     /** Admin: globally hide content for ALL users via Firebase */
     suspend fun moderateHide(contentId: String) {
         val safeId = sanitizeKey(contentId)
-        Log.d("VoteRepo", "moderateHide: safeId=$safeId path=moderation/$safeId")
+        if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "moderateHide: safeId=$safeId path=moderation/$safeId")
         try {
             moderationRef.child(safeId).setValue(true).await()
-            Log.d("VoteRepo", "Admin moderated OK: $contentId")
+            if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "Admin moderated OK: $contentId")
         } catch (e: Exception) {
-            Log.e("VoteRepo", "Moderation FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
+            if (com.freevibe.BuildConfig.DEBUG) Log.e("VoteRepo", "Moderation FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
             hideLocally(contentId)
         }
     }

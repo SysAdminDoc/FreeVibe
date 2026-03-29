@@ -3,7 +3,7 @@ package com.freevibe.data.repository
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
-import android.util.Log
+import com.freevibe.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
@@ -41,9 +41,9 @@ class YouTubeRepository @Inject constructor() {
     init {
         try {
             NewPipe.init(DownloaderImpl.instance)
-            Log.d("YouTubeRepo", "NewPipe Extractor initialized")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "NewPipe Extractor initialized")
         } catch (e: Exception) {
-            Log.e("YouTubeRepo", "Failed to init NewPipe: ${e.message}", e)
+            if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "Failed to init NewPipe: ${e.message}", e)
         }
     }
 
@@ -61,13 +61,13 @@ class YouTubeRepository @Inject constructor() {
         minDuration: Int = 0,
     ): SearchResult<Sound> = withContext(Dispatchers.IO) {
         try {
-            Log.d("YouTubeRepo", "Searching YouTube for: $query")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Searching YouTube for: $query")
             val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-            Log.d("YouTubeRepo", "Got YouTube service")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Got YouTube service")
             val searchExtractor = service.getSearchExtractor(query)
-            Log.d("YouTubeRepo", "Created search extractor, fetching page...")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Created search extractor, fetching page...")
             searchExtractor.fetchPage()
-            Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
 
             val sounds = searchExtractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
@@ -84,7 +84,7 @@ class YouTubeRepository @Inject constructor() {
                 hasMore = searchExtractor.initialPage.hasNextPage(),
             )
         } catch (e: Exception) {
-            Log.e("YouTubeRepo", "Search failed for '$query': ${e.javaClass.simpleName}: ${e.message}")
+            if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "Search failed for '$query': ${e.javaClass.simpleName}: ${e.message}")
             SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
         }
     }
@@ -97,16 +97,16 @@ class YouTubeRepository @Inject constructor() {
         }
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
-            Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
             val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
             request.addOption("-f", "worstaudio") // Fastest to resolve + smallest to buffer
             request.addOption("--get-url")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
-            Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
             streamUrl?.also { streamCache[videoId] = CachedStream(it, System.currentTimeMillis()) }
         } catch (e: Exception) {
-            Log.e("YouTubeRepo", "getAudioPreviewUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
+            if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "getAudioPreviewUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }
@@ -115,7 +115,7 @@ class YouTubeRepository @Inject constructor() {
     suspend fun getAudioStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
-            Log.d("YouTubeRepo", "Extracting best audio via yt-dlp for $videoId")
+            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting best audio via yt-dlp for $videoId")
             val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
             request.addOption("-f", "bestaudio")
             request.addOption("--get-url")
@@ -123,7 +123,7 @@ class YouTubeRepository @Inject constructor() {
             val streamUrl = response.out?.trim()
             if (streamUrl.isNullOrBlank()) null else streamUrl
         } catch (e: Exception) {
-            Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
+            if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }

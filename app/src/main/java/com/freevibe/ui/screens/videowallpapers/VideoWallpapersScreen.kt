@@ -183,7 +183,7 @@ class VideoWallpapersViewModel @Inject constructor(
             try {
                 // Get stream URL (cached or resolve)
                 val videoUrl = streamUrls[item.id] ?: run {
-                    Log.d("VideoWP", "Resolving stream URL for apply: ${item.videoId}")
+                    if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Resolving stream URL for apply: ${item.videoId}")
                     val url = youtubeRepo.getVideoStreamUrl(item.videoId)
                     if (url != null) { streamUrls[item.id] = url }
                     url
@@ -197,7 +197,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d("VideoWP", "Downloading video (source: ${item.source})...")
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Downloading video (source: ${item.source})...")
                 val file = withContext(Dispatchers.IO) {
                     val cacheFile = File(context.filesDir, "live_wallpaper.mp4")
                     if (item.source == "YouTube" && item.videoId.isNotEmpty()) {
@@ -210,7 +210,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             request.addOption("--force-overwrites")
                             com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
                         } catch (e: Exception) {
-                            Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
+                            if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
                             okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
                                 if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
                                 resp.body?.byteStream()?.use { input ->
@@ -230,7 +230,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     if (cacheFile.length() < 1024) {
                         throw Exception("Downloaded file too small (${cacheFile.length()} bytes) — likely an error page")
                     }
-                    Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
+                    if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
                     cacheFile
                 }
 
@@ -253,7 +253,7 @@ class VideoWallpapersViewModel @Inject constructor(
                         }
                         uri
                     } catch (e: Exception) {
-                        Log.e("VideoWP", "Failed to save to MediaStore: ${e.message}")
+                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Failed to save to MediaStore: ${e.message}")
                         null
                     }
                 }
@@ -275,7 +275,7 @@ class VideoWallpapersViewModel @Inject constructor(
                         context.startActivity(intent)
                         Toast.makeText(context, "Tap 'Aura Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
                     } catch (e: Exception) {
-                        Log.e("VideoWP", "Live wallpaper picker failed: ${e.message}")
+                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Live wallpaper picker failed: ${e.message}")
                         // Fallback: save to gallery
                         if (savedUri != null) {
                             Toast.makeText(context, "Video saved to Movies/Aura. Open in Gallery > Set as wallpaper", Toast.LENGTH_LONG).show()
@@ -286,7 +286,7 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
-                Log.e("VideoWP", "Apply failed", e)
+                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Apply failed", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
@@ -331,7 +331,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 item
                             }
                         }
-                    } catch (e: Throwable) { Log.e("VideoWP", "Pexels: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pexels: ${e.message}"); emptyList() }
                 }
 
                 // 2. Reddit — one subreddit per load, rotating, with per-sub pagination
@@ -378,7 +378,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                     _resolvedIds.value = _resolvedIds.value + item.id
                                 }
                             }
-                        } catch (e: Throwable) { Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
+                        } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
                     }
                     items
                 }
@@ -400,7 +400,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 val vid = item.url.substringAfter("v=").substringBefore("&")
                                 VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount)
                             }
-                    } catch (e: Throwable) { Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
                 }
 
                 // 4. Pixabay Videos (animated loops + short videos)
@@ -433,7 +433,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 item
                             }
                         }
-                    } catch (e: Throwable) { Log.e("VideoWP", "Pixabay: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pixabay: ${e.message}"); emptyList() }
                 }
 
                 newItems.addAll(pexelsJob.await())
