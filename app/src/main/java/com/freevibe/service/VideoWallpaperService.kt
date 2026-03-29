@@ -7,7 +7,9 @@ import com.freevibe.BuildConfig
 
 /**
  * Live wallpaper service that plays a video file on the home/lock screen.
- * Center-crop scaling, playback speed, auto-reload on file change.
+ * Supports two scaling modes:
+ *   - "zoom" (default): center-crop — preserves aspect ratio, fills screen, clips overflow
+ *   - "stretch": stretches video to fill screen exactly (may distort)
  */
 class VideoWallpaperService : WallpaperService() {
 
@@ -24,12 +26,12 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun getPrefs() = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
         private fun getVideoPath(): String? = getPrefs().getString("video_path", null)
+        private fun getScaleMode(): String = getPrefs().getString("scale_mode", "zoom") ?: "zoom"
         private fun getPlaybackSpeed(): Float =
             getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
                 .getFloat("video_playback_speed", 1.0f).takeIf { it > 0 } ?: 1.0f
 
         private fun resolveScreenSize() {
-            if (screenWidth > 0 && screenHeight > 0) return
             try {
                 val wm = getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -51,7 +53,6 @@ class VideoWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceWidth = width
             surfaceHeight = height
-            resolveScreenSize()
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -99,6 +100,7 @@ class VideoWallpaperService : WallpaperService() {
             try {
                 lastModified = file.lastModified()
                 val speed = getPlaybackSpeed()
+                val scaleMode = getScaleMode()
                 val safeHolder = object : SurfaceHolder by holder {
                     override fun setKeepScreenOn(screenOn: Boolean) {}
                 }
@@ -107,23 +109,67 @@ class VideoWallpaperService : WallpaperService() {
                     setDisplay(safeHolder)
                     isLooping = true
                     setVolume(0f, 0f)
-                    try { setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING) } catch (_: Exception) {}
                     prepare()
-                    // Use actual screen size for the surface so MediaPlayer's SCALE_TO_FIT_WITH_CROPPING
-                    // renders correctly without distortion. The scaling mode handles center-crop natively.
-                    val sw = if (screenWidth > 0) screenWidth else surfaceWidth
-                    val sh = if (screenHeight > 0) screenHeight else surfaceHeight
-                    if (sw > 0 && sh > 0) {
-                        try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
+
+                    when (scaleMode) {
+                        "stretch" -> {
+                            // Stretch: set surface to screen size, video fills it (may distort)
+                            try { setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT) } catch (_: Exception) {}
+                            val sw = if (screenWidth > 0) screenWidth else surfaceWidth
+                            val sh = if (screenHeight > 0) screenHeight else surfaceHeight
+                            if (sw > 0 && sh > 0) {
+                                try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
+                            }
+                        }
+                        else -> {
+                            // Zoom (center-crop): set surface to video's aspect ratio, sized to cover screen.
+                            // MediaPlayer fills this surface 1:1 (no distortion), screen clips the overflow.
+                            applyCenterCrop(this, holder)
+                        }
                     }
+
                     try { playbackParams = playbackParams.setSpeed(speed) } catch (_: Exception) {}
                     start()
                 }
-                if (BuildConfig.DEBUG) android.util.Log.d("VideoWPService", "Playing ${mediaPlayer?.videoWidth}x${mediaPlayer?.videoHeight} from $path")
+                if (BuildConfig.DEBUG) android.util.Log.d("VideoWPService", "Playing ${mediaPlayer?.videoWidth}x${mediaPlayer?.videoHeight} mode=$scaleMode from $path")
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) android.util.Log.e("VideoWPService", "Init failed: ${e.message}")
                 releasePlayer()
             }
+        }
+
+        /**
+         * Center-crop: size the surface to the video's native aspect ratio,
+         * scaled so it covers the entire screen. The screen clips the overflow.
+         * This preserves the video's aspect ratio (no stretching).
+         */
+        private fun applyCenterCrop(player: MediaPlayer, holder: SurfaceHolder) {
+            val sw = if (screenWidth > 0) screenWidth else surfaceWidth
+            val sh = if (screenHeight > 0) screenHeight else surfaceHeight
+            if (sw <= 0 || sh <= 0) return
+
+            val videoW = player.videoWidth
+            val videoH = player.videoHeight
+            if (videoW <= 0 || videoH <= 0) return
+
+            val screenRatio = sw.toFloat() / sh
+            val videoRatio = videoW.toFloat() / videoH
+
+            // Calculate surface size that:
+            // 1. Matches the video's aspect ratio (no distortion)
+            // 2. Is at least as large as the screen in both dimensions (no black bars)
+            val (surfW, surfH) = if (videoRatio > screenRatio) {
+                // Video is wider than screen: match screen height, expand width
+                val w = (sh * videoRatio).toInt()
+                w to sh
+            } else {
+                // Video is taller/same as screen: match screen width, expand height
+                val h = (sw / videoRatio).toInt()
+                sw to h
+            }
+
+            if (BuildConfig.DEBUG) android.util.Log.d("VideoWPService", "CenterCrop: video=${videoW}x${videoH} screen=${sw}x${sh} surface=${surfW}x${surfH}")
+            try { holder.setFixedSize(surfW, surfH) } catch (_: Exception) {}
         }
 
         private fun releasePlayer() {

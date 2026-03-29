@@ -253,7 +253,10 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
 
                 context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-                    .edit().putString("video_path", file.absolutePath).apply()
+                    .edit()
+                    .putString("video_path", file.absolutePath)
+                    .putString("scale_mode", "zoom")
+                    .apply()
 
                 // Save video to Downloads so Gallery can access it and set as wallpaper
                 val savedUri = withContext(Dispatchers.IO) {
@@ -564,7 +567,10 @@ fun VideoWallpapersScreen(
             onCropped = { croppedFile ->
                 cropItem = null
                 appContext.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-                    .edit().putString("video_path", croppedFile.absolutePath).apply()
+                    .edit()
+                    .putString("video_path", croppedFile.absolutePath)
+                    .putString("scale_mode", "zoom")
+                    .apply()
                 try {
                     val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
                         setComponent(android.content.ComponentName(
