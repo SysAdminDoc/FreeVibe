@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -50,8 +49,20 @@ fun VideoCropScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val config = LocalConfiguration.current
-    val screenRatio = config.screenWidthDp.toFloat() / config.screenHeightDp
+
+    // Get real screen pixel dimensions for accurate aspect ratio
+    val realScreenRatio = remember {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val bounds = wm.currentWindowMetrics.bounds
+            bounds.width().toFloat() / bounds.height()
+        } else {
+            val metrics = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            metrics.widthPixels.toFloat() / metrics.heightPixels
+        }
+    }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -193,24 +204,30 @@ fun VideoCropScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Video with constrained pinch/drag
+            // Video viewport constrained to phone's actual screen aspect ratio
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(Color.Black)
-                    .clipToBounds()
-                    .onGloballyPositioned { viewSize = IntSize(it.size.width, it.size.height) }
-                    .pointerInput(minScale) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val newScale = scale * zoom
-                            val newOx = offsetX + pan.x
-                            val newOy = offsetY + pan.y
-                            val (s, ox, oy) = clampTransform(newScale, newOx, newOy)
-                            scale = s; offsetX = ox; offsetY = oy
-                        }
-                    },
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center,
             ) {
+                Box(
+                    modifier = Modifier
+                        .aspectRatio(realScreenRatio)
+                        .fillMaxSize()
+                        .clipToBounds()
+                        .onGloballyPositioned { viewSize = IntSize(it.size.width, it.size.height) }
+                        .pointerInput(minScale) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newScale = scale * zoom
+                                val newOx = offsetX + pan.x
+                                val newOy = offsetY + pan.y
+                                val (s, ox, oy) = clampTransform(newScale, newOx, newOy)
+                                scale = s; offsetX = ox; offsetY = oy
+                            }
+                        },
+                ) {
                 AndroidView(
                     factory = { ctx ->
                         androidx.media3.ui.PlayerView(ctx).apply {
@@ -230,6 +247,7 @@ fun VideoCropScreen(
 
                 // Viewport border
                 Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)))
+                }
             }
 
             Row(

@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Daily wallpaper notification — shows Reddit's most upvoted wallpaper of the day.
- * Checks r/wallpapers + r/Amoledbackgrounds + r/MobileWallpaper sorted by top/day,
+ * Checks r/wallpapers + r/MobileWallpaper sorted by top/day,
  * picks the single highest-upvoted image post. Upvote count provides a real
  * crowd-sourced quality metric.
  */
@@ -44,7 +44,7 @@ class DailyWallpaperWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         return try {
             // Fetch today's top image posts from multiple wallpaper subreddits
-            val subreddits = listOf("wallpapers", "Amoledbackgrounds", "MobileWallpaper")
+            val subreddits = listOf("wallpapers", "MobileWallpaper")
             val topPost = subreddits.flatMap { sub ->
                 try {
                     redditApi.getSubredditPosts(
