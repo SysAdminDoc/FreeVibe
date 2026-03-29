@@ -43,7 +43,7 @@ class CollectionRepository @Inject constructor(
         dao.removeItem(collectionId, wallpaperId)
 
     suspend fun delete(collectionId: Long) {
-        dao.deleteCollectionWithItems(collectionId)
+        dao.deleteCollection(collectionId) // Items auto-deleted via FK CASCADE
     }
 
     suspend fun rename(collectionId: Long, name: String) =

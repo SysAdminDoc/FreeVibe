@@ -54,7 +54,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/4.1.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/4.2.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -199,11 +199,22 @@ object AppModule {
         }
     }
 
+    // v5→6: Add ForeignKey + index on wallpaper_collection_items.collectionId (CASCADE delete)
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collection_items_new` (`collectionId` INTEGER NOT NULL, `wallpaperId` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `source` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `addedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `wallpaperId`), FOREIGN KEY(`collectionId`) REFERENCES `wallpaper_collections`(`collectionId`) ON DELETE CASCADE)")
+            db.execSQL("INSERT OR IGNORE INTO `wallpaper_collection_items_new` SELECT `collectionId`, `wallpaperId`, `thumbnailUrl`, `fullUrl`, `source`, `width`, `height`, `addedAt` FROM `wallpaper_collection_items`")
+            db.execSQL("DROP TABLE `wallpaper_collection_items`")
+            db.execSQL("ALTER TABLE `wallpaper_collection_items_new` RENAME TO `wallpaper_collection_items`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallpaper_collection_items_collectionId` ON `wallpaper_collection_items` (`collectionId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

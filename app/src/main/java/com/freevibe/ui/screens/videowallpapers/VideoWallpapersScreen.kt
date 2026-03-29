@@ -203,20 +203,20 @@ class VideoWallpapersViewModel @Inject constructor(
                             com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
                         } catch (e: Exception) {
                             Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
-                            val req = Request.Builder().url(videoUrl).build()
-                            val resp = okHttpClient.newCall(req).execute()
-                            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                            resp.body?.byteStream()?.use { input ->
-                                cacheFile.outputStream().use { output -> input.copyTo(output) }
+                            okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
+                                if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                                resp.body?.byteStream()?.use { input ->
+                                    cacheFile.outputStream().use { output -> input.copyTo(output) }
+                                }
                             }
                         }
                     } else {
                         // Pexels / direct URL: simple download
-                        val req = Request.Builder().url(videoUrl).build()
-                        val resp = okHttpClient.newCall(req).execute()
-                        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                        resp.body?.byteStream()?.use { input ->
-                            cacheFile.outputStream().use { output -> input.copyTo(output) }
+                        okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
+                            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+                            resp.body?.byteStream()?.use { input ->
+                                cacheFile.outputStream().use { output -> input.copyTo(output) }
+                            }
                         }
                     }
                     Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
@@ -334,7 +334,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             val after = s.redditAfters[sub]
                             val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
                             val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
-                            val req = Request.Builder().url(url).header("User-Agent", "Aura/4.1.0 (Android; Open Source)").build()
+                            val req = Request.Builder().url(url).header("User-Agent", "Aura/4.2.0 (Android; Open Source)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) { resp.close(); continue }
                             val body = resp.use { it.body?.string() } ?: continue
@@ -655,6 +655,21 @@ fun VideoWallpapersScreen(
                             if (shouldLoadMore && !state.isLoadingMore) viewModel.loadMore()
                         }
 
+                        // Only auto-play the single most-visible card to limit memory
+                        val playingId by remember {
+                            androidx.compose.runtime.derivedStateOf {
+                                listState.layoutInfo.visibleItemsInfo
+                                    .filter { it.index < state.items.size }
+                                    .maxByOrNull { info ->
+                                        val viewportH = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
+                                        val itemTop = info.offset.coerceAtLeast(listState.layoutInfo.viewportStartOffset)
+                                        val itemBottom = (info.offset + info.size).coerceAtMost(listState.layoutInfo.viewportEndOffset)
+                                        (itemBottom - itemTop).toFloat() / viewportH
+                                    }
+                                    ?.let { state.items.getOrNull(it.index)?.id }
+                            }
+                        }
+
                         LazyColumn(
                             state = listState,
                             contentPadding = PaddingValues(8.dp),
@@ -662,9 +677,10 @@ fun VideoWallpapersScreen(
                         ) {
                             items(state.items, key = { it.id }) { item ->
                                 val isResolved = item.id in resolvedIds
+                                val shouldPlay = item.id == playingId
                                 VideoCard(
                                     item = item,
-                                    streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
+                                    streamUrl = if (isResolved && shouldPlay) viewModel.getStreamUrl(item.id) else null,
                                     isApplying = state.isApplying == item.id,
                                     onApply = { confirmItem = item },
                                 )
