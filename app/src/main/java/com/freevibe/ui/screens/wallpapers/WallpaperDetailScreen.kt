@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +62,8 @@ fun WallpaperDetailScreen(
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
     val colorPalette by viewModel.colorPalette.collectAsState()
+    val voteCount by viewModel.getVoteCount(wp.id).collectAsState(initial = 0)
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(wp.id) {
         viewModel.extractColors(wp.thumbnailUrl.ifEmpty { wp.fullUrl })
@@ -139,6 +142,49 @@ fun WallpaperDetailScreen(
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
+                }
+            }
+
+            // Right side: vote buttons (always visible)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Upvote
+                IconButton(
+                    onClick = { viewModel.upvote(wp.id) },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.4f)),
+                ) {
+                    Icon(Icons.Default.ThumbUp, "Upvote", tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+                if (voteCount > 0) {
+                    Text(
+                        "$voteCount",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+                // Downvote (skip + hide)
+                IconButton(
+                    onClick = {
+                        viewModel.downvote(wp.id)
+                        // Advance to next wallpaper
+                        if (wallpapers.size > 1 && pagerState.currentPage < wallpapers.size - 1) {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.4f)),
+                ) {
+                    Icon(Icons.Default.ThumbDown, "Skip", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
                 }
             }
 

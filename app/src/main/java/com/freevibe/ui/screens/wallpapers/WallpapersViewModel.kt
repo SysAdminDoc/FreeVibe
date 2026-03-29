@@ -300,8 +300,10 @@ class WallpapersViewModel @Inject constructor(
     }
 
     fun downvote(contentId: String) {
-        voteRepo.hideContent(contentId)
-        _state.update { it.copy(applySuccess = "Hidden") }
+        viewModelScope.launch {
+            voteRepo.downvote(contentId)
+            _state.update { it.copy(applySuccess = if (voteRepo.isAdmin) "Moderated (hidden for all)" else "Hidden") }
+        }
     }
 
     // -- Collections --
