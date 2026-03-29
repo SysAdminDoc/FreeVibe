@@ -355,7 +355,12 @@ class WallpapersViewModel @Inject constructor(
             }
             try {
                 val result = when (s.selectedTab) {
-                    WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(s.currentPage)
+                    WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(
+                        page = s.currentPage,
+                        redditRepo = redditRepo,
+                        pexelsApi = pexelsApi,
+                        pexelsKey = prefs.pexelsApiKey.first(),
+                    )
                     WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(s.currentPage)
                     WallpaperTab.PEXELS -> {
                         val key = prefs.pexelsApiKey.first()
