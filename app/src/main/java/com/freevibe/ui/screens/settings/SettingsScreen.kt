@@ -45,6 +45,16 @@ class SettingsViewModel @Inject constructor(
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
     val autoWpSource = prefs.autoWallpaperSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallhaven")
+    // Enhanced scheduler
+    val schedulerEnabled = prefs.schedulerEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val schedulerInterval = prefs.schedulerIntervalMinutes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 360L)
+    val schedulerSource = prefs.schedulerSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "discover")
+    val schedulerHome = prefs.schedulerHomeEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val schedulerLock = prefs.schedulerLockEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val schedulerShuffle = prefs.schedulerShuffle.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val weatherEffects = prefs.weatherEffectsEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val adaptiveTint = prefs.adaptiveTintEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val darkModeSwitch = prefs.darkModeAutoSwitch.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
@@ -109,6 +119,28 @@ class SettingsViewModel @Inject constructor(
         prefs.setVideoFpsLimit(fps)
     }
 
+    fun setSchedulerEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.setSchedulerEnabled(enabled)
+        if (enabled) {
+            AutoWallpaperWorker.schedule(context, schedulerInterval.value)
+        } else {
+            AutoWallpaperWorker.cancel(context)
+        }
+    }
+
+    fun setSchedulerInterval(minutes: Long) = viewModelScope.launch {
+        prefs.setSchedulerInterval(minutes)
+        if (schedulerEnabled.value) AutoWallpaperWorker.schedule(context, minutes)
+    }
+
+    fun setSchedulerSource(source: String) = viewModelScope.launch { prefs.setSchedulerSource(source) }
+    fun setSchedulerHome(enabled: Boolean) = viewModelScope.launch { prefs.setSchedulerHome(enabled) }
+    fun setSchedulerLock(enabled: Boolean) = viewModelScope.launch { prefs.setSchedulerLock(enabled) }
+    fun setSchedulerShuffle(shuffle: Boolean) = viewModelScope.launch { prefs.setSchedulerShuffle(shuffle) }
+    fun setWeatherEffects(enabled: Boolean) = viewModelScope.launch { prefs.setWeatherEffectsEnabled(enabled) }
+    fun setAdaptiveTint(enabled: Boolean) = viewModelScope.launch { prefs.setAdaptiveTintEnabled(enabled) }
+    fun setDarkModeSwitch(enabled: Boolean) = viewModelScope.launch { prefs.setDarkModeAutoSwitch(enabled) }
+
     fun setVideoWallpaperPath(uri: Uri) {
         val path = try {
             val inputStream = context.contentResolver.openInputStream(uri)
@@ -165,6 +197,15 @@ fun SettingsScreen(
     val previewVolume by viewModel.previewVolume.collectAsState()
     val redditSubs by viewModel.redditSubs.collectAsState()
     val preferredRes by viewModel.preferredRes.collectAsState()
+    val schedulerEnabled by viewModel.schedulerEnabled.collectAsState()
+    val schedulerInterval by viewModel.schedulerInterval.collectAsState()
+    val schedulerSource by viewModel.schedulerSource.collectAsState()
+    val schedulerHome by viewModel.schedulerHome.collectAsState()
+    val schedulerLock by viewModel.schedulerLock.collectAsState()
+    val schedulerShuffle by viewModel.schedulerShuffle.collectAsState()
+    val weatherEffects by viewModel.weatherEffects.collectAsState()
+    val adaptiveTint by viewModel.adaptiveTint.collectAsState()
+    val darkModeSwitch by viewModel.darkModeSwitch.collectAsState()
 
     // Video wallpaper picker
     val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -235,8 +276,14 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.VideoFile,
                 title = "Video wallpaper",
-                subtitle = "Set a video as live wallpaper",
+                subtitle = "Set a video or GIF as live wallpaper",
                 onClick = { videoPickerLauncher.launch("video/*") },
+            )
+            SettingsItem(
+                icon = Icons.Default.Gif,
+                title = "GIF wallpaper",
+                subtitle = "Set an animated GIF as live wallpaper",
+                onClick = { videoPickerLauncher.launch("image/gif") },
             )
             SettingsItem(
                 icon = Icons.Default.PhotoSizeSelectLarge,
@@ -271,6 +318,128 @@ fun SettingsScreen(
                     onClick = onHistoryClick,
                 )
             }
+        }
+
+        // Wallpaper Scheduler
+        SettingsSection("Wallpaper Scheduler") {
+            var showSchedulerInterval by remember { mutableStateOf(false) }
+            var showSchedulerSource by remember { mutableStateOf(false) }
+
+            SettingsToggle(
+                icon = Icons.Default.Schedule,
+                title = "Auto-rotate wallpapers",
+                subtitle = if (schedulerEnabled) "Every ${formatInterval(schedulerInterval)}" else "Disabled",
+                checked = schedulerEnabled,
+                onCheckedChange = { viewModel.setSchedulerEnabled(it) },
+            )
+            if (schedulerEnabled) {
+                SettingsItem(
+                    icon = Icons.Default.Timer,
+                    title = "Rotation interval",
+                    subtitle = formatInterval(schedulerInterval),
+                    onClick = { showSchedulerInterval = true },
+                )
+                SettingsItem(
+                    icon = Icons.Default.Source,
+                    title = "Source",
+                    subtitle = schedulerSource.replaceFirstChar { it.uppercase() },
+                    onClick = { showSchedulerSource = true },
+                )
+                SettingsToggle(
+                    icon = Icons.Default.Home,
+                    title = "Home screen",
+                    subtitle = "Change home screen wallpaper",
+                    checked = schedulerHome,
+                    onCheckedChange = { viewModel.setSchedulerHome(it) },
+                )
+                SettingsToggle(
+                    icon = Icons.Default.Lock,
+                    title = "Lock screen",
+                    subtitle = "Change lock screen wallpaper",
+                    checked = schedulerLock,
+                    onCheckedChange = { viewModel.setSchedulerLock(it) },
+                )
+                SettingsToggle(
+                    icon = Icons.Default.Shuffle,
+                    title = "Shuffle",
+                    subtitle = if (schedulerShuffle) "Random order" else "Sequential order",
+                    checked = schedulerShuffle,
+                    onCheckedChange = { viewModel.setSchedulerShuffle(it) },
+                )
+            }
+
+            if (showSchedulerInterval) {
+                val intervals = listOf(
+                    15L to "15 minutes", 30L to "30 minutes", 60L to "1 hour",
+                    120L to "2 hours", 360L to "6 hours", 720L to "12 hours",
+                    1440L to "24 hours", 2880L to "2 days",
+                )
+                AlertDialog(
+                    onDismissRequest = { showSchedulerInterval = false },
+                    title = { Text("Rotation interval") },
+                    text = {
+                        Column {
+                            intervals.forEach { (min, label) ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = schedulerInterval == min, onClick = { viewModel.setSchedulerInterval(min); showSchedulerInterval = false })
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showSchedulerInterval = false }) { Text("Cancel") } },
+                )
+            }
+
+            if (showSchedulerSource) {
+                val sources = listOf(
+                    "discover" to "Discover (mixed)", "favorites" to "My Favorites",
+                    "wallhaven" to "Wallhaven", "pixabay" to "Pixabay", "reddit" to "Reddit",
+                    "unsplash" to "Unsplash", "bing" to "Bing Daily", "collection" to "Collection",
+                )
+                AlertDialog(
+                    onDismissRequest = { showSchedulerSource = false },
+                    title = { Text("Wallpaper source") },
+                    text = {
+                        Column {
+                            sources.forEach { (key, label) ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = schedulerSource == key, onClick = { viewModel.setSchedulerSource(key); showSchedulerSource = false })
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showSchedulerSource = false }) { Text("Cancel") } },
+                )
+            }
+        }
+
+        // Smart Features
+        SettingsSection("Smart Features") {
+            SettingsToggle(
+                icon = Icons.Default.WbSunny,
+                title = "Time-of-day tint",
+                subtitle = "Warm tones at sunrise/sunset, cool at night",
+                checked = adaptiveTint,
+                onCheckedChange = { viewModel.setAdaptiveTint(it) },
+            )
+            SettingsToggle(
+                icon = Icons.Default.Cloud,
+                title = "Weather effects",
+                subtitle = "Rain, snow, fog overlay based on real weather",
+                checked = weatherEffects,
+                onCheckedChange = { viewModel.setWeatherEffects(it) },
+            )
+            SettingsToggle(
+                icon = Icons.Default.DarkMode,
+                title = "Dark/light auto-switch",
+                subtitle = "Different wallpaper for dark vs light mode",
+                checked = darkModeSwitch,
+                onCheckedChange = { viewModel.setDarkModeSwitch(it) },
+            )
         }
 
         // Sound settings
@@ -683,6 +852,14 @@ private fun SettingsToggle(
             )
         }
     }
+}
+
+private fun formatInterval(minutes: Long): String = when {
+    minutes < 60 -> "$minutes minutes"
+    minutes == 60L -> "1 hour"
+    minutes < 1440 -> "${minutes / 60} hours"
+    minutes == 1440L -> "1 day"
+    else -> "${minutes / 1440} days"
 }
 
 @Composable
