@@ -123,6 +123,9 @@ interface WallpaperCacheDao {
     @Query("SELECT * FROM wallpaper_cache WHERE cacheKey = :cacheKey ORDER BY rowid ASC")
     suspend fun getByCacheKey(cacheKey: String): List<WallpaperCacheEntity>
 
+    @Query("SELECT * FROM wallpaper_cache WHERE id IN (:ids) GROUP BY id")
+    suspend fun getByIds(ids: List<String>): List<WallpaperCacheEntity>
+
     @Query("SELECT cachedAt FROM wallpaper_cache WHERE cacheKey = :cacheKey LIMIT 1")
     suspend fun getCacheTimestamp(cacheKey: String): Long?
 
