@@ -25,11 +25,16 @@ class WallpaperRepository @Inject constructor(
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
 ) {
-    private fun wallhavenPurity(): String = "100" // SFW only — no API key
+    private suspend fun wallhavenApiKey(): String = prefs.wallhavenApiKey.first()
 
-    private suspend fun wallhavenMinRes(): String {
-        return prefs.preferredResolution.first()
+    private suspend fun wallhavenPurity(): String {
+        val key = wallhavenApiKey()
+        val nsfw = prefs.showNsfwContent.first()
+        return if (key.isNotBlank() && nsfw) "111" else "100" // SFW+Sketchy+NSFW with key, SFW only without
     }
+
+    private suspend fun wallhavenMinRes(): String = prefs.preferredResolution.first()
+
     // -- Wallhaven (toplist by default) --
 
     suspend fun getWallhaven(
@@ -39,6 +44,7 @@ class WallpaperRepository @Inject constructor(
         val cacheKey = if (query.isBlank()) "wallhaven_toplist_$page" else "wallhaven_search_${query.hashCode()}_$page"
         return withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
             val sorting = if (query.isBlank()) "toplist" else "relevance"
+            val apiKey = wallhavenApiKey()
             val response = wallhavenApi.search(
                 query = query,
                 sorting = sorting,
@@ -46,7 +52,7 @@ class WallpaperRepository @Inject constructor(
                 purity = wallhavenPurity(),
                 minResolution = wallhavenMinRes(),
                 page = page,
-                apiKey = "",
+                apiKey = apiKey,
             )
             SearchResult(
                 items = response.data.map { it.toWallpaper() },
@@ -60,6 +66,22 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchWallhaven(query: String, page: Int = 1) =
         getWallhaven(query = query, page = page)
 
+    /** Search across all sources simultaneously */
+    suspend fun searchAll(query: String, page: Int = 1): SearchResult<Wallpaper> = supervisorScope {
+        val sources = listOf(
+            async { runCatching { getWallhaven(query = query, page = page) }.getOrNull() },
+            async { runCatching { getPixabay(query = query, page = page) }.getOrNull() },
+        )
+        val results = sources.map { it.await() }
+        val combined = results.filterNotNull().flatMap { it.items }.shuffled()
+        SearchResult(
+            items = combined,
+            totalCount = combined.size * 5,
+            currentPage = page,
+            hasMore = combined.size >= 5 && results.any { it?.hasMore == true },
+        )
+    }
+
     // -- Wallhaven color search --
 
     suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> =
@@ -70,7 +92,7 @@ class WallpaperRepository @Inject constructor(
                 categories = "111",
                 purity = wallhavenPurity(),
                 page = page,
-                apiKey = "",
+                apiKey = wallhavenApiKey(),
                 colors = color,
             )
             SearchResult(
