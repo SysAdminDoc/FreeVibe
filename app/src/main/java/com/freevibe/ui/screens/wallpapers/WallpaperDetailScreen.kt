@@ -45,6 +45,7 @@ fun WallpaperDetailScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit = {},
     onCrop: () -> Unit = {},
+    onFindSimilar: ((String) -> Unit)? = null,
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -285,11 +286,14 @@ fun WallpaperDetailScreen(
                             )
                         }
                         Spacer(Modifier.weight(1f))
-                        // "Find Similar" by dominant color
+                        // "Find Similar" by dominant color — sets pending query and navigates back
                         if (palette.dominantColor != 0) {
                             val hex = String.format("%06x", palette.dominantColor and 0xFFFFFF)
                             Surface(
-                                onClick = { viewModel.searchByColor(hex) },
+                                onClick = {
+                                    if (onFindSimilar != null) onFindSimilar(hex)
+                                    else { viewModel.setPendingColorSearch(hex); onBack() }
+                                },
                                 color = Color.White.copy(alpha = 0.15f),
                                 shape = RoundedCornerShape(12.dp),
                             ) {

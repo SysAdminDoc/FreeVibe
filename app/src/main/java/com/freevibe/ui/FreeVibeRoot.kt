@@ -194,6 +194,16 @@ fun FreeVibeRoot() {
                     onBack = { navController.popBackStack() },
                     onEdit = { navController.navigate(Screen.WallpaperEditor.route) },
                     onCrop = { navController.navigate(Screen.WallpaperCrop.route) },
+                    onFindSimilar = { colorHex ->
+                        selectedContent.pendingColorQuery = colorHex
+                        navController.navigate(Screen.Wallpapers.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
                 )
             }
             composable(Screen.SoundDetail.route) {
