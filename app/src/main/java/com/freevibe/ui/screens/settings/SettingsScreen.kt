@@ -27,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.service.AutoWallpaperWorker
+import com.freevibe.service.DailyWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -419,6 +420,18 @@ fun SettingsScreen(
 
         // Smart Features
         SettingsSection("Smart Features") {
+            var dailyWp by remember { mutableStateOf(false) }
+            SettingsToggle(
+                icon = Icons.Default.Today,
+                title = "Daily wallpaper",
+                subtitle = "Get a daily wallpaper recommendation notification",
+                checked = dailyWp,
+                onCheckedChange = {
+                    dailyWp = it
+                    if (it) DailyWallpaperWorker.schedule(context)
+                    else DailyWallpaperWorker.cancel(context)
+                },
+            )
             SettingsToggle(
                 icon = Icons.Default.WbSunny,
                 title = "Time-of-day tint",

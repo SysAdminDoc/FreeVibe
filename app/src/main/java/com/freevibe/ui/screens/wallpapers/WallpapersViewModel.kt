@@ -316,7 +316,7 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = s.currentPage)
                     WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(s.currentPage)
-                    WallpaperTab.SEARCH -> wallpaperRepo.searchWallhaven(s.query, page = s.currentPage)
+                    WallpaperTab.SEARCH -> wallpaperRepo.searchAll(s.query, page = s.currentPage)
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(s.selectedColor ?: "", s.currentPage)
                 }
                 _state.update {
