@@ -43,14 +43,19 @@ fun WallpaperDetailScreen(
     val state by viewModel.state.collectAsState()
     val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val sharedList by viewModel.sharedWallpaperList.collectAsState()
+    val hiddenIds by viewModel.hiddenIds.collectAsState()
     val wp = wallpaper ?: return
 
-    val wallpapers = remember(sharedList, wp.id) {
-        val others = sharedList.filter { it.id != wp.id }
-        listOf(wp) + others
+    // Filter hidden wallpapers from pager list
+    val wallpapers = remember(sharedList, wp.id, hiddenIds) {
+        val visible = sharedList.filter { it.id !in hiddenIds }
+        val others = visible.filter { it.id != wp.id }
+        if (wp.id in hiddenIds) others else listOf(wp) + others
     }
 
-    val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size.coerceAtLeast(1) }
+    if (wallpapers.isEmpty()) { onBack(); return }
+
+    val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size }
 
     LaunchedEffect(pagerState.settledPage) {
         wallpapers.getOrNull(pagerState.settledPage)?.let {
@@ -170,15 +175,9 @@ fun WallpaperDetailScreen(
                         color = Color.White,
                     )
                 }
-                // Downvote (skip + hide)
+                // Downvote (hide — item removed from pager list automatically)
                 IconButton(
-                    onClick = {
-                        viewModel.downvote(wp.id)
-                        // Advance to next wallpaper
-                        if (wallpapers.size > 1 && pagerState.currentPage < wallpapers.size - 1) {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                        }
-                    },
+                    onClick = { viewModel.downvote(wp.id) },
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
