@@ -186,9 +186,9 @@ class SoundsViewModel @Inject constructor(
             viewModelScope.launch {
                 _state.update { it.copy(playingId = sound.id) }
                 val videoId = sound.id.removePrefix("yt_")
-                Log.d("SoundsVM", "Resolving YouTube preview for: $videoId")
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("SoundsVM", "Resolving YouTube preview for: $videoId")
                 val url = youtubeRepo.getAudioPreviewUrl(videoId)
-                Log.d("SoundsVM", "YouTube preview URL: ${url?.take(80) ?: "NULL"}")
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("SoundsVM", "YouTube preview URL: ${url?.take(80) ?: "NULL"}")
                 if (url != null) {
                     val resolved = sound.copy(previewUrl = url)
                     startPlayback(resolved)
