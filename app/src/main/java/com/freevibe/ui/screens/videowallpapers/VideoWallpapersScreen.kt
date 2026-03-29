@@ -159,7 +159,7 @@ class VideoWallpapersViewModel @Inject constructor(
         "nature loop", "neon lights", "space", "ocean waves",
     )
 
-    private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Amoledbackgrounds", "Cinemagraphs", "perfectloops")
+    private val redditSubs = listOf("livewallpapers", "LiveWallpaper", "Cinemagraphs", "perfectloops")
 
     init { load() }
 
