@@ -5,7 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,11 +15,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,13 +32,12 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.onGloballyPositioned
 import java.io.File
 
-// Shared client avoids creating new connection pools per crop operation
 private val sharedHttpClient by lazy { okhttp3.OkHttpClient() }
 
 /**
- * Video crop editor for converting landscape videos to portrait phone wallpapers.
- * Shows the full video with a draggable 9:16 crop overlay.
- * Uses FFmpeg (bundled via youtubedl-android) to perform the actual crop.
+ * Video crop editor — pinch to zoom, drag to pan.
+ * The visible viewport is exactly what gets cropped and applied as wallpaper.
+ * No forced aspect ratio — whatever you see is what you get.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,7 +50,6 @@ fun VideoCropScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Video player
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(videoUrl))
@@ -63,14 +61,14 @@ fun VideoCropScreen(
     }
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
-    // Crop state
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var videoWidth by remember { mutableIntStateOf(1920) }
     var videoHeight by remember { mutableIntStateOf(1080) }
-    var cropOffsetX by remember { mutableFloatStateOf(0.5f) } // 0-1, center of crop
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
     var isCropping by remember { mutableStateOf(false) }
 
-    // Get video dimensions once ready (poll up to 3s instead of fixed 1s delay)
     LaunchedEffect(Unit) {
         repeat(30) {
             kotlinx.coroutines.delay(100)
@@ -85,10 +83,15 @@ fun VideoCropScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Crop for Phone") },
+                title = { Text("Crop Video") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { scale = 1f; offsetX = 0f; offsetY = 0f }) {
+                        Text("Reset", color = MaterialTheme.colorScheme.primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -100,31 +103,29 @@ fun VideoCropScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // Instructions
             Text(
-                "Drag to position the crop area",
+                "Pinch to zoom, drag to position. What you see is what gets applied.",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Video with crop overlay
+            // Video with pinch/drag
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color.Black)
+                    .clipToBounds()
+                    .onGloballyPositioned { viewSize = IntSize(it.size.width, it.size.height) }
                     .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            if (viewSize.width > 0) {
-                                cropOffsetX = (cropOffsetX + dragAmount.x / viewSize.width)
-                                    .coerceIn(0f, 1f)
-                            }
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(0.5f, 5f)
+                            offsetX += pan.x
+                            offsetY += pan.y
                         }
                     },
             ) {
-                // Full video
                 AndroidView(
                     factory = { ctx ->
                         androidx.media3.ui.PlayerView(ctx).apply {
@@ -134,42 +135,39 @@ fun VideoCropScreen(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .onGloballyPositioned { coords -> viewSize = IntSize(coords.size.width, coords.size.height) },
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offsetX,
+                            translationY = offsetY,
+                        ),
                 )
 
-                // Dim areas outside crop
-                if (viewSize.width > 0 && viewSize.height > 0) {
-                    val cropAspect = 9f / 16f
-                    val cropW = viewSize.height * cropAspect
-                    val maxOffset = (viewSize.width - cropW).coerceAtLeast(0f)
-                    val cropLeft = maxOffset * cropOffsetX
+                // Viewport border
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                )
+            }
 
-                    // Left dim
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .width(with(LocalDensity.current) { cropLeft.toDp() })
-                            .background(Color.Black.copy(alpha = 0.6f))
-                    )
-
-                    // Right dim
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .width(with(LocalDensity.current) { (viewSize.width - cropLeft - cropW).coerceAtLeast(0f).toDp() })
-                            .align(Alignment.CenterEnd)
-                            .background(Color.Black.copy(alpha = 0.6f))
-                    )
-
-                    // Crop border
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .width(with(LocalDensity.current) { cropW.toDp() })
-                            .offset(x = with(LocalDensity.current) { cropLeft.toDp() })
-                            .border(2.dp, MaterialTheme.colorScheme.primary)
-                    )
-                }
+            // Zoom indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "${videoWidth}x${videoHeight}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "%.0f%%".format(scale * 100),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
 
             // Apply button
@@ -178,12 +176,16 @@ fun VideoCropScreen(
                     if (isCropping) return@Button
                     isCropping = true
                     scope.launch {
-                        val result = cropVideo(
+                        val result = cropVideoCustom(
                             context = context,
                             videoUrl = videoUrl,
                             videoWidth = videoWidth,
                             videoHeight = videoHeight,
-                            cropOffsetFraction = cropOffsetX,
+                            viewWidth = viewSize.width,
+                            viewHeight = viewSize.height,
+                            scale = scale,
+                            panX = offsetX,
+                            panY = offsetY,
                         )
                         isCropping = false
                         if (result != null) {
@@ -215,22 +217,24 @@ fun VideoCropScreen(
 }
 
 /**
- * Crop video to 9:16 portrait using FFmpeg (bundled via youtubedl-android).
+ * Crop video based on the user's zoom/pan transform.
+ * Maps the visible viewport back to source video coordinates.
  */
-private suspend fun cropVideo(
+private suspend fun cropVideoCustom(
     context: Context,
     videoUrl: String,
     videoWidth: Int,
     videoHeight: Int,
-    cropOffsetFraction: Float,
+    viewWidth: Int,
+    viewHeight: Int,
+    scale: Float,
+    panX: Float,
+    panY: Float,
 ): File? = withContext(Dispatchers.IO) {
     try {
-        // Download video first if it's a URL
         val inputFile = if (videoUrl.startsWith("http")) {
             val cacheFile = File(context.cacheDir, "crop_input.mp4")
-            val request = okhttp3.Request.Builder().url(videoUrl).build()
-            val response = sharedHttpClient.newCall(request).execute()
-            response.use { resp ->
+            sharedHttpClient.newCall(okhttp3.Request.Builder().url(videoUrl).build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 resp.body?.byteStream()?.use { input ->
                     cacheFile.outputStream().use { output -> input.copyTo(output) }
@@ -243,51 +247,63 @@ private suspend fun cropVideo(
 
         val outputFile = File(context.filesDir, "live_wallpaper.mp4")
 
-        // Calculate crop dimensions: 9:16 portrait from landscape video
-        val targetRatio = 9.0 / 16.0
-        val cropH = videoHeight
-        val cropW = (videoHeight * targetRatio).toInt().coerceAtMost(videoWidth)
-        val maxX = (videoWidth - cropW).coerceAtLeast(0)
-        val cropX = (maxX * cropOffsetFraction).toInt()
-        val cropY = 0
+        // Map viewport back to video coordinates
+        // The video is rendered at (videoW * fitScale * userScale) centered in the view with pan offset
+        val fitScaleX = viewWidth.toFloat() / videoWidth
+        val fitScaleY = viewHeight.toFloat() / videoHeight
+        val fitScale = minOf(fitScaleX, fitScaleY) // fit inside view
+        val totalScale = fitScale * scale
 
-        Log.d("VideoCrop", "Cropping ${videoWidth}x${videoHeight} to ${cropW}x${cropH} at x=$cropX")
+        val renderedW = videoWidth * totalScale
+        val renderedH = videoHeight * totalScale
 
-        // Use yt-dlp's bundled FFmpeg
-        val ffmpegCmd = "-y -i ${inputFile.absolutePath} -vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast -crf 23 -an ${outputFile.absolutePath}"
+        // Video position in view space
+        val videoLeft = (viewWidth - renderedW) / 2f + panX
+        val videoTop = (viewHeight - renderedH) / 2f + panY
+
+        // Visible region in video space (what the viewport shows)
+        val visLeft = ((0f - videoLeft) / totalScale).coerceIn(0f, videoWidth.toFloat())
+        val visTop = ((0f - videoTop) / totalScale).coerceIn(0f, videoHeight.toFloat())
+        val visRight = ((viewWidth - videoLeft) / totalScale).coerceIn(0f, videoWidth.toFloat())
+        val visBottom = ((viewHeight - videoTop) / totalScale).coerceIn(0f, videoHeight.toFloat())
+
+        val cropX = visLeft.toInt().coerceIn(0, videoWidth - 2)
+        val cropY = visTop.toInt().coerceIn(0, videoHeight - 2)
+        val cropW = (visRight - visLeft).toInt().coerceIn(2, videoWidth - cropX)
+        val cropH = (visBottom - visTop).toInt().coerceIn(2, videoHeight - cropY)
+
+        // Make dimensions even (required by h264)
+        val evenW = cropW and 0x7FFFFFFE
+        val evenH = cropH and 0x7FFFFFFE
+
+        Log.d("VideoCrop", "Custom crop: ${videoWidth}x${videoHeight} -> ${evenW}x${evenH} at ($cropX,$cropY) scale=$scale pan=($panX,$panY)")
 
         try {
-            Log.d("VideoCrop", "Cropping via yt-dlp FFmpeg: ${cropW}x${cropH} at x=$cropX")
             val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
             request.addOption("--enable-file-urls")
             request.addOption("-o", outputFile.absolutePath)
             request.addOption("--recode-video", "mp4")
-            request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
+            request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$evenW:$evenH:$cropX:$cropY -c:v libx264 -preset ultrafast")
             request.addOption("--force-overwrites")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             Log.d("VideoCrop", "yt-dlp crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
 
             if (!outputFile.exists() || outputFile.length() == 0L) {
-                Log.w("VideoCrop", "yt-dlp crop produced no output, copying original")
+                Log.w("VideoCrop", "Crop produced no output, copying original")
                 inputFile.copyTo(outputFile, overwrite = true)
             }
         } catch (e: Exception) {
-            Log.e("VideoCrop", "yt-dlp crop failed: ${e.message}, copying original")
+            Log.e("VideoCrop", "Crop failed: ${e.message}, copying original")
             inputFile.copyTo(outputFile, overwrite = true)
         }
 
-        // Clean up cached input file
         if (inputFile.absolutePath.contains("crop_input")) {
             try { inputFile.delete() } catch (_: Exception) {}
         }
 
-        if (outputFile.exists() && outputFile.length() > 0) {
-            Log.d("VideoCrop", "Cropped video: ${outputFile.length() / 1024}KB")
-            outputFile
-        } else null
+        if (outputFile.exists() && outputFile.length() > 0) outputFile else null
     } catch (e: Exception) {
         Log.e("VideoCrop", "Crop failed: ${e.message}", e)
-        // Clean up cached input on failure too
         try { File(context.cacheDir, "crop_input.mp4").delete() } catch (_: Exception) {}
         null
     }
