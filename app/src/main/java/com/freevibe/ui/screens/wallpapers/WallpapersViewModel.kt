@@ -83,7 +83,11 @@ class WallpapersViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     init {
-        // Check for pending category query from CategoriesScreen
+        consumePendingQueries()
+    }
+
+    /** Check for pending queries from detail/category screens. Called on init and on resume. */
+    fun consumePendingQueries() {
         val categoryQuery = selectedContent.pendingCategoryQuery
         val colorQuery = selectedContent.pendingColorQuery
         if (categoryQuery != null) {
@@ -92,7 +96,7 @@ class WallpapersViewModel @Inject constructor(
         } else if (colorQuery != null) {
             selectedContent.pendingColorQuery = null
             searchByColor(colorQuery)
-        } else {
+        } else if (_state.value.wallpapers.isEmpty() && !_state.value.isLoading) {
             loadWallpapers()
         }
     }
