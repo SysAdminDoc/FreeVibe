@@ -18,7 +18,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v4.4.0** (versionCode 34)
+- **v4.5.0** (versionCode 35)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -80,8 +80,10 @@ DataStore: Settings, Onboarding
 
 ## Known Issues (remaining)
 - Fastlane metadata completely outdated
+- YouTube videos still lack dimension metadata (NewPipe extractor doesn't expose w/h for search results), pass through orientation filter
 
 ## Version History
+- v4.5.0: Video wallpaper orientation fixes. VideoWallpaperItem now carries videoWidth/videoHeight from APIs (Pexels, Pixabay, Reddit). Orientation filter now actually filters by dimensions (was keyword-only). Portrait/Landscape badges on video cards. VideoCropScreen uses MediaMetadataRetriever fallback with rotation awareness (was hardcoded 1920x1080). VideoWallpaperService: removed broken applyCenterCrop setFixedSize distortion, now uses screen-sized surface + native SCALE_TO_FIT_WITH_CROPPING. Confirm dialog warns on landscape video and promotes Crop as primary action. resolveScreenSize() uses WindowMetrics API for accurate screen dimensions.
 - v4.4.0: WallpaperCropScreen: response leak fixed, cropped bitmap recycled on apply failure. VideoCropScreen: video dimension polling (was fixed 1s delay, now polls 3s), cache input file cleaned up after crop. SoundDetailScreen: DisposableEffect stops playback on screen exit, SimilarSoundsSection resets on soundId change. WallpaperEditorScreen response leak fixed.
 - v4.3.0: Bitmap memory leaks fixed in WallpaperEditorScreen (intermediate bitmaps recycled between filter stages, old editedBitmap recycled on reset/reapply). VfxParticleRenderer: complete particle state reset on respawn (was missing alpha/size/phase/color), paint style reset at draw start. WeatherUpdateWorker: proper FINE vs COARSE location permission check (was using GPS with only COARSE). FreeVibeApp: crash log trim via RandomAccessFile seek instead of full 500KB readText(). WallpaperEditorScreen: HTTP response leak fixed in image download.
 - v4.2.0: API keys moved to BuildConfig (overridable via local.properties). Signing credentials moved to local.properties. DB v6: ForeignKey CASCADE on wallpaper_collection_items (auto-cleanup on collection delete). VideoWallpapersScreen: single ExoPlayer for most-visible card (was per-card), response leaks fixed in applyVideoWallpaper. WallpapersViewModel: robust image extension detection. CollectionRepository.delete() simplified (FK CASCADE handles items).

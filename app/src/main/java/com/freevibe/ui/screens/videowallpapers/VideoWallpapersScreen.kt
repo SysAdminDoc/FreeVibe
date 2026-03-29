@@ -70,7 +70,13 @@ data class VideoWallpaperItem(
     val uploaderName: String = "",
     val videoId: String = "",
     val popularity: Long = 0, // Views (YouTube), upvotes (Reddit), or 0 (Pexels)
-)
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
+) {
+    val isPortrait: Boolean get() = videoHeight > videoWidth
+    val isLandscape: Boolean get() = videoWidth > videoHeight
+    val hasDimensions: Boolean get() = videoWidth > 0 && videoHeight > 0
+}
 
 enum class OrientationFilter { ALL, PORTRAIT, LANDSCAPE }
 
@@ -325,7 +331,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 .firstOrNull { (it.height ?: 0) <= 1920 }
                                 ?: video.videoFiles.firstOrNull { it.link.endsWith(".mp4") }
                             file?.let {
-                                val item = VideoWallpaperItem(id = "px_${video.id}", title = "by ${video.user.name}", thumbnailUrl = video.image, source = "Pexels", duration = video.duration.toLong(), uploaderName = video.user.name)
+                                val item = VideoWallpaperItem(id = "px_${video.id}", title = "by ${video.user.name}", thumbnailUrl = video.image, source = "Pexels", duration = video.duration.toLong(), uploaderName = video.user.name, videoWidth = video.width, videoHeight = video.height)
                                 streamUrls[item.id] = it.link
                                 _resolvedIds.value = _resolvedIds.value + item.id
                                 item
@@ -345,7 +351,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             val after = s.redditAfters[sub]
                             val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
                             val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
-                            val req = Request.Builder().url(url).header("User-Agent", "Aura/4.4.0 (Android; Open Source)").build()
+                            val req = Request.Builder().url(url).header("User-Agent", "Aura/4.5.0 (Android; Open Source)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) { resp.close(); continue }
                             val body = resp.use { it.body?.string() } ?: continue
@@ -354,25 +360,31 @@ class VideoWallpapersViewModel @Inject constructor(
                             val afterToken = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
                             _state.update { it.copy(redditAfters = it.redditAfters + (sub to afterToken)) }
 
-                            // Extract video posts
+                            // Extract video posts with dimensions
                             val videoRegex = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
                             val titleRegex = Regex(""""title"\s*:\s*"([^"]{2,200})"""")
                             val upsRegex = Regex(""""ups"\s*:\s*(\d+)""")
                             val thumbRegex = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
+                            val widthRegex = Regex(""""reddit_video"\s*:\s*\{[^}]*"width"\s*:\s*(\d+)""")
+                            val heightRegex = Regex(""""reddit_video"\s*:\s*\{[^}]*"height"\s*:\s*(\d+)""")
 
                             val videos = videoRegex.findAll(body).toList()
                             val titles = titleRegex.findAll(body).toList()
                             val upsList = upsRegex.findAll(body).toList()
                             val thumbList = thumbRegex.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
+                            val widths = widthRegex.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
+                            val heights = heightRegex.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
 
                             for (i in videos.indices) {
                                 val videoUrl = videos[i].groupValues[1]
                                 val title = titles.getOrNull(i + 1)?.groupValues?.getOrNull(1) ?: "Video from r/$sub" // +1 to skip subreddit title
                                 val ups = upsList.getOrNull(i)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0
                                 val thumb = thumbList.getOrNull(i) ?: ""
+                                val vw = widths.getOrNull(i) ?: 0
+                                val vh = heights.getOrNull(i) ?: 0
 
                                 if (junkPatterns.none { it.containsMatchIn(title) } && !title.contains("#")) {
-                                    val item = VideoWallpaperItem(id = "rd_${videoUrl.hashCode()}", title = title, thumbnailUrl = thumb, source = "Reddit", uploaderName = "r/$sub", popularity = ups)
+                                    val item = VideoWallpaperItem(id = "rd_${videoUrl.hashCode()}", title = title, thumbnailUrl = thumb, source = "Reddit", uploaderName = "r/$sub", popularity = ups, videoWidth = vw, videoHeight = vh)
                                     items.add(item)
                                     streamUrls[item.id] = videoUrl.trimEnd('/') + "/DASH_720.mp4"
                                     _resolvedIds.value = _resolvedIds.value + item.id
@@ -427,6 +439,8 @@ class VideoWallpapersViewModel @Inject constructor(
                                     duration = video.duration.toLong(),
                                     uploaderName = video.user,
                                     popularity = video.views.toLong(),
+                                    videoWidth = it.width,
+                                    videoHeight = it.height,
                                 )
                                 streamUrls[item.id] = it.url
                                 _resolvedIds.value = _resolvedIds.value + item.id
@@ -442,9 +456,16 @@ class VideoWallpapersViewModel @Inject constructor(
                 newItems.addAll(ytJob.await())
             }
 
+            // Filter by orientation (items with known dimensions are filtered; unknown pass through)
+            val orientedItems = when (s.orientation) {
+                OrientationFilter.ALL -> newItems
+                OrientationFilter.PORTRAIT -> newItems.filter { !it.hasDimensions || it.isPortrait }
+                OrientationFilter.LANDSCAPE -> newItems.filter { !it.hasDimensions || it.isLandscape }
+            }
+
             // Deduplicate against existing items
             val existingIds = s.items.map { it.id }.toSet()
-            val deduped = newItems.filter { it.id !in existingIds }.distinctBy { it.id }
+            val deduped = orientedItems.filter { it.id !in existingIds }.distinctBy { it.id }
 
             // Interleave: Pexels, Pixabay, Reddit, YouTube round-robin
             val px = deduped.filter { it.source == "Pexels" }.toMutableList()
@@ -727,29 +748,54 @@ fun VideoWallpapersScreen(
     // Confirmation dialog with crop option
     confirmItem?.let { item ->
         val streamUrl = viewModel.getStreamUrl(item.id)
+        val needsCrop = item.hasDimensions && item.isLandscape
         AlertDialog(
             onDismissRequest = { confirmItem = null },
             title = { Text("Video Wallpaper") },
             text = {
                 Column {
                     Text(item.title, style = MaterialTheme.typography.bodyMedium)
+                    if (item.hasDimensions) {
+                        Spacer(Modifier.height(2.dp))
+                        Text("${item.videoWidth}x${item.videoHeight} (${if (item.isPortrait) "Portrait" else "Landscape"})", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Spacer(Modifier.height(4.dp))
-                    Text("Choose how to apply this video wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (needsCrop) {
+                        Text("This is a landscape video. Crop recommended to avoid stretching.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    } else {
+                        Text("Choose how to apply this video wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (streamUrl != null) {
-                        OutlinedButton(onClick = {
-                            confirmItem = null
-                            cropItem = item to streamUrl
-                        }) {
-                            Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Crop")
+                        if (needsCrop) {
+                            // Landscape: Crop is primary action
+                            OutlinedButton(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply Anyway") }
+                            Button(onClick = {
+                                confirmItem = null
+                                cropItem = item to streamUrl
+                            }) {
+                                Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Crop")
+                            }
+                        } else {
+                            // Portrait/unknown: Apply is primary, Crop is secondary
+                            OutlinedButton(onClick = {
+                                confirmItem = null
+                                cropItem = item to streamUrl
+                            }) {
+                                Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Crop")
+                            }
+                            Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
                         }
+                    } else {
+                        Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
                     }
-                    Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
                 }
             },
             dismissButton = { TextButton(onClick = { confirmItem = null }) { Text("Cancel") } },
@@ -831,14 +877,30 @@ private fun VideoCard(
                 }
             }
 
-            // Duration badge
-            if (item.duration > 0) {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                ) {
-                    Text("${item.duration}s", Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+            // Duration + orientation badges
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (item.hasDimensions) {
+                    Surface(
+                        color = if (item.isLandscape) Color(0xFFFF6D00).copy(alpha = 0.85f) else Color(0xFF2979FF).copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text(
+                            if (item.isPortrait) "Portrait" else "Landscape",
+                            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall, color = Color.White,
+                        )
+                    }
+                }
+                if (item.duration > 0) {
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text("${item.duration}s", Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
                 }
             }
 
