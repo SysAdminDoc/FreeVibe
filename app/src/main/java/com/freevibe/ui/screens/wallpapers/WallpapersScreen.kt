@@ -284,6 +284,7 @@ fun WallpapersScreen(
                                     when {
                                         state.selectedTab == WallpaperTab.SEARCH -> "No results for \"${state.query}\""
                                         state.selectedTab == WallpaperTab.COLOR -> "No wallpapers with this color"
+                                        state.selectedTab == WallpaperTab.PIXABAY -> "Add your Pixabay API key in Settings"
                                         else -> "No wallpapers found"
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
