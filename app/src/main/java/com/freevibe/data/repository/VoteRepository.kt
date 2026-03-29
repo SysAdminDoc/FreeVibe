@@ -46,7 +46,8 @@ class VoteRepository @Inject constructor(
 
     /** Admin device IDs that can globally moderate content */
     private val adminDeviceIds = setOf(
-        "9eb287ea039a5b73", // SysAdminDoc primary device
+        "9eb287ea039a5b73", // SysAdminDoc (adb)
+        "abed3c69ec4115f2", // SysAdminDoc (app runtime)
     )
 
     val isAdmin: Boolean get() = deviceId in adminDeviceIds
@@ -123,6 +124,7 @@ class VoteRepository @Inject constructor(
 
     /** Regular user: hide locally. Admin: hide globally for everyone. */
     suspend fun downvote(contentId: String) {
+        Log.d("VoteRepo", "downvote($contentId) deviceId=$deviceId isAdmin=$isAdmin")
         if (isAdmin) {
             moderateHide(contentId)
         } else {
@@ -141,12 +143,12 @@ class VoteRepository @Inject constructor(
     /** Admin: globally hide content for ALL users via Firebase */
     suspend fun moderateHide(contentId: String) {
         val safeId = sanitizeKey(contentId)
+        Log.d("VoteRepo", "moderateHide: safeId=$safeId path=moderation/$safeId")
         try {
             moderationRef.child(safeId).setValue(true).await()
-            Log.d("VoteRepo", "Admin moderated: $contentId")
+            Log.d("VoteRepo", "Admin moderated OK: $contentId")
         } catch (e: Exception) {
-            Log.e("VoteRepo", "Moderation failed: ${e.message}")
-            // Fallback to local hide
+            Log.e("VoteRepo", "Moderation FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
             hideLocally(contentId)
         }
     }
