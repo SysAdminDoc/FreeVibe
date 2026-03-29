@@ -374,54 +374,11 @@ private fun SoundsList(
             }
         }
 
-        // Trending sounds horizontal row
-        if (trendingSounds.isNotEmpty()) {
-            item(key = "trending_header") {
-                Text("Popular Sounds", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 4.dp))
-            }
-            item(key = "trending_row") {
-                androidx.compose.foundation.lazy.LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    trendingSounds.forEach { sound ->
-                        item(key = "tr_${sound.id}") {
-                            Card(
-                                modifier = Modifier.width(160.dp).clickable { onSoundClick(sound) },
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        IconButton(onClick = { onPlayClick(sound) }, modifier = Modifier.size(32.dp)) {
-                                            Icon(if (playingId == sound.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text(sound.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text("${String.format("%.1f", sound.duration)}s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                    // Format badge
-                                    if (sound.fileType.isNotEmpty()) {
-                                        Spacer(Modifier.height(4.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                        ) {
-                                            Text(sound.fileType.uppercase(), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
+        // Popular sounds shown as regular cards at the top, then the rest deduped
+        val trendingIds = trendingSounds.map { it.id }.toSet()
+        val combinedSounds = trendingSounds + sounds.filter { it.id !in trendingIds }
 
-        items(sounds, key = { it.id }) { sound ->
+        items(combinedSounds, key = { it.id }) { sound ->
             val isYt = sound.id.startsWith("yt_")
             val isReady = !isYt || sound.id in cachedYtIds
             SoundCard(
