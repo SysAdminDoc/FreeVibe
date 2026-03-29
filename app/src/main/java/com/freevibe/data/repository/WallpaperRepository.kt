@@ -85,8 +85,36 @@ class WallpaperRepository @Inject constructor(
 
     // -- Wallhaven color search --
 
-    suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> =
-        withCacheFallback("wallhaven_color_${color}_$page", ContentSource.WALLHAVEN) {
+    /** Wallhaven only accepts these specific hex colors */
+    private val wallhavenColors = listOf(
+        0x660000, 0x990000, 0xcc0000, 0xcc3333, 0xea4c88,
+        0x993399, 0x663399, 0x333399, 0x0066cc, 0x0099cc,
+        0x66cccc, 0x77cc33, 0x669900, 0x336600, 0x666600,
+        0x999900, 0xcccc33, 0xffff00, 0xffcc33, 0xff9900,
+        0xff6600, 0xcc6633, 0x996633, 0x663300, 0x000000,
+        0x999999, 0xcccccc, 0xffffff, 0x424153,
+    )
+
+    /** Map an arbitrary hex color to the nearest Wallhaven-supported color */
+    private fun nearestWallhavenColor(hex: String): String {
+        val rgb = hex.removePrefix("#").lowercase().let {
+            runCatching { it.toInt(16) }.getOrDefault(0)
+        }
+        val r1 = (rgb shr 16) and 0xFF
+        val g1 = (rgb shr 8) and 0xFF
+        val b1 = rgb and 0xFF
+        val nearest = wallhavenColors.minBy { c ->
+            val r2 = (c shr 16) and 0xFF
+            val g2 = (c shr 8) and 0xFF
+            val b2 = c and 0xFF
+            (r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2)
+        }
+        return String.format("%06x", nearest)
+    }
+
+    suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> {
+        val mapped = nearestWallhavenColor(color)
+        return withCacheFallback("wallhaven_color_${mapped}_$page", ContentSource.WALLHAVEN) {
             val response = wallhavenApi.search(
                 query = "",
                 sorting = "relevance",
@@ -94,7 +122,7 @@ class WallpaperRepository @Inject constructor(
                 purity = wallhavenPurity(),
                 page = page,
                 apiKey = wallhavenApiKey(),
-                colors = color,
+                colors = mapped,
             )
             SearchResult(
                 items = response.data.map { it.toWallpaper() },
@@ -103,6 +131,7 @@ class WallpaperRepository @Inject constructor(
                 hasMore = response.meta.currentPage < response.meta.lastPage,
             )
         }
+    }
 
     // -- Unsplash via Lorem Picsum --
 
