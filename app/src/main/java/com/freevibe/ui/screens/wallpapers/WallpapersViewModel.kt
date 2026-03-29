@@ -14,6 +14,7 @@ import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
+import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.ColorExtractor
 import com.freevibe.service.DualWallpaperService
@@ -62,6 +63,7 @@ class WallpapersViewModel @Inject constructor(
     private val searchHistoryRepo: SearchHistoryRepository,
     private val prefs: PreferencesManager,
     private val colorExtractor: ColorExtractor,
+    val voteRepo: VoteRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
@@ -282,6 +284,25 @@ class WallpapersViewModel @Inject constructor(
 
     fun clearError() = _state.update { it.copy(error = null, errorSource = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
+
+    // -- Voting --
+
+    val hiddenIds = voteRepo.hiddenIds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    fun getVoteCount(contentId: String) = voteRepo.getVoteCount(contentId)
+
+    fun upvote(contentId: String) {
+        viewModelScope.launch {
+            val success = voteRepo.upvote(contentId)
+            if (!success) _state.update { it.copy(applySuccess = "Already voted") }
+        }
+    }
+
+    fun downvote(contentId: String) {
+        voteRepo.hideContent(contentId)
+        _state.update { it.copy(applySuccess = "Hidden") }
+    }
 
     // -- Collections --
 

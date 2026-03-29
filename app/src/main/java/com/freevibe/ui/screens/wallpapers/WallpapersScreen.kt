@@ -75,6 +75,16 @@ fun WallpapersScreen(
     val recentSearches by viewModel.recentSearches.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val dailyPick by viewModel.dailyPick.collectAsState()
+    val hiddenIds by viewModel.hiddenIds.collectAsState()
+
+    // Vote counts for visible wallpapers
+    val voteCounts by remember(state.wallpapers) {
+        if (state.wallpapers.isNotEmpty()) {
+            viewModel.voteRepo.getVoteCounts(state.wallpapers.map { it.id })
+        } else {
+            kotlinx.coroutines.flow.flowOf(emptyMap())
+        }
+    }.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
@@ -320,6 +330,10 @@ fun WallpapersScreen(
                                     viewModel.toggleFavorite(wp)
                                 },
                                 favoriteIds = favoriteIds,
+                                hiddenIds = hiddenIds,
+                                onUpvote = { id -> viewModel.upvote(id) },
+                                onDownvote = { id -> viewModel.downvote(id) },
+                                voteCounts = voteCounts,
                                 onLoadMore = { viewModel.loadMore() },
                             )
                         }
@@ -402,6 +416,10 @@ private fun WallpaperGrid(
     onWallpaperClick: (Wallpaper) -> Unit,
     onLongPress: ((Wallpaper) -> Unit)? = null,
     favoriteIds: Set<String> = emptySet(),
+    hiddenIds: Set<String> = emptySet(),
+    onUpvote: ((String) -> Unit)? = null,
+    onDownvote: ((String) -> Unit)? = null,
+    voteCounts: Map<String, Int> = emptyMap(),
     onLoadMore: () -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -462,14 +480,18 @@ private fun WallpaperGrid(
             }
         }
 
-        items(wallpapers, key = { it.id }) { wallpaper ->
+        val visibleWallpapers = wallpapers.filter { it.id !in hiddenIds }
+        items(visibleWallpapers, key = { it.id }) { wallpaper ->
             val isFav = wallpaper.id in favoriteIds
             WallpaperCard(
                 wallpaper = wallpaper,
                 isFavorite = isFav,
+                voteCount = voteCounts[wallpaper.id] ?: 0,
                 onClick = { onWallpaperClick(wallpaper) },
                 onFavoriteClick = onLongPress?.let { { it(wallpaper) } },
-                onLongPress = onLongPress?.let { { it(wallpaper) } },
+                onLongPress = onDownvote?.let { { it(wallpaper.id) } },
+                onUpvote = onUpvote?.let { { it(wallpaper.id) } },
+                onDownvote = onDownvote?.let { { it(wallpaper.id) } },
             )
         }
 
@@ -496,9 +518,12 @@ private fun WallpaperGrid(
 private fun WallpaperCard(
     wallpaper: Wallpaper,
     isFavorite: Boolean = false,
+    voteCount: Int = 0,
     onClick: () -> Unit,
     onFavoriteClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
+    onUpvote: (() -> Unit)? = null,
+    onDownvote: (() -> Unit)? = null,
 ) {
     val aspectRatio = if (wallpaper.width > 0 && wallpaper.height > 0) {
         wallpaper.width.toFloat() / wallpaper.height.toFloat()
@@ -560,7 +585,30 @@ private fun WallpaperCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SourceBadge(wallpaper.source.name)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SourceBadge(wallpaper.source.name)
+                        if (onUpvote != null) {
+                            Surface(
+                                onClick = onUpvote,
+                                color = Color.White.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Icon(Icons.Default.ThumbUp, null, Modifier.size(12.dp), tint = Color.White.copy(alpha = 0.9f))
+                                    if (voteCount > 0) {
+                                        Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (wallpaper.width > 0 && wallpaper.height > 0) {
                         Text(
                             "${wallpaper.width}x${wallpaper.height}",
