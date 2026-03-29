@@ -66,23 +66,30 @@ class RedditRepository @Inject constructor(
         )
     }
 
-    /** Get combined wallpapers from multiple subreddits */
+    private val redditWallpaperSubs = listOf(
+        "wallpapers", "MobileWallpaper", "wallpaper", "WQHD_Wallpaper",
+        "MinimalWallpaper", "phonewallpapers", "iWallpaper",
+    )
+
+    /** Get combined wallpapers from multiple subreddits with pagination */
     suspend fun getMultiSubreddit(
-        subreddits: List<String> = listOf("wallpapers", "MobileWallpaper"),
+        subreddits: List<String> = redditWallpaperSubs,
     ): SearchResult<Wallpaper> {
-        val allWallpapers = subreddits.flatMap { sub ->
+        val allWallpapers = mutableListOf<Wallpaper>()
+        var anyHasMore = false
+        subreddits.forEach { sub ->
             try {
-                getSubredditWallpapers(sub, sort = "top", timeRange = "week").items
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }.distinctBy { it.id }
+                val result = getSubredditWallpapers(sub, sort = "top", timeRange = "week")
+                allWallpapers.addAll(result.items)
+                if (result.hasMore) anyHasMore = true
+            } catch (_: Exception) {}
+        }
 
         return SearchResult(
-            items = allWallpapers,
-            totalCount = allWallpapers.size,
-            currentPage = 1,
-            hasMore = false,
+            items = allWallpapers.distinctBy { it.id },
+            totalCount = -1,
+            currentPage = 0,
+            hasMore = anyHasMore,
         )
     }
 
