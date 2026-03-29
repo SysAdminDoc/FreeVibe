@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,16 +9,21 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.freevibe"
     compileSdk = 35
 
     signingConfigs {
         create("release") {
-            storeFile = file("../freevibe.jks")
-            storePassword = "freevibe123"
-            keyAlias = "freevibe"
-            keyPassword = "freevibe123"
+            storeFile = file(localProps.getProperty("signing.keystore.path", "../freevibe.jks"))
+            storePassword = localProps.getProperty("signing.keystore.password", "")
+            keyAlias = localProps.getProperty("signing.key.alias", "")
+            keyPassword = localProps.getProperty("signing.key.password", "")
         }
     }
 
@@ -24,12 +31,14 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "4.1.0"
+        versionCode = 32
+        versionName = "4.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // No API keys required — all sources work out of the box
+        // API keys — defaults baked in, user can override via settings
+        buildConfigField("String", "PEXELS_API_KEY", "\"${localProps.getProperty("pexels.api.key", "3AN2RtNJNs6cT4M04xUzN1EuojlmC9283l6l3yPKaYQ7ez0rcFLwvpHP")}\"")
+        buildConfigField("String", "PIXABAY_API_KEY", "\"${localProps.getProperty("pixabay.api.key", "24952670-25430be562a78b27d4746e060")}\"")
     }
 
     buildTypes {

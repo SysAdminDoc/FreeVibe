@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.Flow
         WallpaperCollectionEntity::class,
         WallpaperCollectionItemEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class FreeVibeDatabase : RoomDatabase() {

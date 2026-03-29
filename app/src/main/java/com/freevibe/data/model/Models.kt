@@ -158,6 +158,15 @@ data class WallpaperCollectionEntity(
 @Entity(
     tableName = "wallpaper_collection_items",
     primaryKeys = ["collectionId", "wallpaperId"],
+    foreignKeys = [
+        androidx.room.ForeignKey(
+            entity = WallpaperCollectionEntity::class,
+            parentColumns = ["collectionId"],
+            childColumns = ["collectionId"],
+            onDelete = androidx.room.ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [androidx.room.Index("collectionId")],
 )
 data class WallpaperCollectionItemEntity(
     val collectionId: Long,
