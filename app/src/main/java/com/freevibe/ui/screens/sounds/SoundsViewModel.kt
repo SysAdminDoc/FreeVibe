@@ -13,6 +13,7 @@ import android.util.Log
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.SoundRepository
+import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
@@ -76,6 +77,7 @@ class SoundsViewModel @Inject constructor(
     private val selectedContent: SelectedContentHolder,
     private val searchHistoryRepo: SearchHistoryRepository,
     prefs: PreferencesManager,
+    val voteRepo: VoteRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
@@ -264,6 +266,10 @@ class SoundsViewModel @Inject constructor(
 
     fun clearError() = _state.update { it.copy(error = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
+
+    // -- Voting --
+    fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
+    fun downvote(id: String) { voteRepo.hideContent(id) }
 
     private fun startPlayback(sound: Sound) {
         stopPlayback()

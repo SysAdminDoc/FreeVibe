@@ -45,6 +45,11 @@ fun SoundsScreen(
     val state by viewModel.state.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val cachedYtIds by viewModel.cachedYtIds.collectAsState()
+    val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
+    val voteCounts by remember(state.sounds) {
+        if (state.sounds.isNotEmpty()) viewModel.voteRepo.getVoteCounts(state.sounds.map { it.id })
+        else kotlinx.coroutines.flow.flowOf(emptyMap())
+    }.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf("") }
     var showSearchHistory by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -269,15 +274,18 @@ fun SoundsScreen(
                         onRefresh = { viewModel.refresh() },
                     ) {
                         SoundsList(
-                            sounds = state.sounds,
+                            sounds = state.sounds.filter { it.id !in hiddenIds },
                             playingId = state.playingId,
                             isLoadingMore = state.isLoadingMore,
                             cachedYtIds = cachedYtIds,
+                            voteCounts = voteCounts,
                             onSoundClick = { sound ->
                                 viewModel.selectSound(sound)
                                 onSoundClick(sound)
                             },
                             onPlayClick = { viewModel.togglePlayback(it) },
+                            onUpvote = { viewModel.upvote(it) },
+                            onDownvote = { viewModel.downvote(it) },
                             onLoadMore = { viewModel.loadMore() },
                         )
                     }
@@ -293,8 +301,11 @@ private fun SoundsList(
     playingId: String?,
     isLoadingMore: Boolean,
     cachedYtIds: Set<String> = emptySet(),
+    voteCounts: Map<String, Int> = emptyMap(),
     onSoundClick: (Sound) -> Unit,
     onPlayClick: (Sound) -> Unit,
+    onUpvote: (String) -> Unit = {},
+    onDownvote: (String) -> Unit = {},
     onLoadMore: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -322,8 +333,11 @@ private fun SoundsList(
                 sound = sound,
                 isPlaying = playingId == sound.id,
                 isResolving = isYt && !isReady && playingId == sound.id,
+                voteCount = voteCounts[sound.id] ?: 0,
                 onClick = { onSoundClick(sound) },
                 onPlayClick = { onPlayClick(sound) },
+                onUpvote = { onUpvote(sound.id) },
+                onDownvote = { onDownvote(sound.id) },
             )
         }
 
@@ -342,8 +356,11 @@ private fun SoundCard(
     sound: Sound,
     isPlaying: Boolean,
     isResolving: Boolean = false,
+    voteCount: Int = 0,
     onClick: () -> Unit,
     onPlayClick: () -> Unit,
+    onUpvote: () -> Unit = {},
+    onDownvote: () -> Unit = {},
 ) {
     Surface(
         onClick = onClick,
@@ -426,6 +443,17 @@ private fun SoundCard(
                             color = MaterialTheme.colorScheme.secondary,
                         )
                     }
+                }
+
+                // Vote buttons
+                IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ThumbUp, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        if (voteCount > 0) Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 2.dp))
+                    }
+                }
+                IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.VisibilityOff, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 Icon(

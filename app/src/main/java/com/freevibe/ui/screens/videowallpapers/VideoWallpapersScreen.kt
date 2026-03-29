@@ -41,6 +41,7 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.pexels.PexelsVideo
 import com.freevibe.data.repository.YouTubeRepository
+import com.freevibe.data.repository.VoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
@@ -99,6 +100,7 @@ class VideoWallpapersViewModel @Inject constructor(
     private val pixabayApi: com.freevibe.data.remote.pixabay.PixabayApi,
     private val prefs: PreferencesManager,
     private val okHttpClient: OkHttpClient,
+    val voteRepo: VoteRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VideoWallpapersState())
@@ -168,6 +170,9 @@ class VideoWallpapersViewModel @Inject constructor(
     }
 
     fun getStreamUrl(id: String): String? = streamUrls[id]
+
+    fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
+    fun downvote(id: String) { voteRepo.hideContent(id) }
 
     fun applyVideoWallpaper(item: VideoWallpaperItem) {
         viewModelScope.launch {
@@ -486,6 +491,11 @@ fun VideoWallpapersScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val resolvedIds by viewModel.resolvedIds.collectAsState()
+    val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
+    val voteCounts by remember(state.items) {
+        if (state.items.isNotEmpty()) viewModel.voteRepo.getVoteCounts(state.items.map { it.id })
+        else kotlinx.coroutines.flow.flowOf(emptyMap())
+    }.collectAsState(initial = emptyMap())
     val context = LocalContext.current
     var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
     var cropItem by remember { mutableStateOf<Pair<VideoWallpaperItem, String>?>(null) }
@@ -675,14 +685,18 @@ fun VideoWallpapersScreen(
                             contentPadding = PaddingValues(8.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            items(state.items, key = { it.id }) { item ->
+                            val visibleItems = state.items.filter { it.id !in hiddenIds }
+                            items(visibleItems, key = { it.id }) { item ->
                                 val isResolved = item.id in resolvedIds
                                 val shouldPlay = item.id == playingId
                                 VideoCard(
                                     item = item,
                                     streamUrl = if (isResolved && shouldPlay) viewModel.getStreamUrl(item.id) else null,
                                     isApplying = state.isApplying == item.id,
+                                    voteCount = voteCounts[item.id] ?: 0,
                                     onApply = { confirmItem = item },
+                                    onUpvote = { viewModel.upvote(item.id) },
+                                    onDownvote = { viewModel.downvote(item.id) },
                                 )
                             }
                             if (state.isLoadingMore) {
@@ -755,7 +769,10 @@ private fun VideoCard(
     item: VideoWallpaperItem,
     streamUrl: String?,
     isApplying: Boolean,
+    voteCount: Int = 0,
     onApply: () -> Unit,
+    onUpvote: () -> Unit = {},
+    onDownvote: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -849,7 +866,7 @@ private fun VideoCard(
             }
         }
 
-        // Title + Apply button
+        // Title + Vote + Apply button
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -858,7 +875,17 @@ private fun VideoCard(
                 Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(item.uploaderName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(8.dp))
+            // Vote buttons
+            IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ThumbUp, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    if (voteCount > 0) Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 2.dp))
+                }
+            }
+            IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.VisibilityOff, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(4.dp))
             Button(
                 onClick = onApply,
                 enabled = !isApplying,
