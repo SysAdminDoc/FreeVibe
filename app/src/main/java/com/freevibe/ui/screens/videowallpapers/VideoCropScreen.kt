@@ -293,13 +293,27 @@ fun VideoCropScreen(
 }
 
 /**
- * Find the bundled ffmpeg binary from the native lib directory.
- * youtubedl-android ships it as libffmpeg.so in the APK's native libs.
+ * Get ffmpeg binary path and LD_LIBRARY_PATH from youtubedl-android via reflection.
+ * Returns Pair(ffmpegPath, ldLibraryPath) or null if not available.
  */
-private fun findFfmpegBinary(context: Context): File? {
-    val nativeLibDir = context.applicationInfo.nativeLibraryDir
-    val ffmpeg = File(nativeLibDir, "libffmpeg.so")
-    return if (ffmpeg.exists() && ffmpeg.canExecute()) ffmpeg else null
+private fun getYtdlpFfmpeg(): Pair<File, String>? {
+    return try {
+        val ytdl = com.yausername.youtubedl_android.YoutubeDL.getInstance()
+        val cls = ytdl::class.java
+
+        val ffmpegField = cls.getDeclaredField("ffmpegPath")
+        ffmpegField.isAccessible = true
+        val ffmpegPath = ffmpegField.get(null) as? File ?: return null
+
+        val ldField = cls.getDeclaredField("ENV_LD_LIBRARY_PATH")
+        ldField.isAccessible = true
+        val ldPath = ldField.get(null) as? String ?: ""
+
+        if (ffmpegPath.exists()) Pair(ffmpegPath, ldPath) else null
+    } catch (e: Exception) {
+        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Reflection failed: ${e.message}")
+        null
+    }
 }
 
 private suspend fun cropVideoConstrained(
@@ -363,68 +377,58 @@ private suspend fun cropVideoConstrained(
         // Delete existing output to avoid stale files
         if (outputFile.exists()) outputFile.delete()
 
-        val ffmpeg = findFfmpegBinary(context)
         var cropSucceeded = false
+        val ffmpegInfo = getYtdlpFfmpeg()
 
-        if (ffmpeg != null) {
-            // Primary: call ffmpeg directly for reliable cropping
+        if (ffmpegInfo != null) {
+            val (ffmpegPath, ldLibPath) = ffmpegInfo
             try {
                 val tempOutput = File(context.cacheDir, "crop_output.mp4")
                 if (tempOutput.exists()) tempOutput.delete()
 
                 val cmd = listOf(
-                    ffmpeg.absolutePath,
+                    ffmpegPath.absolutePath,
                     "-y",
                     "-i", inputFile.absolutePath,
                     "-vf", "crop=$cropW:$cropH:$cropX:$cropY",
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
-                    "-c:a", "copy",
+                    "-an",
                     "-movflags", "+faststart",
                     tempOutput.absolutePath,
                 )
                 if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg cmd: ${cmd.joinToString(" ")}")
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "LD_LIBRARY_PATH=$ldLibPath")
 
-                val process = ProcessBuilder(cmd)
+                val env = mutableMapOf<String, String>()
+                if (ldLibPath.isNotEmpty()) env["LD_LIBRARY_PATH"] = ldLibPath
+
+                val pb = ProcessBuilder(cmd)
                     .redirectErrorStream(true)
                     .directory(context.cacheDir)
-                    .start()
+                pb.environment().putAll(env)
+                val process = pb.start()
 
-                // Read all output to prevent pipe deadlock
                 val processOutput = process.inputStream.bufferedReader().readText()
                 val exitCode = process.waitFor()
 
                 if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg exit=$exitCode, output size=${tempOutput.length() / 1024}KB")
-                if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: $processOutput")
+                if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: ${processOutput.takeLast(500)}")
 
                 if (exitCode == 0 && tempOutput.exists() && tempOutput.length() > 1024) {
                     tempOutput.copyTo(outputFile, overwrite = true)
                     tempOutput.delete()
                     cropSucceeded = true
+                    if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "Crop success: ${outputFile.length() / 1024}KB")
                 } else {
                     if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg crop produced invalid output")
                     tempOutput.delete()
                 }
             } catch (e: Exception) {
-                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg direct crop failed: ${e.message}")
+                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg crop failed: ${e.message}")
             }
-        }
-
-        // Fallback: try yt-dlp postprocessor
-        if (!cropSucceeded) {
-            try {
-                val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
-                request.addOption("--enable-file-urls")
-                request.addOption("-o", outputFile.absolutePath)
-                request.addOption("--recode-video", "mp4")
-                request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
-                request.addOption("--force-overwrites")
-                val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "yt-dlp crop: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
-                cropSucceeded = outputFile.exists() && outputFile.length() > 1024
-            } catch (e: Exception) {
-                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "yt-dlp crop failed: ${e.message}")
-            }
+        } else {
+            if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg not available via yt-dlp reflection")
         }
 
         // Clean up input cache
