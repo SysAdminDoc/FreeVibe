@@ -86,6 +86,25 @@ class RedditRepository @Inject constructor(
         )
     }
 
+    /** Get today's single most-upvoted wallpaper across key subreddits */
+    suspend fun getDailyTopWallpaper(): Wallpaper? {
+        val subs = listOf("wallpapers", "Amoledbackgrounds", "MobileWallpaper")
+        return subs.flatMap { sub ->
+            try {
+                redditApi.getSubredditPosts(
+                    subreddit = sub, sort = "top", timeRange = "day", limit = 5,
+                ).data.children.map { it.data }
+            } catch (_: Exception) { emptyList() }
+        }
+            .filter { it.isImage && !it.over18 }
+            .maxByOrNull { it.ups }
+            ?.let { post ->
+                val wp = post.toWallpaper()
+                // Enrich with upvote count in the category field for display
+                wp.copy(category = "${post.ups} upvotes on r/${post.subreddit}", favorites = post.ups)
+            }
+    }
+
     fun resetPagination() {
         afterTokens.clear()
     }
