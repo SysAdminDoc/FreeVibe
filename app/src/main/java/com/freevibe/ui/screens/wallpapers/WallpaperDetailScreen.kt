@@ -44,18 +44,26 @@ fun WallpaperDetailScreen(
     val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val sharedList by viewModel.sharedWallpaperList.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
-    val wp = wallpaper ?: return
+    val initialWp = wallpaper ?: return
 
-    // Filter hidden wallpapers from pager list
-    val wallpapers = remember(sharedList, wp.id, hiddenIds) {
+    // Build stable list once from the initial wallpaper + shared list, only re-filter when hidden changes
+    val initialWpId = remember { initialWp.id }
+    val wallpapers = remember(sharedList, hiddenIds) {
         val visible = sharedList.filter { it.id !in hiddenIds }
-        val others = visible.filter { it.id != wp.id }
-        if (wp.id in hiddenIds) others else listOf(wp) + others
+        // Put initial wallpaper first if still visible
+        val idx = visible.indexOfFirst { it.id == initialWpId }
+        if (idx > 0) {
+            listOf(visible[idx]) + visible.subList(0, idx) + visible.subList(idx + 1, visible.size)
+        } else {
+            visible
+        }
     }
 
     if (wallpapers.isEmpty()) { onBack(); return }
 
+    // Track which wallpaper the pager is currently showing
     val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size }
+    val currentWp = wallpapers.getOrNull(pagerState.currentPage) ?: wallpapers.first()
 
     LaunchedEffect(pagerState.settledPage) {
         wallpapers.getOrNull(pagerState.settledPage)?.let {
@@ -63,6 +71,9 @@ fun WallpaperDetailScreen(
         }
         if (pagerState.settledPage >= wallpapers.size - 3) viewModel.loadMore()
     }
+
+    // Use pager's current wallpaper for UI (not the reactive wp which causes reorder)
+    val wp = currentWp
 
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
