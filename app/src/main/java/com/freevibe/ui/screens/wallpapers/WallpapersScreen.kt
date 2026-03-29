@@ -74,6 +74,7 @@ fun WallpapersScreen(
     val gridColumns by viewModel.gridColumns.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val dailyPick by viewModel.dailyPick.collectAsState()
     var searchQuery by remember { mutableStateOf(state.query) }
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
@@ -306,7 +307,7 @@ fun WallpapersScreen(
                             onRefresh = { viewModel.refresh() },
                         ) {
                             WallpaperGrid(
-                                showDailyPick = state.selectedTab == WallpaperTab.DISCOVER,
+                                dailyPick = if (state.selectedTab == WallpaperTab.DISCOVER) dailyPick else null,
                                 wallpapers = state.wallpapers,
                                 isLoadingMore = state.isLoadingMore,
                                 columns = gridColumns,
@@ -397,7 +398,7 @@ private fun WallpaperGrid(
     wallpapers: List<Wallpaper>,
     isLoadingMore: Boolean,
     columns: Int = 2,
-    showDailyPick: Boolean = false,
+    dailyPick: Wallpaper? = null,
     onWallpaperClick: (Wallpaper) -> Unit,
     onLongPress: ((Wallpaper) -> Unit)? = null,
     favoriteIds: Set<String> = emptySet(),
@@ -424,10 +425,10 @@ private fun WallpaperGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalItemSpacing = 8.dp,
     ) {
-        // Wallpaper of the Day banner
-        if (showDailyPick && wallpapers.isNotEmpty()) {
+        // Wallpaper of the Day banner — Reddit's most upvoted today
+        if (dailyPick != null) {
             item(span = StaggeredGridItemSpan.FullLine, key = "daily_pick") {
-                val pick = wallpapers.first()
+                val pick = dailyPick
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -453,7 +454,7 @@ private fun WallpaperGrid(
                         }
                         Column(Modifier.weight(1f)) {
                             Text("Wallpaper of the Day", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                            Text("${pick.width}x${pick.height} from ${pick.source.name.lowercase()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(pick.category.ifEmpty { "Top voted on Reddit" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     }

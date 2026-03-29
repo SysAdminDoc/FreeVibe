@@ -82,8 +82,21 @@ class WallpapersViewModel @Inject constructor(
     val favoriteIds = favoritesRepo.allIds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    /** Reddit's most upvoted wallpaper today — crowd-sourced quality metric */
+    private val _dailyPick = MutableStateFlow<Wallpaper?>(null)
+    val dailyPick = _dailyPick.asStateFlow()
+
     init {
         consumePendingQueries()
+        fetchDailyPick()
+    }
+
+    private fun fetchDailyPick() {
+        viewModelScope.launch {
+            try {
+                _dailyPick.value = redditRepo.getDailyTopWallpaper()
+            } catch (_: Exception) {}
+        }
     }
 
     /** Check for pending queries from detail/category screens. Called on init and on resume. */
