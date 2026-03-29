@@ -70,12 +70,15 @@ fun VideoCropScreen(
     var cropOffsetX by remember { mutableFloatStateOf(0.5f) } // 0-1, center of crop
     var isCropping by remember { mutableStateOf(false) }
 
-    // Get video dimensions once ready
+    // Get video dimensions once ready (poll up to 3s instead of fixed 1s delay)
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(1000)
-        exoPlayer.videoFormat?.let { format ->
-            videoWidth = format.width
-            videoHeight = format.height
+        repeat(30) {
+            kotlinx.coroutines.delay(100)
+            exoPlayer.videoFormat?.let { format ->
+                videoWidth = format.width
+                videoHeight = format.height
+                return@LaunchedEffect
+            }
         }
     }
 
@@ -273,12 +276,19 @@ private suspend fun cropVideo(
             inputFile.copyTo(outputFile, overwrite = true)
         }
 
+        // Clean up cached input file
+        if (inputFile.absolutePath.contains("crop_input")) {
+            try { inputFile.delete() } catch (_: Exception) {}
+        }
+
         if (outputFile.exists() && outputFile.length() > 0) {
             Log.d("VideoCrop", "Cropped video: ${outputFile.length() / 1024}KB")
             outputFile
         } else null
     } catch (e: Exception) {
         Log.e("VideoCrop", "Crop failed: ${e.message}", e)
+        // Clean up cached input on failure too
+        try { File(context.cacheDir, "crop_input.mp4").delete() } catch (_: Exception) {}
         null
     }
 }
