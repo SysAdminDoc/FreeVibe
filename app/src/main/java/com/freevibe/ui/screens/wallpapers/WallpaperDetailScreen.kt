@@ -61,14 +61,11 @@ fun WallpaperDetailScreen(
 
     val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size.coerceAtLeast(1) }
 
-    // Update selected wallpaper when page changes (don't pass list — already shared)
+    // Update selected wallpaper when page changes + load more when near end
     LaunchedEffect(pagerState.settledPage) {
         wallpapers.getOrNull(pagerState.settledPage)?.let {
             viewModel.selectWallpaperOnly(it)
         }
-    }
-    // Load more when near end
-    LaunchedEffect(pagerState.settledPage) {
         if (pagerState.settledPage >= wallpapers.size - 3) viewModel.loadMore()
     }
 
