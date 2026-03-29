@@ -685,6 +685,33 @@ fun VideoWallpapersScreen(
             }
         }
 
+        // Video category quick-search chips
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val categories = listOf(
+                "Nature" to "nature calm loop",
+                "Abstract" to "abstract particles loop",
+                "Space" to "space galaxy stars loop",
+                "Neon" to "neon lights glow loop",
+                "Ocean" to "ocean waves water loop",
+                "Fire" to "fire flames embers loop",
+                "Cinemagraph" to "cinemagraph subtle motion",
+                "Sci-Fi" to "sci-fi futuristic loop",
+                "Rain" to "rain drops window loop",
+                "Clouds" to "clouds sky timelapse loop",
+            )
+            categories.forEach { (label, query) ->
+                item {
+                    AssistChip(
+                        onClick = { viewModel.search(query) },
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+        }
+
         Box(Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.ImeAction
@@ -86,6 +87,7 @@ fun WallpapersScreen(
         }
     }.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf(state.query) }
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     var showColorPicker by remember { mutableStateOf(false) }
@@ -354,6 +356,8 @@ fun WallpapersScreen(
                                 onDownvote = { id -> viewModel.downvote(id) },
                                 voteCounts = voteCounts,
                                 onLoadMore = { viewModel.loadMore() },
+                                onSearch = { query -> viewModel.search(query) },
+                                isDiscoverTab = state.selectedTab == WallpaperTab.DISCOVER,
                             )
                         }
                     }
@@ -361,17 +365,31 @@ fun WallpapersScreen(
             }
         }
 
-        // Random wallpaper FAB
-        if (state.wallpapers.isNotEmpty() && !state.isLoading) {
+        // FABs: Shuffle + Match My Theme
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            // Match My Theme
+            if (state.selectedTab == WallpaperTab.DISCOVER) {
+                SmallFloatingActionButton(
+                    onClick = { viewModel.matchMyTheme(context) },
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ) {
+                    Icon(Icons.Default.Palette, contentDescription = "Match my theme")
+                }
+            }
+            // Surprise Me — random wallpapers from Wallhaven
             SmallFloatingActionButton(
-                onClick = { viewModel.applyRandom() },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
+                onClick = { viewModel.loadRandom() },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.primary,
             ) {
-                Icon(Icons.Default.Shuffle, contentDescription = "Random wallpaper")
+                Icon(Icons.Default.Shuffle, contentDescription = "Surprise me")
             }
         }
     }
@@ -440,6 +458,8 @@ private fun WallpaperGrid(
     onDownvote: ((String) -> Unit)? = null,
     voteCounts: Map<String, Int> = emptyMap(),
     onLoadMore: () -> Unit,
+    onSearch: ((String) -> Unit)? = null,
+    isDiscoverTab: Boolean = false,
 ) {
     val gridState = rememberLazyStaggeredGridState()
 
@@ -524,6 +544,74 @@ private fun WallpaperGrid(
                             tint = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).size(20.dp),
                         )
+                    }
+                }
+            }
+        }
+
+        // Curated collections carousel (Discover tab only)
+        if (isDiscoverTab) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "curated_collections") {
+                Column {
+                    Text(
+                        "Explore Collections",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        val collections = listOf(
+                            "AMOLED Black" to "amoled black dark",
+                            "Minimal" to "minimal clean simple",
+                            "Nature 4K" to "nature landscape 4k",
+                            "Cyberpunk" to "cyberpunk neon city",
+                            "Space" to "space galaxy nebula",
+                            "Abstract" to "abstract colorful gradient",
+                            "Anime" to "anime art illustration",
+                            "Ocean" to "ocean sea waves beach",
+                            "Mountains" to "mountain peak scenic",
+                            "Urban" to "city skyline urban night",
+                        )
+                        collections.forEach { (name, query) ->
+                            item {
+                                ElevatedFilterChip(
+                                    selected = false,
+                                    onClick = { onSearch?.invoke(query) },
+                                    label = { Text(name) },
+                                    leadingIcon = { Icon(Icons.Default.Collections, null, Modifier.size(16.dp)) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Trending searches
+            item(span = StaggeredGridItemSpan.FullLine, key = "trending_searches") {
+                Column {
+                    Text(
+                        "Trending",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val trending = listOf(
+                            "nature 4k", "dark aesthetic", "gradient", "retro wave",
+                            "studio ghibli", "moody forest", "neon lights", "sakura",
+                            "sunset golden hour", "geometric art", "lofi vibes",
+                        )
+                        trending.forEach { term ->
+                            item {
+                                AssistChip(
+                                    onClick = { onSearch?.invoke(term) },
+                                    label = { Text(term) },
+                                    leadingIcon = { Icon(Icons.Default.Whatshot, null, Modifier.size(16.dp)) },
+                                )
+                            }
+                        }
                     }
                 }
             }
