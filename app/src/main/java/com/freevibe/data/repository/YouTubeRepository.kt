@@ -19,15 +19,24 @@ import javax.inject.Singleton
 @Singleton
 class YouTubeRepository @Inject constructor() {
 
-    // Cache resolved stream URLs to avoid re-extracting on replay (bounded LRU, synchronized)
+    // Cache resolved stream URLs with TTL to avoid stale URLs (YouTube tokens expire)
+    private data class CachedStream(val url: String, val cachedAt: Long)
     private val streamCache = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<String, String>(32, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 50
+        object : LinkedHashMap<String, CachedStream>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedStream>?) = size > 50
         }
     )
+    private val STREAM_TTL_MS = 3 * 60 * 60 * 1000L // 3 hours
 
-    /** Check if a video's audio URL is already cached (ready for instant playback) */
-    fun isCached(videoId: String): Boolean = streamCache.containsKey(videoId)
+    /** Check if a video's audio URL is cached and fresh */
+    fun isCached(videoId: String): Boolean {
+        val cached = streamCache[videoId] ?: return false
+        if (System.currentTimeMillis() - cached.cachedAt > STREAM_TTL_MS) {
+            streamCache.remove(videoId)
+            return false
+        }
+        return true
+    }
 
     init {
         try {
@@ -82,7 +91,10 @@ class YouTubeRepository @Inject constructor() {
 
     /** Fast preview URL — checks cache first, then extracts via yt-dlp with worstaudio for speed */
     suspend fun getAudioPreviewUrl(videoId: String): String? = withContext(Dispatchers.IO) {
-        streamCache[videoId]?.let { return@withContext it }
+        streamCache[videoId]?.let { cached ->
+            if (System.currentTimeMillis() - cached.cachedAt <= STREAM_TTL_MS) return@withContext cached.url
+            streamCache.remove(videoId)
+        }
         try {
             val url = "https://www.youtube.com/watch?v=$videoId"
             Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
@@ -92,7 +104,7 @@ class YouTubeRepository @Inject constructor() {
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
             Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
-            streamUrl?.also { streamCache[videoId] = it }
+            streamUrl?.also { streamCache[videoId] = CachedStream(it, System.currentTimeMillis()) }
         } catch (e: Exception) {
             Log.e("YouTubeRepo", "getAudioPreviewUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null

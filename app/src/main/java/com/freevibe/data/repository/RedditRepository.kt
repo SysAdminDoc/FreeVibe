@@ -11,7 +11,8 @@ import javax.inject.Singleton
 class RedditRepository @Inject constructor(
     private val redditApi: RedditApi,
 ) {
-    private var afterToken: String? = null
+    // Per-subreddit pagination tokens (thread-safe)
+    private val afterTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     suspend fun getSubredditWallpapers(
         subreddit: String = "wallpapers",
@@ -23,9 +24,10 @@ class RedditRepository @Inject constructor(
             subreddit = subreddit,
             sort = sort,
             timeRange = timeRange,
-            after = after ?: afterToken,
+            after = after ?: afterTokens[subreddit],
         )
-        afterToken = response.data.after
+        val nextAfter = response.data.after
+        if (nextAfter != null) afterTokens[subreddit] = nextAfter else afterTokens.remove(subreddit)
 
         val wallpapers = response.data.children
             .map { it.data }
@@ -85,6 +87,6 @@ class RedditRepository @Inject constructor(
     }
 
     fun resetPagination() {
-        afterToken = null
+        afterTokens.clear()
     }
 }

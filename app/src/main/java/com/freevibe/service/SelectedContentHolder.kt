@@ -27,12 +27,16 @@ class SelectedContentHolder @Inject constructor() {
     val selectedSound: StateFlow<Sound?> = _selectedSound.asStateFlow()
 
     /** Pending category search query, consumed by WallpapersViewModel */
-    @Volatile
-    var pendingCategoryQuery: String? = null
+    private val _pendingCategoryQuery = MutableStateFlow<String?>(null)
+    var pendingCategoryQuery: String?
+        get() = _pendingCategoryQuery.value
+        set(value) { _pendingCategoryQuery.value = value }
 
     /** Pending color search, consumed by WallpapersViewModel */
-    @Volatile
-    var pendingColorQuery: String? = null
+    private val _pendingColorQuery = MutableStateFlow<String?>(null)
+    var pendingColorQuery: String?
+        get() = _pendingColorQuery.value
+        set(value) { _pendingColorQuery.value = value }
 
     fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper> = emptyList()) {
         _selectedWallpaper.value = wallpaper
