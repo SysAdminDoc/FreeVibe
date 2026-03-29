@@ -112,6 +112,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setPreferredResolution(res)
     }
 
+    fun setWallhavenKey(key: String) = viewModelScope.launch {
+        prefs.setWallhavenKey(key)
+    }
+
     fun setPexelsKey(key: String) = viewModelScope.launch {
         prefs.setPexelsKey(key)
     }
@@ -527,6 +531,28 @@ fun SettingsScreen(
 
         // API Keys
         SettingsSection("API Keys") {
+            var showWallhavenKey by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Key,
+                title = "Wallhaven API Key",
+                subtitle = "Optional: higher limits + NSFW (wallhaven.cc/settings)",
+                onClick = { showWallhavenKey = true },
+            )
+            if (showWallhavenKey) {
+                var keyText by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showWallhavenKey = false },
+                    title = { Text("Wallhaven API Key") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Get your key at wallhaven.cc/settings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(value = keyText, onValueChange = { keyText = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Paste API key") }, singleLine = true)
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { viewModel.setWallhavenKey(keyText.trim()); showWallhavenKey = false }) { Text("Save") } },
+                    dismissButton = { TextButton(onClick = { showWallhavenKey = false }) { Text("Cancel") } },
+                )
+            }
             var showPexelsKey by remember { mutableStateOf(false) }
             SettingsItem(
                 icon = Icons.Default.Key,
