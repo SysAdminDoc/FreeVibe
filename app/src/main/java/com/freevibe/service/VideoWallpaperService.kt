@@ -111,26 +111,38 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         private fun initializePlayer(holder: SurfaceHolder) {
-            val path = getVideoPath() ?: return
+            val path = getVideoPath()
+            android.util.Log.d("VideoWPService", "initializePlayer path=$path")
+            if (path == null) return
             val file = java.io.File(path)
-            if (!file.exists()) return
+            if (!file.exists()) {
+                android.util.Log.e("VideoWPService", "File does not exist: $path")
+                return
+            }
+            android.util.Log.d("VideoWPService", "File exists: ${file.length() / 1024}KB")
             try {
                 releasePlayer()
                 lastModified = file.lastModified()
                 val speed = getPlaybackSpeed()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
-                    setDisplay(holder)
+                    // WallpaperService surfaces don't support setKeepScreenOn —
+                    // MediaPlayer.setDisplay() calls it internally, so we wrap the holder
+                    val safeHolder = object : SurfaceHolder by holder {
+                        override fun setKeepScreenOn(screenOn: Boolean) {} // no-op
+                    }
+                    setDisplay(safeHolder)
                     isLooping = true
                     setVolume(0f, 0f)
                     prepare()
-                    // Apply playback speed
                     try {
                         playbackParams = playbackParams.setSpeed(speed)
-                    } catch (_: Exception) {} // Some devices don't support speed change
+                    } catch (_: Exception) {}
                     start()
                 }
-            } catch (_: Exception) {
+                android.util.Log.d("VideoWPService", "Player started OK")
+            } catch (e: Exception) {
+                android.util.Log.e("VideoWPService", "Player init failed: ${e.message}", e)
                 releasePlayer()
             }
         }
