@@ -30,6 +30,10 @@ class SelectedContentHolder @Inject constructor() {
     @Volatile
     var pendingCategoryQuery: String? = null
 
+    /** Pending color search, consumed by WallpapersViewModel */
+    @Volatile
+    var pendingColorQuery: String? = null
+
     fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper> = emptyList()) {
         _selectedWallpaper.value = wallpaper
         if (wallpapers.isNotEmpty()) _wallpaperList.value = wallpapers

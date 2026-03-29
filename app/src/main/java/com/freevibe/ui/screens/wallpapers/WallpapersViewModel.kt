@@ -85,9 +85,13 @@ class WallpapersViewModel @Inject constructor(
     init {
         // Check for pending category query from CategoriesScreen
         val categoryQuery = selectedContent.pendingCategoryQuery
+        val colorQuery = selectedContent.pendingColorQuery
         if (categoryQuery != null) {
             selectedContent.pendingCategoryQuery = null
             search(categoryQuery)
+        } else if (colorQuery != null) {
+            selectedContent.pendingColorQuery = null
+            searchByColor(colorQuery)
         } else {
             loadWallpapers()
         }
@@ -161,6 +165,11 @@ class WallpapersViewModel @Inject constructor(
 
     fun selectWallpaper(wallpaper: Wallpaper) {
         selectedContent.selectWallpaper(wallpaper, _state.value.wallpapers)
+    }
+
+    /** Set pending color search for the wallpapers list screen to pick up on return */
+    fun setPendingColorSearch(hex: String) {
+        selectedContent.pendingColorQuery = hex
     }
 
     /** Update selected wallpaper without overwriting the shared list (used by detail pager) */
