@@ -71,6 +71,7 @@ class WallpaperRepository @Inject constructor(
         val sources = listOf(
             async { runCatching { getWallhaven(query = query, page = page) }.getOrNull() },
             async { runCatching { getPixabay(query = query, page = page) }.getOrNull() },
+            async { runCatching { getPicsum(page = page) }.getOrNull() }, // Picsum doesn't support search, just adds variety
         )
         val results = sources.map { it.await() }
         val combined = results.filterNotNull().flatMap { it.items }.shuffled()

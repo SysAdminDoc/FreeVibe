@@ -20,6 +20,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
@@ -147,7 +148,7 @@ private fun WidgetContent(
                 )
             }
 
-            // Home/Lock quick actions for wider widgets
+            // Home/Lock/Skip quick actions for wider widgets
             if (size.width >= 200.dp) {
                 Spacer(GlanceModifier.height(6.dp))
                 Row(
@@ -155,10 +156,19 @@ private fun WidgetContent(
                     horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                 ) {
                     QuickActionBtn("Home", GlanceModifier.defaultWeight(), actionRunCallback<ApplyHomeAction>())
-                    Spacer(GlanceModifier.width(6.dp))
+                    Spacer(GlanceModifier.width(4.dp))
                     QuickActionBtn("Lock", GlanceModifier.defaultWeight(), actionRunCallback<ApplyLockAction>())
-                    Spacer(GlanceModifier.width(6.dp))
+                    Spacer(GlanceModifier.width(4.dp))
                     QuickActionBtn("Faves", GlanceModifier.defaultWeight(), actionRunCallback<OpenFavoritesAction>(), Tertiary)
+                }
+                Spacer(GlanceModifier.height(4.dp))
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                ) {
+                    QuickActionBtn("Pixabay", GlanceModifier.defaultWeight(), actionRunCallback<ShufflePixabayAction>(), ColorProvider(Color(0xFF00AB6C)))
+                    Spacer(GlanceModifier.width(4.dp))
+                    QuickActionBtn("Reddit", GlanceModifier.defaultWeight(), actionRunCallback<ShuffleRedditAction>(), ColorProvider(Color(0xFFFF4500)))
                 }
             }
 
@@ -203,6 +213,7 @@ private fun QuickActionBtn(
 @InstallIn(SingletonComponent::class)
 interface WidgetEntryPoint {
     fun wallpaperRepository(): WallpaperRepository
+    fun redditRepository(): RedditRepository
     fun wallpaperApplier(): WallpaperApplier
     fun wallpaperHistoryManager(): WallpaperHistoryManager
 }
@@ -257,11 +268,49 @@ class OpenFavoritesAction : ActionCallback {
     }
 }
 
+class ShufflePixabayAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        applyFromSource(context, "pixabay", WallpaperTarget.BOTH)
+        updateWidgetStats(context)
+        FreeVibeWidget().update(context, glanceId)
+    }
+}
+
+class ShuffleRedditAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        applyFromSource(context, "reddit", WallpaperTarget.BOTH)
+        updateWidgetStats(context)
+        FreeVibeWidget().update(context, glanceId)
+    }
+}
+
 class OpenAppAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
+        }
+    }
+}
+
+private suspend fun applyFromSource(context: Context, source: String, target: WallpaperTarget) {
+    withContext(Dispatchers.IO) {
+        try {
+            val ep = getEntryPoint(context)
+            val items = when (source) {
+                "pixabay" -> ep.wallpaperRepository().getPixabay(page = (1..5).random()).items
+                "reddit" -> ep.redditRepository().getMultiSubreddit().items
+                else -> ep.wallpaperRepository().getDiscover(page = 1).items
+            }
+            val wp = items.randomOrNull()
+            if (wp == null) {
+                withContext(Dispatchers.Main) { Toast.makeText(context, "No wallpapers available", Toast.LENGTH_SHORT).show() }
+                return@withContext
+            }
+            ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target)
+            ep.wallpaperHistoryManager().record(wp, target)
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show() }
         }
     }
 }
