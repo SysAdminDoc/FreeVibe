@@ -22,6 +22,7 @@ class WeatherWallpaperService : WallpaperService() {
 
     inner class WeatherEngine : Engine() {
         private var renderer: WeatherParticleRenderer? = null
+        private var vfxRenderer: VfxParticleRenderer? = null
         private var wallpaperBitmap: Bitmap? = null
         private var scaledBitmap: Bitmap? = null
         private val handler = Handler(Looper.getMainLooper())
@@ -38,8 +39,10 @@ class WeatherWallpaperService : WallpaperService() {
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
             renderer = WeatherParticleRenderer(width, height)
+            vfxRenderer = VfxParticleRenderer(width, height)
             scaledBitmap = wallpaperBitmap?.let { scaleBitmap(it, width, height) }
             loadWeatherFromPrefs()
+            loadVfxFromPrefs()
             if (visible) scheduleDraw()
         }
 
@@ -48,6 +51,7 @@ class WeatherWallpaperService : WallpaperService() {
             this.visible = visible
             if (visible) {
                 loadWeatherFromPrefs()
+                loadVfxFromPrefs()
                 scheduleDraw()
             } else {
                 handler.removeCallbacks(drawRunner)
@@ -76,6 +80,16 @@ class WeatherWallpaperService : WallpaperService() {
                     wallpaperBitmap = BitmapFactory.decodeFile(path)
                 }
             } catch (_: Exception) {}
+        }
+
+        private fun loadVfxFromPrefs() {
+            val prefs = getSharedPreferences("freevibe_weather_wp", MODE_PRIVATE)
+            val effectName = prefs.getString("vfx_effect", "NONE") ?: "NONE"
+            try {
+                vfxRenderer?.setEffect(VfxParticleRenderer.VfxEffect.valueOf(effectName))
+            } catch (_: Exception) {
+                vfxRenderer?.setEffect(VfxParticleRenderer.VfxEffect.NONE)
+            }
         }
 
         private fun loadWeatherFromPrefs() {
@@ -111,6 +125,10 @@ class WeatherWallpaperService : WallpaperService() {
                     // Update and draw weather particles
                     renderer?.update()
                     renderer?.draw(canvas)
+
+                    // Draw VFX overlay (fireflies, sakura, etc.)
+                    vfxRenderer?.update()
+                    vfxRenderer?.draw(canvas)
                 }
             } catch (_: Exception) {
             } finally {

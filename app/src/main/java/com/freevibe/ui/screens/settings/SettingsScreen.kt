@@ -1,6 +1,7 @@
 package com.freevibe.ui.screens.settings
 
 import android.app.WallpaperManager
+import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -28,6 +29,7 @@ import androidx.lifecycle.viewModelScope
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.DailyWallpaperWorker
+import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -448,7 +450,11 @@ fun SettingsScreen(
                 title = "Weather effects",
                 subtitle = "Rain, snow, fog overlay based on real weather",
                 checked = weatherEffects,
-                onCheckedChange = { viewModel.setWeatherEffects(it) },
+                onCheckedChange = {
+                    viewModel.setWeatherEffects(it)
+                    if (it) WeatherUpdateWorker.schedule(context)
+                    else WeatherUpdateWorker.cancel(context)
+                },
             )
             SettingsToggle(
                 icon = Icons.Default.DarkMode,
@@ -457,6 +463,42 @@ fun SettingsScreen(
                 checked = darkModeSwitch,
                 onCheckedChange = { viewModel.setDarkModeSwitch(it) },
             )
+            // VFX particle overlays
+            var showVfxPicker by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.AutoFixHigh,
+                title = "Decorative effects",
+                subtitle = "Fireflies, sakura, embers, bubbles, leaves, sparkles",
+                onClick = { showVfxPicker = true },
+            )
+            if (showVfxPicker) {
+                val effects = listOf(
+                    "NONE" to "None", "FIREFLIES" to "Fireflies",
+                    "SAKURA" to "Sakura petals", "EMBERS" to "Fire embers",
+                    "BUBBLES" to "Bubbles", "LEAVES" to "Autumn leaves",
+                    "SPARKLES" to "Sparkles",
+                )
+                AlertDialog(
+                    onDismissRequest = { showVfxPicker = false },
+                    title = { Text("Decorative overlay") },
+                    text = {
+                        Column {
+                            effects.forEach { (key, label) ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = false, onClick = {
+                                        context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+                                            .edit().putString("vfx_effect", key).apply()
+                                        showVfxPicker = false
+                                    })
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showVfxPicker = false }) { Text("Cancel") } },
+                )
+            }
         }
 
         // Sound settings
