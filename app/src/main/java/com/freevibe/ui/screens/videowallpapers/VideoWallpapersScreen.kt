@@ -665,27 +665,9 @@ fun VideoWallpapersScreen(
                             if (shouldLoadMore && !state.isLoadingMore) viewModel.loadMore()
                         }
 
-                        // Filter + sort outside LazyColumn for stable list
-                        val visibleItems = remember(state.items, hiddenIds, voteCounts) {
-                            state.items
-                                .filter { it.id !in hiddenIds }
-                                .sortedByDescending { voteCounts[it.id] ?: 0 }
-                        }
-
-                        // Only auto-play the single most-visible card
-                        val playingId by remember {
-                            androidx.compose.runtime.derivedStateOf {
-                                listState.layoutInfo.visibleItemsInfo
-                                    .filter { it.index < visibleItems.size }
-                                    .maxByOrNull { info ->
-                                        val viewportH = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
-                                        val itemTop = info.offset.coerceAtLeast(listState.layoutInfo.viewportStartOffset)
-                                        val itemBottom = (info.offset + info.size).coerceAtMost(listState.layoutInfo.viewportEndOffset)
-                                        (itemBottom - itemTop).toFloat() / viewportH
-                                    }
-                                    ?.let { visibleItems.getOrNull(it.index)?.id }
-                            }
-                        }
+                        val visibleItems = state.items
+                            .filter { it.id !in hiddenIds }
+                            .sortedByDescending { voteCounts[it.id] ?: 0 }
 
                         LazyColumn(
                             state = listState,
@@ -694,10 +676,9 @@ fun VideoWallpapersScreen(
                         ) {
                             items(visibleItems, key = { it.id }) { item ->
                                 val isResolved = item.id in resolvedIds
-                                val shouldPlay = item.id == playingId
                                 VideoCard(
                                     item = item,
-                                    streamUrl = if (isResolved && shouldPlay) viewModel.getStreamUrl(item.id) else null,
+                                    streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
                                     isApplying = state.isApplying == item.id,
                                     voteCount = voteCounts[item.id] ?: 0,
                                     onApply = { confirmItem = item },
