@@ -26,13 +26,16 @@ class BatchDownloadService @Inject constructor(
     private val _state = MutableStateFlow(BatchDownloadState())
     val state = _state.asStateFlow()
 
-    private var job: Job? = null
+    private var scope: CoroutineScope? = null
 
     fun downloadBatch(wallpapers: List<Wallpaper>, concurrency: Int = 3) {
         if (_state.value.isRunning) return
 
         _state.value = BatchDownloadState(totalCount = wallpapers.size, isRunning = true)
-        job = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+        scope?.cancel()
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope = newScope
+        newScope.launch {
             val semaphore = kotlinx.coroutines.sync.Semaphore(concurrency)
 
             wallpapers.map { wp ->
@@ -65,7 +68,8 @@ class BatchDownloadService @Inject constructor(
     }
 
     fun cancel() {
-        job?.cancel()
+        scope?.cancel()
+        scope = null
         _state.update { it.copy(isRunning = false) }
     }
 

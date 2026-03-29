@@ -151,12 +151,12 @@ class WeatherWallpaperService : WallpaperService() {
             val scaledH = (src.height * scale).toInt()
             val scaled = Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
             // Center crop
-            val x = (scaledW - targetW) / 2
-            val y = (scaledH - targetH) / 2
+            val x = ((scaledW - targetW) / 2).coerceAtLeast(0)
+            val y = ((scaledH - targetH) / 2).coerceAtLeast(0)
+            val cropW = targetW.coerceAtMost(scaled.width - x).coerceAtLeast(1)
+            val cropH = targetH.coerceAtMost(scaled.height - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
-                Bitmap.createBitmap(scaled, x.coerceAtLeast(0), y.coerceAtLeast(0),
-                    targetW.coerceAtMost(scaled.width - x.coerceAtLeast(0)),
-                    targetH.coerceAtMost(scaled.height - y.coerceAtLeast(0)))
+                Bitmap.createBitmap(scaled, x, y, cropW, cropH)
             } else scaled
         }
     }

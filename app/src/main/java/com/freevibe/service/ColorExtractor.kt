@@ -42,6 +42,7 @@ class ColorExtractor @Inject constructor(
                     inJustDecodeBounds = true
                 }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                if (options.outWidth <= 0 || options.outHeight <= 0) return@withContext null
                 options.inSampleSize = calculateSampleSize(options.outWidth, options.outHeight, 200, 200)
                 options.inJustDecodeBounds = false
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)

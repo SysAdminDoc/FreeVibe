@@ -38,6 +38,14 @@ class YouTubeRepository @Inject constructor() {
         }
     }
 
+    companion object {
+        private val junkPatterns = listOf(
+            "top \\d+", "\\d+ best", "compilation", "mix 20\\d\\d", "playlist",
+            "ranked", "tier list", "reaction", "review", "tutorial", "how to",
+            "part \\d+", "episode", "ep\\.", "podcast", "interview", "live stream",
+        ).map { Regex(it, RegexOption.IGNORE_CASE) }
+    }
+
     suspend fun searchSounds(
         query: String,
         maxDuration: Int = 240,
@@ -51,12 +59,6 @@ class YouTubeRepository @Inject constructor() {
             Log.d("YouTubeRepo", "Created search extractor, fetching page...")
             searchExtractor.fetchPage()
             Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
-
-            val junkPatterns = listOf(
-                "top \\d+", "\\d+ best", "compilation", "mix 20\\d\\d", "playlist",
-                "ranked", "tier list", "reaction", "review", "tutorial", "how to",
-                "part \\d+", "episode", "ep\\.", "podcast", "interview", "live stream",
-            ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
             val sounds = searchExtractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
@@ -88,7 +90,7 @@ class YouTubeRepository @Inject constructor() {
             request.addOption("-f", "worstaudio") // Fastest to resolve + smallest to buffer
             request.addOption("--get-url")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            val streamUrl = response.out?.trim()
+            val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
             Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
             streamUrl?.also { streamCache[videoId] = it }
         } catch (e: Exception) {
