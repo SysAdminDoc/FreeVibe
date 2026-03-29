@@ -52,6 +52,15 @@ fun SoundDetailScreen(
     val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
     val similarLoading = remember { mutableStateOf(false) }
 
+    // Stop playback when leaving detail screen
+    DisposableEffect(s.id) {
+        onDispose {
+            if (viewModel.state.value.playingId == s.id) {
+                viewModel.togglePlayback(s) // stops playback
+            }
+        }
+    }
+
     // Auto-preview: play sound when entering detail screen
     LaunchedEffect(s.id) {
         if (autoPreview && state.playingId != s.id) {
@@ -346,13 +355,14 @@ private fun SimilarSoundsSection(
     viewModel: SoundsViewModel,
     onSoundClick: (Sound) -> Unit,
 ) {
-    var loaded by remember { mutableStateOf(false) }
+    var loaded by remember(soundId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    // Auto-load similar sounds on first render
+    // Auto-load similar sounds when soundId changes
     LaunchedEffect(soundId) {
         if (!loaded && !isLoading.value) {
             isLoading.value = true
+            similarSounds.value = emptyList()
             try {
                 val result = viewModel.loadSimilar(soundId)
                 similarSounds.value = result
