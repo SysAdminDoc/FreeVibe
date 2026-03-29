@@ -188,24 +188,63 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchPixabay(query: String, page: Int = 1) =
         getPixabay(page = page, query = query)
 
-    // -- Discover feed (mixed from all sources) --
+    // -- Discover feed (mixed from ALL sources for diversity) --
 
-    suspend fun getDiscover(page: Int = 1): SearchResult<Wallpaper> = supervisorScope {
-        val sources = listOf(
+    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null, pexelsApi: com.freevibe.data.remote.pexels.PexelsApi? = null, pexelsKey: String = ""): SearchResult<Wallpaper> = supervisorScope {
+        val sources = mutableListOf(
             async { runCatching { getWallhaven(page = page) }.getOrNull() },
             async { runCatching { getPicsum(page = page) }.getOrNull() },
             async { runCatching { getPixabay(page = page) }.getOrNull() },
+            async { runCatching { getBingDaily(page = page) }.getOrNull() },
         )
+        // Reddit
+        if (redditRepo != null) {
+            sources.add(async { runCatching { redditRepo.getMultiSubreddit() }.getOrNull() })
+        }
+        // Pexels
+        if (pexelsApi != null && pexelsKey.isNotBlank()) {
+            sources.add(async {
+                runCatching {
+                    val resp = pexelsApi.curatedPhotos(apiKey = pexelsKey, page = page)
+                    SearchResult(
+                        items = resp.photos.map { photo ->
+                            Wallpaper(
+                                id = "px_${photo.id}",
+                                source = ContentSource.PEXELS,
+                                thumbnailUrl = photo.src.medium,
+                                fullUrl = photo.src.original,
+                                width = photo.width,
+                                height = photo.height,
+                                sourcePageUrl = photo.url,
+                                uploaderName = photo.photographer,
+                            )
+                        },
+                        totalCount = resp.totalResults,
+                        currentPage = resp.page,
+                        hasMore = resp.nextPage != null,
+                    )
+                }.getOrNull()
+            })
+        }
+
         val results = sources.map { it.await() }
-        val combined = results.filterNotNull()
-            .flatMap { it.items }
-            .shuffled()
+        // Round-robin interleave sources for even distribution
+        val bySource = results.filterNotNull().map { it.items.toMutableList() }
+        val interleaved = mutableListOf<Wallpaper>()
+        var idx = 0
+        while (bySource.any { it.isNotEmpty() }) {
+            for (source in bySource) {
+                if (source.isNotEmpty()) interleaved.add(source.removeFirst())
+            }
+            idx++
+            if (idx > 200) break
+        }
 
         SearchResult(
-            items = combined,
-            totalCount = combined.size * 10,
+            items = interleaved,
+            totalCount = interleaved.size * 5,
             currentPage = page,
-            hasMore = combined.size >= 10 && results.any { it?.hasMore == true },
+            hasMore = interleaved.size >= 10 && results.any { it?.hasMore == true },
         )
     }
 
