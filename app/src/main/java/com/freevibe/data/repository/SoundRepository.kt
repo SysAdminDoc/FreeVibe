@@ -61,7 +61,7 @@ class SoundRepository @Inject constructor(
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("(ringtone OR phone tone OR mobile tone OR ring tone) NOT music NOT song NOT instrumental NOT podcast")
+        val q = buildSoundQuery("ringtone OR phone tone OR ring tone OR mobile tone")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
@@ -72,7 +72,7 @@ class SoundRepository @Inject constructor(
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("(notification sound OR text tone OR message chime OR beep OR ding) NOT alarm NOT siren NOT music NOT song")
+        val q = buildSoundQuery("notification OR chime OR beep OR ding OR alert tone")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
@@ -83,7 +83,7 @@ class SoundRepository @Inject constructor(
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("(alarm clock OR alarm buzzer OR alarm bell OR wake up tone) NOT music NOT song NOT gentle NOT relaxing NOT podcast")
+        val q = buildSoundQuery("alarm OR buzzer OR alarm clock OR wake up tone OR alarm bell")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
