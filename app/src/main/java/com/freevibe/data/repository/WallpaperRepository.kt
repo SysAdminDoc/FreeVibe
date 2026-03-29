@@ -41,14 +41,16 @@ class WallpaperRepository @Inject constructor(
     suspend fun getWallhaven(
         query: String = "",
         page: Int = 1,
+        topRange: String = "1M",
     ): SearchResult<Wallpaper> {
-        val cacheKey = if (query.isBlank()) "wallhaven_toplist_$page" else "wallhaven_search_${query.hashCode()}_$page"
+        val cacheKey = if (query.isBlank()) "wallhaven_toplist_${topRange}_$page" else "wallhaven_search_${query.hashCode()}_$page"
         return withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
             val sorting = if (query.isBlank()) "toplist" else "relevance"
             val apiKey = wallhavenApiKey()
             val response = wallhavenApi.search(
                 query = query,
                 sorting = sorting,
+                topRange = topRange,
                 categories = "111",
                 purity = wallhavenPurity(),
                 minResolution = wallhavenMinRes(),
