@@ -172,12 +172,12 @@ private fun WelcomePage() {
 @Composable
 private fun FeaturesPage() {
     val features = listOf(
-        Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "Discover feed from Wallhaven, Unsplash, Bing & Reddit"),
-        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "Thousands of sounds from Internet Archive"),
-        Triple(Icons.Default.Edit, "Built-in Editors", "Crop, adjust, trim with presets & fade effects"),
-        Triple(Icons.Default.Folder, "Collections", "Organize wallpapers into folders and browse later"),
-        Triple(Icons.Default.AutoAwesome, "Auto-Wallpaper", "Rotate wallpapers on a schedule, even from favorites"),
-        Triple(Icons.Default.Widgets, "Home Widget", "Quick shuffle from your home screen"),
+        Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "6 sources: Wallhaven, Pexels, Pixabay, Reddit, Unsplash, Bing"),
+        Triple(Icons.Default.VideoLibrary, "Video Wallpapers", "Pexels, Pixabay loops, YouTube, Reddit cinemagraphs"),
+        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "YouTube + Internet Archive, trim & fade editor"),
+        Triple(Icons.Default.Schedule, "Smart Scheduler", "Auto-rotate by interval, source, or time of day"),
+        Triple(Icons.Default.Cloud, "Weather Effects", "Rain, snow, fog overlay from real-time weather"),
+        Triple(Icons.Default.DarkMode, "AMOLED Editor", "Black crush, vignette, grain, warmth + 10 presets"),
     )
 
     Column(
