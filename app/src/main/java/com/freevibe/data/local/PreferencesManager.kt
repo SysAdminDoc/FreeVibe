@@ -22,8 +22,8 @@ class PreferencesManager @Inject constructor(
     // ── API Keys (optional, for higher rate limits) ────────────────
 
     val wallhavenApiKey: Flow<String> = get(Keys.WALLHAVEN_KEY, "")
-    val pexelsApiKey: Flow<String> = get(Keys.PEXELS_KEY, "3AN2RtNJNs6cT4M04xUzN1EuojlmC9283l6l3yPKaYQ7ez0rcFLwvpHP")
-    val pixabayApiKey: Flow<String> = get(Keys.PIXABAY_KEY, "24952670-25430be562a78b27d4746e060")
+    val pexelsApiKey: Flow<String> = get(Keys.PEXELS_KEY, com.freevibe.BuildConfig.PEXELS_API_KEY)
+    val pixabayApiKey: Flow<String> = get(Keys.PIXABAY_KEY, com.freevibe.BuildConfig.PIXABAY_API_KEY)
 
     suspend fun setWallhavenKey(key: String) = set(Keys.WALLHAVEN_KEY, key)
     suspend fun setPexelsKey(key: String) = set(Keys.PEXELS_KEY, key)

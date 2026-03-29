@@ -217,12 +217,32 @@ class WallpapersViewModel @Inject constructor(
 
     fun downloadWallpaper(wallpaper: Wallpaper) {
         viewModelScope.launch {
-            val ext = wallpaper.fileType.substringAfterLast("/", "jpg").substringAfterLast(".", "jpg")
+            val ext = guessImageExtension(wallpaper.fileType, wallpaper.fullUrl)
             downloadManager.downloadWallpaper(
                 id = wallpaper.id,
                 url = wallpaper.fullUrl,
                 fileName = "Aura_${wallpaper.id}.$ext",
             )
+        }
+    }
+
+    private fun guessImageExtension(fileType: String, url: String): String {
+        // Check MIME type first
+        if (fileType.isNotBlank()) {
+            return when {
+                fileType.contains("png", true) -> "png"
+                fileType.contains("webp", true) -> "webp"
+                fileType.contains("gif", true) -> "gif"
+                else -> "jpg"
+            }
+        }
+        // Fallback to URL extension
+        val path = url.substringBefore("?").substringBefore("#").lowercase()
+        return when {
+            path.endsWith(".png") -> "png"
+            path.endsWith(".webp") -> "webp"
+            path.endsWith(".gif") -> "gif"
+            else -> "jpg"
         }
     }
 

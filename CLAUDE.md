@@ -18,7 +18,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v4.1.0** (versionCode 31)
+- **v4.2.0** (versionCode 32)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -31,13 +31,13 @@ Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorite
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
-Room DB (v4): favorites, downloads, search_history, wallpaper_cache,
+Room DB (v6): favorites, downloads, search_history, wallpaper_cache,
               wallpaper_history, ia_audio_cache, wallpaper_collections, wallpaper_collection_items
 DataStore: Settings, Onboarding
 ```
 
 ## API Keys
-- Zero API keys required for v3.0.0 (Pexels key hardcoded in PreferencesManager default)
+- Pexels/Pixabay keys provided via BuildConfig (defaults baked in, overridable via local.properties)
 - `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
 - Freesound API was removed in v2.6.0
 
@@ -46,6 +46,7 @@ DataStore: Settings, Onboarding
 - v2->3: Added ia_audio_cache table
 - v3->4: Added wallpaper_collections + wallpaper_collection_items tables
 - v4->5: Composite PKs for search_history (query+type) and wallpaper_cache (id+cacheKey)
+- v5->6: ForeignKey CASCADE on wallpaper_collection_items.collectionId + index
 - Migrations defined in AppModule.kt. Uses fallbackToDestructiveMigrationOnDowngrade() only.
 
 ## Gotchas
@@ -60,7 +61,7 @@ DataStore: Settings, Onboarding
 - NASA/Wikimedia/Freesound enum values kept in ContentSource for legacy favorites compatibility
 - NavHost uses animated transitions (fade+slide) in FreeVibeRoot
 - Package is `com.freevibe` (cannot rename without breaking updates), display name is "Aura"
-- Signing credentials are hardcoded in build.gradle.kts (should move to local.properties)
+- Signing credentials in local.properties (not committed), build.gradle.kts reads from localProps
 
 ## Key Files
 - `FreeVibeApp.kt` - Application class, crash logging, cache eviction on startup
@@ -69,23 +70,20 @@ DataStore: Settings, Onboarding
 - `SelectedContentHolder.kt` - Singleton: selectedWallpaper + wallpaperList + selectedSound + pendingCategoryQuery
 - `WallpapersViewModel.kt` - Wallpaper state, tabs (Discover/Pexels/Reddit/Wallhaven/Unsplash/Color/Search)
 - `WallpaperDetailScreen.kt` - VerticalPager with parallax, apply/download/edit/crop/share/collection actions
-- `VideoWallpapersScreen.kt` - Video wallpaper browsing (Pexels + YouTube + Reddit), ExoPlayer per-card
+- `VideoWallpapersScreen.kt` - Video wallpaper browsing (Pexels + YouTube + Reddit), single ExoPlayer for visible card
 - `VideoCropScreen.kt` - Landscape-to-portrait crop via yt-dlp FFmpeg
 - `SoundsViewModel.kt` - Sound browsing, ExoPlayer playback, YouTube + IA sources
-- `YouTubeRepository.kt` - NewPipe Extractor search + yt-dlp stream extraction, stream URL caching
+- `YouTubeRepository.kt` - NewPipe Extractor search + yt-dlp stream extraction, stream URL caching (3h TTL)
 - `SoundRepository.kt` - IA sound search, duration/category filtering
 - `CollectionsScreen.kt` - Wallpaper collections list + detail grid
 - `VideoWallpaperService.kt` - WallpaperService for live video wallpapers
 
 ## Known Issues (remaining)
-- Pexels/Pixabay API keys hardcoded in PreferencesManager (should use BuildConfig)
-- Signing credentials hardcoded in build.gradle.kts (should move to local.properties)
-- No ForeignKey on wallpaper_collection_items.collectionId
-- VideoWallpapersScreen creates ExoPlayer per card (memory pressure on scroll)
 - Fastlane metadata completely outdated
 
 ## Version History
-- v4.1.0: Comprehensive audit fixes. DB v5: composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey) — prevents data collisions. DownloadManager response leak fixed (response.use{}). DarkModeReceiver reuses shared OkHttpClient. AutoWallpaperWorker: empty-list crash on .random() fixed. SoundApplier: incomplete files cleaned up on write failure. WeatherWallpaperService: intermediate bitmap recycled in scaleBitmap. VideoWallpaperService: removed unnecessary SurfaceHolder wrapper. YouTubeRepository: stream cache now has 3h TTL. VideoWallpapersScreen: Reddit response leak fixed. RedditRepository: per-subreddit pagination tokens (ConcurrentHashMap). BatchDownloadService: isRunning always reset on completion, robust MIME extension mapping. WeatherParticleRenderer: per-star phase offset for natural twinkling. SelectedContentHolder: @Volatile replaced with MutableStateFlow. FavoritesExporter: BufferedReader properly closed. Version string mismatch in VideoWallpapersScreen fixed.
-- v3.0.0+audit: Fix Discover tab navigation (share wallpaper list via SelectedContentHolder). Remove r/wallpaperengine. Fix 20+ bugs: FavoriteEntity valueOf crash, ContactPicker empty name crash, SoundEditorState hashCode, AudioTrimmer/WallpaperApplier/DualWallpaper/DownloadManager/SoundApplier/OfflineFavorites resource leaks, YouTubeRepository connection leak, VideoCropScreen OkHttpClient reuse, Reddit case-insensitive extensions, OfflineFavorites stale DB path on remove.
-- v3.0.0: YouTube integration (NewPipe Extractor search + yt-dlp stream extraction). Video Wallpapers tab with ExoPlayer auto-playing cards, crop editor for landscape-to-portrait conversion, yt-dlp FFmpeg crop. VideoWallpaperService: file timestamp hot-swap, looping. 5 bottom nav tabs. Pexels as photo + video source. Reddit video sources. Search across all video sources. Orientation filtering.
+- v4.2.0: API keys moved to BuildConfig (overridable via local.properties). Signing credentials moved to local.properties. DB v6: ForeignKey CASCADE on wallpaper_collection_items (auto-cleanup on collection delete). VideoWallpapersScreen: single ExoPlayer for most-visible card (was per-card), response leaks fixed in applyVideoWallpaper. WallpapersViewModel: robust image extension detection. CollectionRepository.delete() simplified (FK CASCADE handles items).
+- v4.1.0: Comprehensive audit fixes. DB v5: composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey). Fix 16 bugs across data/service/UI layers.
+- v3.0.0+audit: Fix Discover tab navigation. Remove r/wallpaperengine. Fix 20+ resource leaks and edge cases.
+- v3.0.0: YouTube integration (NewPipe + yt-dlp). Video Wallpapers tab. VideoWallpaperService. 5 bottom nav tabs.
 - v2.7.0-v2.0.0: See memory file for full changelog.
