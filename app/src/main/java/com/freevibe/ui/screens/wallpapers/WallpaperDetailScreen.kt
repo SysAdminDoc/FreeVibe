@@ -264,17 +264,18 @@ fun WallpaperDetailScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Material You Color Palette Preview
+                // Material You Color Palette Preview + Find Similar
                 colorPalette?.let { palette ->
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Theme colors", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
-                        Spacer(Modifier.width(6.dp))
-                        listOf(palette.dominantColor, palette.vibrantColor, palette.vibrantDark,
-                            palette.mutedColor, palette.mutedLight).filter { it != 0 }.take(5).forEach { color ->
+                        val paletteColors = listOf(palette.dominantColor, palette.vibrantColor, palette.vibrantDark,
+                            palette.mutedColor, palette.mutedLight).filter { it != 0 }.take(5)
+                        Text("Theme", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                        Spacer(Modifier.width(4.dp))
+                        paletteColors.forEach { color ->
                             Box(
                                 Modifier
                                     .size(18.dp)
@@ -282,6 +283,19 @@ fun WallpaperDetailScreen(
                                     .background(Color(color))
                                     .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        // "Find Similar" by dominant color
+                        if (palette.dominantColor != 0) {
+                            val hex = String.format("%06x", palette.dominantColor and 0xFFFFFF)
+                            Surface(
+                                onClick = { viewModel.searchByColor(hex) },
+                                color = Color.White.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text("Find similar", Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall, color = Color.White)
+                            }
                         }
                     }
                 }
