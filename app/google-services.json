@@ -2,7 +2,8 @@
   "project_info": {
     "project_number": "741398780719",
     "project_id": "aura-1b494",
-    "storage_bucket": "aura-1b494.firebasestorage.app"
+    "storage_bucket": "aura-1b494.firebasestorage.app",
+    "firebase_url": "https://aura-1b494-default-rtdb.firebaseio.com"
   },
   "client": [
     {
