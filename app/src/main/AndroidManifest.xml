@@ -28,6 +28,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Location (weather effects) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Contacts (per-contact ringtones) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
@@ -70,6 +73,20 @@
             <meta-data
                 android:name="android.service.wallpaper"
                 android:resource="@xml/video_wallpaper" />
+        </service>
+
+        <!-- Weather Live Wallpaper Service -->
+        <service
+            android:name=".service.WeatherWallpaperService"
+            android:exported="true"
+            android:label="Aura Weather"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/weather_wallpaper" />
         </service>
 
         <!-- Home Screen Widget -->
