@@ -2,4 +2,4 @@
 <wallpaper
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/video_wallpaper_label"
-    android:thumbnail="@drawable/ic_launcher_foreground" />
+    android:thumbnail="@mipmap/ic_launcher" />
