@@ -40,6 +40,7 @@ android {
         // API keys — defaults baked in, user can override via settings
         buildConfigField("String", "PEXELS_API_KEY", "\"${localProps.getProperty("pexels.api.key", "3AN2RtNJNs6cT4M04xUzN1EuojlmC9283l6l3yPKaYQ7ez0rcFLwvpHP")}\"")
         buildConfigField("String", "PIXABAY_API_KEY", "\"${localProps.getProperty("pixabay.api.key", "24952670-25430be562a78b27d4746e060")}\"")
+        buildConfigField("String", "FREESOUND_API_KEY", "\"${localProps.getProperty("freesound.api.key", "")}\"")
     }
 
     buildTypes {

@@ -26,7 +26,7 @@ class YouTubeRepository @Inject constructor() {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedStream>?) = size > 50
         }
     )
-    private val STREAM_TTL_MS = 3 * 60 * 60 * 1000L // 3 hours
+    private val STREAM_TTL_MS = 6 * 60 * 60 * 1000L // 6 hours (YouTube tokens last ~6h)
 
     /** Check if a video's audio URL is cached and fresh */
     fun isCached(videoId: String): Boolean {

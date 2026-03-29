@@ -71,11 +71,13 @@ class SoundsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val soundRepo: SoundRepository,
     private val youtubeRepo: YouTubeRepository,
+    private val freesoundRepo: com.freevibe.data.repository.FreesoundRepository,
     private val favoritesRepo: FavoritesRepository,
     private val soundApplier: SoundApplier,
     private val downloadManager: DownloadManager,
     private val selectedContent: SelectedContentHolder,
     private val searchHistoryRepo: SearchHistoryRepository,
+    private val audioTrimmer: com.freevibe.service.AudioTrimmer,
     prefs: PreferencesManager,
     val voteRepo: VoteRepository,
 ) : ViewModel() {
@@ -95,10 +97,43 @@ class SoundsViewModel @Inject constructor(
         .map { list -> list.map { it.query } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Trending sounds from Freesound (most downloaded) */
+    private val _trendingSounds = MutableStateFlow<List<Sound>>(emptyList())
+    val trendingSounds = _trendingSounds.asStateFlow()
+
+    /** Sound of the Day */
+    private val _soundOfTheDay = MutableStateFlow<Sound?>(null)
+    val soundOfTheDay = _soundOfTheDay.asStateFlow()
+
     private var exoPlayer: ExoPlayer? = null
 
     init {
         loadSounds()
+        fetchTrendingAndSotd()
+    }
+
+    private fun fetchTrendingAndSotd() {
+        viewModelScope.launch {
+            try {
+                val trending = freesoundRepo.getTrending(page = 1)
+                _trendingSounds.value = trending.items.take(10)
+                _soundOfTheDay.value = trending.items.firstOrNull()
+            } catch (_: Exception) {}
+        }
+    }
+
+    /** Normalize audio volume via FFmpeg loudnorm */
+    fun normalizeAudio(inputPath: String, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            onResult(audioTrimmer.normalize(inputPath))
+        }
+    }
+
+    /** Convert audio format via FFmpeg */
+    fun convertAudio(inputPath: String, targetFormat: String, onResult: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            onResult(audioTrimmer.convert(inputPath, targetFormat))
+        }
     }
 
     fun selectTab(tab: SoundTab) {
@@ -271,9 +306,19 @@ class SoundsViewModel @Inject constructor(
     fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
     fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
 
+    /** Playback position as 0.0-1.0 fraction for seekable waveform */
+    private val _playbackProgress = MutableStateFlow(0f)
+    val playbackProgress = _playbackProgress.asStateFlow()
+    private var progressJob: kotlinx.coroutines.Job? = null
+
     private fun startPlayback(sound: Sound) {
         stopPlayback()
-        exoPlayer = ExoPlayer.Builder(context).build().apply {
+        if (exoPlayer == null) {
+            exoPlayer = ExoPlayer.Builder(context).build()
+        }
+        exoPlayer?.apply {
+            stop()
+            clearMediaItems()
             setMediaItem(MediaItem.fromUri(sound.previewUrl))
             prepare()
             volume = previewVolume.value
@@ -282,21 +327,45 @@ class SoundsViewModel @Inject constructor(
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
                         _state.update { it.copy(playingId = null) }
+                        _playbackProgress.value = 0f
+                        progressJob?.cancel()
                     }
                 }
             })
         }
         _state.update { it.copy(playingId = sound.id) }
+        // Track playback position
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            while (_state.value.playingId == sound.id) {
+                val player = exoPlayer
+                if (player != null && player.duration > 0) {
+                    _playbackProgress.value = player.currentPosition.toFloat() / player.duration
+                }
+                kotlinx.coroutines.delay(50)
+            }
+        }
+    }
+
+    fun seekTo(fraction: Float) {
+        exoPlayer?.let { player ->
+            if (player.duration > 0) {
+                player.seekTo((fraction * player.duration).toLong())
+            }
+        }
     }
 
     private fun stopPlayback() {
-        exoPlayer?.apply { stop(); release() }
-        exoPlayer = null
+        progressJob?.cancel()
+        _playbackProgress.value = 0f
+        exoPlayer?.apply { stop(); clearMediaItems() }
         _state.update { it.copy(playingId = null) }
     }
 
     override fun onCleared() {
-        stopPlayback()
+        progressJob?.cancel()
+        exoPlayer?.release()
+        exoPlayer = null
         super.onCleared()
     }
 
@@ -395,6 +464,26 @@ class SoundsViewModel @Inject constructor(
                         }
                     } catch (_: Exception) {}
 
+                    // Freesound results (fast — metadata in response)
+                    val fsJob = async {
+                        try {
+                            val fsResult = when {
+                                cat != null -> freesoundRepo.search(cat.query, minDuration = dur.minSec.toDouble(), maxDuration = dur.maxSec.toDouble(), page = s.currentPage)
+                                s.selectedTab == SoundTab.RINGTONES -> freesoundRepo.getRingtones(page = s.currentPage)
+                                s.selectedTab == SoundTab.NOTIFICATIONS -> freesoundRepo.getNotifications(page = s.currentPage)
+                                s.selectedTab == SoundTab.ALARMS -> freesoundRepo.getAlarms(page = s.currentPage)
+                                s.selectedTab == SoundTab.SEARCH -> freesoundRepo.search(s.query, minDuration = dur.minSec.toDouble(), maxDuration = dur.maxSec.toDouble(), page = s.currentPage)
+                                else -> freesoundRepo.getRingtones(page = s.currentPage)
+                            }
+                            fsResult.items.forEach { allResults.add(it) }
+                            if (fsResult.items.isNotEmpty()) {
+                                _state.update { st ->
+                                    st.copy(sounds = allResults.toList(), isLoading = false)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
                     // IA results stream progressively after YouTube
                     val iaJob = async {
                         try {
@@ -432,6 +521,7 @@ class SoundsViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     }
 
+                    fsJob.await()
                     iaJob.await()
                 }
 
