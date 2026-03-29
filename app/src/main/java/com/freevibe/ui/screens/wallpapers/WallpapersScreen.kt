@@ -240,6 +240,25 @@ fun WallpapersScreen(
                 onDismiss = { viewModel.dismissDownload(it) },
             )
 
+            // Wallhaven toplist time-range filter chips
+            if (state.selectedTab == WallpaperTab.WALLHAVEN) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf("1d" to "Today", "1w" to "Week", "1M" to "Month", "6M" to "6 Months", "1y" to "Year").forEach { (range, label) ->
+                        FilterChip(
+                            selected = state.topRange == range,
+                            onClick = { viewModel.setTopRange(range) },
+                            label = { Text(label) },
+                            leadingIcon = if (state.topRange == range) {
+                                { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                            } else null,
+                        )
+                    }
+                }
+            }
+
             // Content with pull-to-refresh (#4)
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
@@ -443,7 +462,7 @@ private fun WallpaperGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalItemSpacing = 8.dp,
     ) {
-        // Wallpaper of the Day banner — Reddit's most upvoted today
+        // Wallpaper of the Day — hero card with full image
         if (dailyPick != null) {
             item(span = StaggeredGridItemSpan.FullLine, key = "daily_pick") {
                 val pick = dailyPick
@@ -452,29 +471,59 @@ private fun WallpaperGrid(
                         .fillMaxWidth()
                         .clickable { onWallpaperClick(pick) },
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
                     ) {
                         SubcomposeAsyncImage(
-                            model = pick.thumbnailUrl,
+                            model = pick.fullUrl.ifEmpty { pick.thumbnailUrl },
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
+                            modifier = Modifier.fillMaxSize(),
                         ) {
                             when (painter.state) {
                                 is AsyncImagePainter.State.Loading -> ShimmerBox(Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
                                 else -> SubcomposeAsyncImageContent()
                             }
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text("Wallpaper of the Day", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                            Text(pick.category.ifEmpty { "Top voted on Reddit" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Gradient overlay
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
+                                        startY = 80f,
+                                    ),
+                                ),
+                        )
+                        // Text overlay
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(16.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp), tint = Color(0xFFFFD700))
+                                Text("Wallpaper of the Day", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                            }
+                            Text(
+                                pick.category.ifEmpty { "Top voted on Reddit" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
                         }
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        // Arrow
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward, null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).size(20.dp),
+                        )
                     }
                 }
             }
