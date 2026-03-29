@@ -107,7 +107,10 @@ class VideoWallpapersViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     // Cache of resolved video stream URLs
-    private val streamUrls = ConcurrentHashMap<String, String>()
+    // Bounded cache — evict oldest when exceeding 200 entries
+    private val streamUrls = object : LinkedHashMap<String, String>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 200
+    }.let { java.util.Collections.synchronizedMap(it) }
     private val _resolvedIds = MutableStateFlow<Set<String>>(emptySet())
     val resolvedIds = _resolvedIds.asStateFlow()
 
@@ -224,6 +227,9 @@ class VideoWallpapersViewModel @Inject constructor(
                             }
                         }
                     }
+                    if (cacheFile.length() < 1024) {
+                        throw Exception("Downloaded file too small (${cacheFile.length()} bytes) — likely an error page")
+                    }
                     Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
                     cacheFile
                 }
@@ -312,7 +318,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             OrientationFilter.ALL -> "portrait"
                         }
                         val response = pexelsApi.searchVideos(apiKey = key, query = query, orientation = orientation, perPage = 15, page = s.pexelsPage)
-                        response.videos.filter { it.duration in 3..120 }.mapNotNull { video ->
+                        response.videos.filter { it.duration in 5..120 }.mapNotNull { video ->
                             val file = video.videoFiles
                                 .filter { it.fileType == "video/mp4" || it.link.endsWith(".mp4") }
                                 .sortedByDescending { it.height ?: 0 }
@@ -780,7 +786,7 @@ private fun VideoCard(
                     }
                 }
 
-                DisposableEffect(streamUrl) {
+                DisposableEffect(exoPlayer) {
                     onDispose { exoPlayer.release() }
                 }
 
