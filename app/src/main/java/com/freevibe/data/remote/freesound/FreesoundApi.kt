@@ -3,62 +3,53 @@ package com.freevibe.data.remote.freesound
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.Path
 import retrofit2.http.Query
 
+/**
+ * Openverse API — aggregates Freesound.org + Jamendo + Wikimedia Audio.
+ * Zero auth required for anonymous access (20 req/min, 200/day).
+ * Returns CC-licensed sounds with direct preview URLs.
+ */
 interface FreesoundApi {
 
-    @GET("apiv2/search/text/")
+    @GET("v1/audio/")
     suspend fun search(
-        @Header("Authorization") auth: String,
-        @Query("query") query: String,
-        @Query("filter") filter: String = "",
-        @Query("sort") sort: String = "score",
-        @Query("fields") fields: String = "id,name,tags,description,license,duration,samplerate,bitrate,filesize,type,previews,username,created,num_downloads,avg_rating",
+        @Query("q") query: String,
         @Query("page") page: Int = 1,
-        @Query("page_size") pageSize: Int = 30,
-    ): FreesoundSearchResponse
-
-    @GET("apiv2/sounds/{id}/")
-    suspend fun getSound(
-        @Header("Authorization") auth: String,
-        @Path("id") id: Long,
-        @Query("fields") fields: String = "id,name,tags,description,license,duration,samplerate,bitrate,filesize,type,previews,username,created,num_downloads,avg_rating",
-    ): FreesoundSound
+        @Query("page_size") pageSize: Int = 20,
+        @Query("mature") mature: Boolean = false,
+    ): OpenverseAudioResponse
 }
 
 @JsonClass(generateAdapter = true)
-data class FreesoundSearchResponse(
-    @Json(name = "count") val count: Int = 0,
-    @Json(name = "next") val next: String? = null,
-    @Json(name = "previous") val previous: String? = null,
-    @Json(name = "results") val results: List<FreesoundSound> = emptyList(),
+data class OpenverseAudioResponse(
+    @Json(name = "result_count") val resultCount: Int = 0,
+    @Json(name = "page_count") val pageCount: Int = 0,
+    @Json(name = "page_size") val pageSize: Int = 20,
+    @Json(name = "page") val page: Int = 1,
+    @Json(name = "results") val results: List<OpenverseAudio> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
-data class FreesoundSound(
-    @Json(name = "id") val id: Long = 0,
-    @Json(name = "name") val name: String = "",
-    @Json(name = "tags") val tags: List<String> = emptyList(),
-    @Json(name = "description") val description: String = "",
+data class OpenverseAudio(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "title") val title: String = "",
+    @Json(name = "url") val url: String = "",
+    @Json(name = "creator") val creator: String = "",
     @Json(name = "license") val license: String = "",
-    @Json(name = "duration") val duration: Double = 0.0,
-    @Json(name = "samplerate") val samplerate: Int = 0,
-    @Json(name = "bitrate") val bitrate: Int = 0,
-    @Json(name = "filesize") val filesize: Long = 0,
-    @Json(name = "type") val type: String = "",
-    @Json(name = "previews") val previews: FreesoundPreviews = FreesoundPreviews(),
-    @Json(name = "username") val username: String = "",
-    @Json(name = "created") val created: String = "",
-    @Json(name = "num_downloads") val numDownloads: Int = 0,
-    @Json(name = "avg_rating") val avgRating: Double = 0.0,
+    @Json(name = "provider") val provider: String = "",
+    @Json(name = "source") val source: String = "",
+    @Json(name = "duration") val duration: Int? = null, // milliseconds
+    @Json(name = "bit_rate") val bitRate: Int? = null,
+    @Json(name = "sample_rate") val sampleRate: Int? = null,
+    @Json(name = "filesize") val filesize: Long? = null,
+    @Json(name = "filetype") val filetype: String? = null,
+    @Json(name = "tags") val tags: List<OpenverseTag> = emptyList(),
+    @Json(name = "foreign_landing_url") val foreignLandingUrl: String = "",
+    @Json(name = "category") val category: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
-data class FreesoundPreviews(
-    @Json(name = "preview-hq-mp3") val previewHqMp3: String = "",
-    @Json(name = "preview-lq-mp3") val previewLqMp3: String = "",
-    @Json(name = "preview-hq-ogg") val previewHqOgg: String = "",
-    @Json(name = "preview-lq-ogg") val previewLqOgg: String = "",
+data class OpenverseTag(
+    @Json(name = "name") val name: String = "",
 )
