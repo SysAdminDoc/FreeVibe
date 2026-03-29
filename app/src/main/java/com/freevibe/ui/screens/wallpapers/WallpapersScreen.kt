@@ -480,7 +480,9 @@ private fun WallpaperGrid(
             }
         }
 
-        val visibleWallpapers = wallpapers.filter { it.id !in hiddenIds }
+        val visibleWallpapers = wallpapers
+            .filter { it.id !in hiddenIds }
+            .sortedByDescending { voteCounts[it.id] ?: 0 }
         items(visibleWallpapers, key = { it.id }) { wallpaper ->
             val isFav = wallpaper.id in favoriteIds
             WallpaperCard(

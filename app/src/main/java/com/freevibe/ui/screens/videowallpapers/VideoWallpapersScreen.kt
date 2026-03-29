@@ -685,7 +685,9 @@ fun VideoWallpapersScreen(
                             contentPadding = PaddingValues(8.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            val visibleItems = state.items.filter { it.id !in hiddenIds }
+                            val visibleItems = state.items
+                                .filter { it.id !in hiddenIds }
+                                .sortedByDescending { voteCounts[it.id] ?: 0 }
                             items(visibleItems, key = { it.id }) { item ->
                                 val isResolved = item.id in resolvedIds
                                 val shouldPlay = item.id == playingId

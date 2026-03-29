@@ -274,7 +274,9 @@ fun SoundsScreen(
                         onRefresh = { viewModel.refresh() },
                     ) {
                         SoundsList(
-                            sounds = state.sounds.filter { it.id !in hiddenIds },
+                            sounds = state.sounds
+                                .filter { it.id !in hiddenIds }
+                                .sortedByDescending { voteCounts[it.id] ?: 0 },
                             playingId = state.playingId,
                             isLoadingMore = state.isLoadingMore,
                             cachedYtIds = cachedYtIds,
