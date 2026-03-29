@@ -30,6 +30,8 @@ class VideoWallpaperService : WallpaperService() {
         private var mediaPlayer: MediaPlayer? = null
         private var currentHolder: SurfaceHolder? = null
         private var lastModified: Long = 0
+        private var surfaceWidth = 0
+        private var surfaceHeight = 0
 
         // Touch ripple effect
         private val ripples = mutableListOf<TouchRipple>()
@@ -50,6 +52,14 @@ class VideoWallpaperService : WallpaperService() {
         private fun getRippleEnabled(): Boolean =
             getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
                 .getBoolean("touch_ripple_enabled", true)
+
+        override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            super.onSurfaceChanged(holder, format, width, height)
+            surfaceWidth = width
+            surfaceHeight = height
+            // Re-apply crop scaling if player is active
+            mediaPlayer?.let { applyCenterCrop(it, holder) }
+        }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
@@ -134,7 +144,13 @@ class VideoWallpaperService : WallpaperService() {
                     setDisplay(safeHolder)
                     isLooping = true
                     setVolume(0f, 0f)
+                    // Use scale-to-fill mode (center crop)
+                    try {
+                        setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                    } catch (_: Exception) {}
                     prepare()
+                    // Resize surface for center-crop fill
+                    applyCenterCrop(this, holder)
                     try {
                         playbackParams = playbackParams.setSpeed(speed)
                     } catch (_: Exception) {}
@@ -145,6 +161,36 @@ class VideoWallpaperService : WallpaperService() {
                 android.util.Log.e("VideoWPService", "Player init failed: ${e.message}", e)
                 releasePlayer()
             }
+        }
+
+        /**
+         * Resize the surface so the video fills the screen with center-crop.
+         * This prevents squeezing — the video is zoomed to cover the full surface
+         * and excess is cropped off-screen.
+         */
+        private fun applyCenterCrop(player: MediaPlayer, holder: SurfaceHolder) {
+            if (surfaceWidth <= 0 || surfaceHeight <= 0) return
+            val videoW = player.videoWidth
+            val videoH = player.videoHeight
+            if (videoW <= 0 || videoH <= 0) return
+
+            val surfaceRatio = surfaceWidth.toFloat() / surfaceHeight
+            val videoRatio = videoW.toFloat() / videoH
+
+            val (newW, newH) = if (videoRatio > surfaceRatio) {
+                // Video is wider than surface — match height, crop sides
+                val w = (surfaceHeight * videoRatio).toInt()
+                w to surfaceHeight
+            } else {
+                // Video is taller than surface — match width, crop top/bottom
+                val h = (surfaceWidth / videoRatio).toInt()
+                surfaceWidth to h
+            }
+
+            try {
+                holder.setFixedSize(newW, newH)
+                android.util.Log.d("VideoWPService", "Center-crop: video=${videoW}x${videoH} surface=${surfaceWidth}x${surfaceHeight} -> ${newW}x${newH}")
+            } catch (_: Exception) {}
         }
 
         private fun releasePlayer() {
