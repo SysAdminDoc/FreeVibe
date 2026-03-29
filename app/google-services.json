@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "741398780719",
+    "project_id": "aura-1b494",
+    "storage_bucket": "aura-1b494.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741398780719:android:1e2333fa31df6c7d285fda",
+        "android_client_info": {
+          "package_name": "com.freevibe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwoCs_LGOWdvc8QBBX9ChPsZb4tX93lBk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
