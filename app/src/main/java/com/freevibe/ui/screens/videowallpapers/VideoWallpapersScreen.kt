@@ -1,8 +1,14 @@
 package com.freevibe.ui.screens.videowallpapers
 
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -547,12 +553,13 @@ fun VideoWallpapersScreen(
             ),
         )
 
-        // Orientation filter
+        // Orientation filter + gallery picker
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             OrientationFilter.entries.forEach { filter ->
                 FilterChip(
@@ -569,6 +576,40 @@ fun VideoWallpapersScreen(
                         { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
                     } else null,
                 )
+            }
+            Spacer(Modifier.weight(1f))
+            // Gallery video picker
+            val galleryLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.GetContent()
+            ) { uri: Uri? ->
+                uri?.let {
+                    // Copy to app storage and set as live wallpaper
+                    val path = try {
+                        val input = context.contentResolver.openInputStream(it)
+                        val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
+                        input?.use { inp -> cacheFile.outputStream().use { out -> inp.copyTo(out) } }
+                        cacheFile.absolutePath
+                    } catch (_: Exception) { null }
+                    if (path != null) {
+                        context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
+                            .edit().putString("video_path", path).apply()
+                        try {
+                            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                                putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                    ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java))
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            FilledTonalIconButton(
+                onClick = { galleryLauncher.launch("video/*") },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(Icons.Default.FolderOpen, "From gallery", modifier = Modifier.size(18.dp))
             }
         }
 
