@@ -133,10 +133,10 @@ fun FreeVibeRoot() {
             navController = navController,
             startDestination = startRoute,
             modifier = Modifier.padding(padding),
-            enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(250)) { it / 6 } },
-            exitTransition = { fadeOut(tween(150)) },
-            popEnterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(250)) { -it / 6 } },
-            popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(250)) { it / 6 } },
+            enterTransition = { fadeIn(tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + slideInHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 5 } },
+            exitTransition = { fadeOut(tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) },
+            popEnterTransition = { fadeIn(tween(250, easing = androidx.compose.animation.core.FastOutSlowInEasing)) + slideInHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { -it / 5 } },
+            popExitTransition = { fadeOut(tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) + slideOutHorizontally(tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it / 5 } },
         ) {
             // ── Onboarding ────────────────────────────────────────
             composable(Screen.Onboarding.route) {

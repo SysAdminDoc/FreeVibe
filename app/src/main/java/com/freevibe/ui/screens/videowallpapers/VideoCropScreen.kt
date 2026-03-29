@@ -289,7 +289,7 @@ private suspend fun cropVideoConstrained(
         cropW = ((cropW / 2) * 2).coerceIn(2, videoWidth - cropX)
         cropH = ((cropH / 2) * 2).coerceIn(2, videoHeight - cropY)
 
-        Log.d("VideoCrop", "Constrained crop: ${videoWidth}x${videoHeight} -> ${cropW}x${cropH} at ($cropX,$cropY)")
+        if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "Constrained crop: ${videoWidth}x${videoHeight} -> ${cropW}x${cropH} at ($cropX,$cropY)")
 
         try {
             val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
@@ -299,13 +299,13 @@ private suspend fun cropVideoConstrained(
             request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
             request.addOption("--force-overwrites")
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            Log.d("VideoCrop", "Crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
+            if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "Crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
 
             if (!outputFile.exists() || outputFile.length() == 0L) {
                 inputFile.copyTo(outputFile, overwrite = true)
             }
         } catch (e: Exception) {
-            Log.e("VideoCrop", "Crop failed: ${e.message}, copying original")
+            if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Crop failed: ${e.message}, copying original")
             inputFile.copyTo(outputFile, overwrite = true)
         }
 
@@ -315,7 +315,7 @@ private suspend fun cropVideoConstrained(
 
         if (outputFile.exists() && outputFile.length() > 0) outputFile else null
     } catch (e: Exception) {
-        Log.e("VideoCrop", "Crop failed: ${e.message}", e)
+        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Crop failed: ${e.message}", e)
         try { File(context.cacheDir, "crop_input.mp4").delete() } catch (_: Exception) {}
         null
     }
