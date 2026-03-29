@@ -1,13 +1,14 @@
 # Aura - CLAUDE.md
 
 ## Overview
-Open-source Android app for device personalization - wallpapers, video wallpapers, ringtones, sounds. YouTube-powered sounds, Pexels/Wallhaven/Picsum/Reddit wallpapers.
+Open-source Android app for device personalization. 21 content sources across wallpapers, video wallpapers, GIFs, and sounds. Weather effects, AMOLED editor, smart scheduler, Material You color preview.
 
 ## Tech Stack
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
 - Hilt 2.53.1 DI, Room 2.6.1 DB, Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
 - NewPipe Extractor (YouTube search), yt-dlp (stream extraction + FFmpeg crop)
+- Palette API (Material You color extraction), Open-Meteo (weather)
 - Min SDK 26, Target SDK 35, JDK 17
 
 ## Build
@@ -17,7 +18,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v3.0.0** (versionCode 29)
+- **v4.0.0** (versionCode 30)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
 
 ## Architecture
