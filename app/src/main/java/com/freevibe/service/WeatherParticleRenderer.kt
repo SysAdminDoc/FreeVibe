@@ -169,7 +169,7 @@ class WeatherParticleRenderer(
     }
 
     private fun drawStars(canvas: Canvas) {
-        // Static twinkling stars for clear night
+        // Static twinkling stars for clear night with per-star phase offset
         val starPaint = Paint().apply { isAntiAlias = true }
         val seed = 12345L
         val rng = Random(seed)
@@ -177,7 +177,8 @@ class WeatherParticleRenderer(
             val x = rng.nextFloat() * screenWidth
             val y = rng.nextFloat() * screenHeight * 0.6f
             val size = 1f + rng.nextFloat() * 2f
-            val twinkle = (sin(System.currentTimeMillis() * 0.003 + it * 0.5) * 0.5 + 0.5).toFloat()
+            val phase = rng.nextFloat() * (2 * Math.PI)
+            val twinkle = (sin(System.currentTimeMillis() * 0.003 + phase) * 0.5 + 0.5).toFloat()
             starPaint.color = Color.argb((twinkle * 180).toInt(), 255, 255, 255)
             canvas.drawCircle(x, y, size, starPaint)
         }

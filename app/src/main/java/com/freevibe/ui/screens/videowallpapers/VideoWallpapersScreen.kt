@@ -334,10 +334,10 @@ class VideoWallpapersViewModel @Inject constructor(
                             val after = s.redditAfters[sub]
                             val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
                             val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
-                            val req = Request.Builder().url(url).header("User-Agent", "Aura/3.0.0 (Android)").build()
+                            val req = Request.Builder().url(url).header("User-Agent", "Aura/4.1.0 (Android; Open Source)").build()
                             val resp = okHttpClient.newCall(req).execute()
-                            if (!resp.isSuccessful) continue
-                            val body = resp.body?.string() ?: continue
+                            if (!resp.isSuccessful) { resp.close(); continue }
+                            val body = resp.use { it.body?.string() } ?: continue
 
                             // Per-subreddit after token
                             val afterToken = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)

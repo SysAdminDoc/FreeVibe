@@ -18,8 +18,8 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v4.0.0** (versionCode 30)
-- Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `README.md` badge
+- **v4.1.0** (versionCode 31)
+- Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
 ```
@@ -45,6 +45,7 @@ DataStore: Settings, Onboarding
 - v1->2: Added wallpaper_cache + wallpaper_history tables
 - v2->3: Added ia_audio_cache table
 - v3->4: Added wallpaper_collections + wallpaper_collection_items tables
+- v4->5: Composite PKs for search_history (query+type) and wallpaper_cache (id+cacheKey)
 - Migrations defined in AppModule.kt. Uses fallbackToDestructiveMigrationOnDowngrade() only.
 
 ## Gotchas
@@ -76,21 +77,15 @@ DataStore: Settings, Onboarding
 - `CollectionsScreen.kt` - Wallpaper collections list + detail grid
 - `VideoWallpaperService.kt` - WallpaperService for live video wallpapers
 
-## Known Issues (from audit)
-- Pexels API key hardcoded as default in PreferencesManager (should use BuildConfig)
-- SearchHistoryEntity PK is `query` alone — wallpaper/sound searches with same term collide
-- WallpaperCacheEntity PK `id` can collide across different cache keys
-- `WallpaperRepository.getWallhaven()` always passes empty API key (user preference never read)
-- `evictExpired()` uses most conservative TTL for all sources (24h instead of per-source)
-- `CollectionRepository.delete()` not transactional (items + collection in separate calls)
+## Known Issues (remaining)
+- Pexels/Pixabay API keys hardcoded in PreferencesManager (should use BuildConfig)
+- Signing credentials hardcoded in build.gradle.kts (should move to local.properties)
 - No ForeignKey on wallpaper_collection_items.collectionId
-- `streamCache` in YouTubeRepository grows unbounded (no TTL eviction)
 - VideoWallpapersScreen creates ExoPlayer per card (memory pressure on scroll)
-- KotlinJsonAdapterFactory adds ~2MB to APK (all adapters are KSP-generated, reflection not needed)
-- HttpLoggingInterceptor always active (not gated behind BuildConfig.DEBUG)
-- Fastlane metadata completely outdated (references Pixabay, NASA, Freesound, Stability AI)
+- Fastlane metadata completely outdated
 
 ## Version History
+- v4.1.0: Comprehensive audit fixes. DB v5: composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey) — prevents data collisions. DownloadManager response leak fixed (response.use{}). DarkModeReceiver reuses shared OkHttpClient. AutoWallpaperWorker: empty-list crash on .random() fixed. SoundApplier: incomplete files cleaned up on write failure. WeatherWallpaperService: intermediate bitmap recycled in scaleBitmap. VideoWallpaperService: removed unnecessary SurfaceHolder wrapper. YouTubeRepository: stream cache now has 3h TTL. VideoWallpapersScreen: Reddit response leak fixed. RedditRepository: per-subreddit pagination tokens (ConcurrentHashMap). BatchDownloadService: isRunning always reset on completion, robust MIME extension mapping. WeatherParticleRenderer: per-star phase offset for natural twinkling. SelectedContentHolder: @Volatile replaced with MutableStateFlow. FavoritesExporter: BufferedReader properly closed. Version string mismatch in VideoWallpapersScreen fixed.
 - v3.0.0+audit: Fix Discover tab navigation (share wallpaper list via SelectedContentHolder). Remove r/wallpaperengine. Fix 20+ bugs: FavoriteEntity valueOf crash, ContactPicker empty name crash, SoundEditorState hashCode, AudioTrimmer/WallpaperApplier/DualWallpaper/DownloadManager/SoundApplier/OfflineFavorites resource leaks, YouTubeRepository connection leak, VideoCropScreen OkHttpClient reuse, Reddit case-insensitive extensions, OfflineFavorites stale DB path on remove.
 - v3.0.0: YouTube integration (NewPipe Extractor search + yt-dlp stream extraction). Video Wallpapers tab with ExoPlayer auto-playing cards, crop editor for landscape-to-portrait conversion, yt-dlp FFmpeg crop. VideoWallpaperService: file timestamp hot-swap, looping. 5 bottom nav tabs. Pexels as photo + video source. Reddit video sources. Search across all video sources. Orientation filtering.
 - v2.7.0-v2.0.0: See memory file for full changelog.

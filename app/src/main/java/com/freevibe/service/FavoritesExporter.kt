@@ -41,7 +41,7 @@ class FavoritesExporter @Inject constructor(
     suspend fun import(inputUri: Uri): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
             val json = context.contentResolver.openInputStream(inputUri)?.use { input ->
-                BufferedReader(InputStreamReader(input)).readText()
+                BufferedReader(InputStreamReader(input)).use { it.readText() }
             } ?: throw IllegalStateException("Failed to read file")
 
             val items = try {

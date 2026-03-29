@@ -36,34 +36,36 @@ class BatchDownloadService @Inject constructor(
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope = newScope
         newScope.launch {
-            val semaphore = kotlinx.coroutines.sync.Semaphore(concurrency)
+            try {
+                val semaphore = kotlinx.coroutines.sync.Semaphore(concurrency)
 
-            wallpapers.map { wp ->
-                async {
-                    semaphore.acquire()
-                    try {
-                        _state.update { it.copy(currentItem = wp.id) }
-                        val ext = wp.fileType.substringAfterLast("/", "jpg").substringAfterLast(".", "jpg")
+                wallpapers.map { wp ->
+                    async {
+                        semaphore.acquire()
                         try {
-                            downloadManager.downloadWallpaper(
-                                id = "batch_${wp.id}",
-                                url = wp.fullUrl,
-                                fileName = "Aura_${wp.id}.$ext",
-                            ).onSuccess {
-                                _state.update { it.copy(completedCount = it.completedCount + 1) }
-                            }.onFailure {
+                            _state.update { it.copy(currentItem = wp.id) }
+                            val ext = guessBatchExtension(wp.fileType)
+                            try {
+                                downloadManager.downloadWallpaper(
+                                    id = "batch_${wp.id}",
+                                    url = wp.fullUrl,
+                                    fileName = "Aura_${wp.id}.$ext",
+                                ).onSuccess {
+                                    _state.update { it.copy(completedCount = it.completedCount + 1) }
+                                }.onFailure {
+                                    _state.update { it.copy(failedCount = it.failedCount + 1) }
+                                }
+                            } catch (_: Exception) {
                                 _state.update { it.copy(failedCount = it.failedCount + 1) }
                             }
-                        } catch (_: Exception) {
-                            _state.update { it.copy(failedCount = it.failedCount + 1) }
+                        } finally {
+                            semaphore.release()
                         }
-                    } finally {
-                        semaphore.release()
                     }
-                }
-            }.awaitAll()
-
-            _state.update { it.copy(isRunning = false) }
+                }.awaitAll()
+            } finally {
+                _state.update { it.copy(isRunning = false) }
+            }
         }
     }
 
@@ -75,5 +77,13 @@ class BatchDownloadService @Inject constructor(
 
     fun reset() {
         _state.value = BatchDownloadState()
+    }
+
+    private fun guessBatchExtension(fileType: String): String = when {
+        fileType.contains("png", true) -> "png"
+        fileType.contains("webp", true) -> "webp"
+        fileType.contains("gif", true) -> "gif"
+        fileType.contains("jpeg", true) || fileType.contains("jpg", true) -> "jpg"
+        else -> "jpg"
     }
 }

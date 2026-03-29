@@ -54,7 +54,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/4.0.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/4.1.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -182,11 +182,28 @@ object AppModule {
         }
     }
 
+    // v4→5: Composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey)
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Rebuild search_history with composite PK (query, type)
+            db.execSQL("CREATE TABLE IF NOT EXISTS `search_history_new` (`query` TEXT NOT NULL, `type` TEXT NOT NULL, `timestamp` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`query`, `type`))")
+            db.execSQL("INSERT OR IGNORE INTO `search_history_new` SELECT `query`, `type`, `timestamp` FROM `search_history`")
+            db.execSQL("DROP TABLE `search_history`")
+            db.execSQL("ALTER TABLE `search_history_new` RENAME TO `search_history`")
+
+            // Rebuild wallpaper_cache with composite PK (id, cacheKey)
+            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_cache_new` (`id` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `category` TEXT NOT NULL DEFAULT '', `tags` TEXT NOT NULL DEFAULT '', `fileSize` INTEGER NOT NULL DEFAULT 0, `fileType` TEXT NOT NULL DEFAULT '', `uploaderName` TEXT NOT NULL DEFAULT '', `cacheKey` TEXT NOT NULL DEFAULT '', `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`, `cacheKey`))")
+            db.execSQL("INSERT OR IGNORE INTO `wallpaper_cache_new` SELECT `id`, `source`, `thumbnailUrl`, `fullUrl`, `width`, `height`, `category`, `tags`, `fileSize`, `fileType`, `uploaderName`, `cacheKey`, `cachedAt` FROM `wallpaper_cache`")
+            db.execSQL("DROP TABLE `wallpaper_cache`")
+            db.execSQL("ALTER TABLE `wallpaper_cache_new` RENAME TO `wallpaper_cache`")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
