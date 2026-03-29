@@ -22,7 +22,6 @@ import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,11 +45,13 @@ object AppModule {
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
-        .addInterceptor(
-            HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
+        .apply {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                })
             }
-        )
+        }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
                 .header("User-Agent", "Aura/4.0.0 (Android; Open Source)")
@@ -62,7 +63,6 @@ object AppModule {
     @Provides
     @Singleton
     fun provideMoshi(): Moshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
         .build()
 
     // -- API Services --

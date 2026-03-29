@@ -210,6 +210,12 @@ interface CollectionDao {
     @Query("DELETE FROM wallpaper_collection_items WHERE collectionId = :collectionId")
     suspend fun deleteCollectionItems(collectionId: Long)
 
+    @Transaction
+    suspend fun deleteCollectionWithItems(collectionId: Long) {
+        deleteCollectionItems(collectionId)
+        deleteCollection(collectionId)
+    }
+
     @Query("SELECT EXISTS(SELECT 1 FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId)")
     suspend fun isInCollection(collectionId: Long, wallpaperId: String): Boolean
 

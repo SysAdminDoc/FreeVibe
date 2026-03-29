@@ -78,7 +78,7 @@ class AudioTrimmer @Inject constructor(
                 val bufferSize = audioFormat.getInteger(
                     MediaFormat.KEY_MAX_INPUT_SIZE,
                     256 * 1024,
-                )
+                ).coerceIn(8192, 1024 * 1024)
                 val buffer = ByteBuffer.allocate(bufferSize)
                 val bufferInfo = MediaCodec.BufferInfo()
 
@@ -141,8 +141,8 @@ class AudioTrimmer @Inject constructor(
                 var pos = 0L
                 // Skip ID3 header if present
                 file.seek(0)
-                file.read(chunk, 0, min(10, chunkSize))
-                val headerOffset = if (chunk[0] == 'I'.code.toByte() && chunk[1] == 'D'.code.toByte() && chunk[2] == '3'.code.toByte()) {
+                val headerRead = file.read(chunk, 0, min(10, chunkSize))
+                val headerOffset = if (headerRead >= 10 && chunk[0] == 'I'.code.toByte() && chunk[1] == 'D'.code.toByte() && chunk[2] == '3'.code.toByte()) {
                     // ID3v2 header: size is in bytes 6-9 (synchsafe integer)
                     val s = ((chunk[6].toInt() and 0x7F) shl 21) or
                         ((chunk[7].toInt() and 0x7F) shl 14) or
