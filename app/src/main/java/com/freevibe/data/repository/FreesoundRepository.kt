@@ -50,23 +50,23 @@ class FreesoundRepository @Inject constructor(
     )
 
     suspend fun getRingtones(page: Int = 1): SearchResult<Sound> = search(
-        query = "ringtone melody tone phone",
-        minDuration = 3.0,
+        query = "ringtone phone ring tone mobile",
+        minDuration = 5.0,
         maxDuration = 30.0,
         page = page,
     )
 
     suspend fun getNotifications(page: Int = 1): SearchResult<Sound> = search(
-        query = "notification alert beep chime ding",
+        query = "notification beep chime ding message alert tone",
         minDuration = 0.5,
         maxDuration = 5.0,
         page = page,
     )
 
     suspend fun getAlarms(page: Int = 1): SearchResult<Sound> = search(
-        query = "alarm buzzer bell wake up clock",
+        query = "alarm clock buzzer bell wake morning",
         minDuration = 3.0,
-        maxDuration = 30.0,
+        maxDuration = 40.0,
         page = page,
     )
 

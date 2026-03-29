@@ -61,18 +61,18 @@ class SoundRepository @Inject constructor(
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("ringtone OR melody OR music OR tone OR jingle")
+        val q = buildSoundQuery("(ringtone OR phone tone OR mobile tone OR ring tone) NOT music NOT song NOT instrumental NOT podcast")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
     suspend fun searchNotifications(
         page: Int = 1,
-        maxDuration: Int = 3,
+        maxDuration: Int = 5,
         minDuration: Int = 0,
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("notification OR alert OR chime OR beep OR ding OR ping")
+        val q = buildSoundQuery("(notification sound OR text tone OR message chime OR beep OR ding) NOT alarm NOT siren NOT music NOT song")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
@@ -83,7 +83,7 @@ class SoundRepository @Inject constructor(
         onProgress: ((Int, Int) -> Unit)? = null,
         onSoundResolved: ((Sound) -> Unit)? = null,
     ): SearchResult<Sound> {
-        val q = buildSoundQuery("alarm OR buzzer OR siren OR wake OR warning")
+        val q = buildSoundQuery("(alarm clock OR alarm buzzer OR alarm bell OR wake up tone) NOT music NOT song NOT gentle NOT relaxing NOT podcast")
         return fetchSounds(q, page, maxDuration, minDuration, "downloads desc", onProgress, onSoundResolved)
     }
 
