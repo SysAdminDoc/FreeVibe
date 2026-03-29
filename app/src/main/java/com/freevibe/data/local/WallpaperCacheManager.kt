@@ -41,9 +41,9 @@ class WallpaperCacheManager @Inject constructor(
         cacheDao.insertAll(wallpapers.map { it.toCacheEntity(cacheKey, now) })
     }
 
-    /** Remove all expired entries */
+    /** Remove all expired entries (uses longest TTL — per-source freshness is checked in getCached) */
     suspend fun evictExpired() {
-        val oldest = System.currentTimeMillis() - TTL_PICSUM // Most conservative TTL
+        val oldest = System.currentTimeMillis() - TTL_PICSUM
         cacheDao.evictOlderThan(oldest)
     }
 

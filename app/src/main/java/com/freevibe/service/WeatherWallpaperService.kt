@@ -156,7 +156,9 @@ class WeatherWallpaperService : WallpaperService() {
             val cropW = targetW.coerceAtMost(scaled.width - x).coerceAtLeast(1)
             val cropH = targetH.coerceAtMost(scaled.height - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
-                Bitmap.createBitmap(scaled, x, y, cropW, cropH)
+                Bitmap.createBitmap(scaled, x, y, cropW, cropH).also {
+                    if (scaled != src) scaled.recycle()
+                }
             } else scaled
         }
     }

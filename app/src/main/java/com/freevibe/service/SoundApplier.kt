@@ -145,7 +145,16 @@ class SoundApplier @Inject constructor(
         val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
             ?: return null
 
-        resolver.openOutputStream(uri)?.use { it.write(data) }
+        val written = try {
+            resolver.openOutputStream(uri)?.use { it.write(data); true } ?: false
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!written) {
+            resolver.delete(uri, null, null)
+            return null
+        }
 
         // Mark as complete
         if (Build.VERSION.SDK_INT >= 29) {

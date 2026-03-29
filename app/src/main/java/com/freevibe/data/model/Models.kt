@@ -88,18 +88,24 @@ data class SearchResult<T>(
 
 // -- Search history (Room entity) --
 
-@Entity(tableName = "search_history")
+@Entity(
+    tableName = "search_history",
+    primaryKeys = ["query", "type"],
+)
 data class SearchHistoryEntity(
-    @PrimaryKey val query: String,
+    val query: String,
     val type: String,           // WALLPAPER or SOUND
     val timestamp: Long = System.currentTimeMillis(),
 )
 
 // -- Cached content (Room entity) --
 
-@Entity(tableName = "wallpaper_cache")
+@Entity(
+    tableName = "wallpaper_cache",
+    primaryKeys = ["id", "cacheKey"],
+)
 data class WallpaperCacheEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     val source: String,
     val thumbnailUrl: String,
     val fullUrl: String,

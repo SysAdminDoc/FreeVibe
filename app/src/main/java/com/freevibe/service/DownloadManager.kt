@@ -95,67 +95,66 @@ class DownloadManager @Inject constructor(
         // Start HTTP download
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            response.close()
-            throw IllegalStateException("Download failed: HTTP ${response.code}")
-        }
-        val body = response.body ?: run {
-            response.close()
-            throw IllegalStateException("Empty response body")
-        }
-        val totalBytes = body.contentLength()
-
-        // Create MediaStore entry
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
-            if (Build.VERSION.SDK_INT >= 29) {
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
+        response.use { resp ->
+            if (!resp.isSuccessful) {
+                throw IllegalStateException("Download failed: HTTP ${resp.code}")
             }
-        }
+            val body = resp.body
+                ?: throw IllegalStateException("Empty response body")
+            val totalBytes = body.contentLength()
 
-        val resolver = context.contentResolver
-        val uri = resolver.insert(collection, values)
-            ?: throw IllegalStateException("Failed to create MediaStore entry")
-
-        // Stream data with progress tracking
-        var downloadedBytes = 0L
-        resolver.openOutputStream(uri)?.use { output ->
-            body.byteStream().use { input ->
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-                    val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
-                    updateProgress(id, DownloadProgress(id, fileName, progress, totalBytes, downloadedBytes))
+            // Create MediaStore entry
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                if (Build.VERSION.SDK_INT >= 29) {
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }
-        }
 
-        // Mark as complete in MediaStore
-        if (Build.VERSION.SDK_INT >= 29) {
-            values.clear()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-        }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(collection, values)
+                ?: throw IllegalStateException("Failed to create MediaStore entry")
 
-        // Record in local database
-        downloadDao.insert(
-            DownloadEntity(
-                id = id,
-                source = contentType,
-                type = contentType,
-                localPath = uri.toString(),
-                name = fileName,
+            // Stream data with progress tracking
+            var downloadedBytes = 0L
+            resolver.openOutputStream(uri)?.use { output ->
+                body.byteStream().use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        downloadedBytes += bytesRead
+                        val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
+                        updateProgress(id, DownloadProgress(id, fileName, progress, totalBytes, downloadedBytes))
+                    }
+                }
+            }
+
+            // Mark as complete in MediaStore
+            if (Build.VERSION.SDK_INT >= 29) {
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+
+            // Record in local database
+            downloadDao.insert(
+                DownloadEntity(
+                    id = id,
+                    source = contentType,
+                    type = contentType,
+                    localPath = uri.toString(),
+                    name = fileName,
+                )
             )
-        )
 
-        // Mark download complete
-        updateProgress(id, DownloadProgress(id, fileName, 1f, totalBytes, downloadedBytes, isComplete = true))
+            // Mark download complete
+            updateProgress(id, DownloadProgress(id, fileName, 1f, totalBytes, downloadedBytes, isComplete = true))
 
-        uri
+            uri
+        }
     }.onFailure { e ->
         updateProgress(id, DownloadProgress(id, fileName, 0f, 0, 0, error = e.message))
     }

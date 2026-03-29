@@ -75,7 +75,8 @@ class AutoWallpaperWorker @AssistedInject constructor(
             if (homeEnabled) applyAndRecord(pick, WallpaperTarget.HOME)
             if (lockEnabled) {
                 // Pick a different wallpaper for lock if available
-                val lockPick = if (wallpapers.size > 1) wallpapers.filter { it.id != pick.id }.random() else pick
+                val others = wallpapers.filter { it.id != pick.id }
+                val lockPick = if (others.isNotEmpty()) others.random() else pick
                 applyAndRecord(lockPick, WallpaperTarget.LOCK)
             }
         }

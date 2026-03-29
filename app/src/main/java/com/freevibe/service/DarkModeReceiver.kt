@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 /**
  * Listens for system UI mode changes (dark/light) and applies the
@@ -38,17 +39,18 @@ class DarkModeReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val client = OkHttpClient()
-                val request = Request.Builder().url(url).build()
-                client.newCall(request).execute().use { resp ->
+                sharedClient.newCall(Request.Builder().url(url).build()).execute().use { resp ->
                     val bytes = resp.body?.bytes()
                     if (bytes != null) {
                         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         if (bitmap != null) {
-                            val wm = WallpaperManager.getInstance(context)
-                            wm.setBitmap(bitmap, null, true,
-                                WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
-                            bitmap.recycle()
+                            try {
+                                val wm = WallpaperManager.getInstance(context)
+                                wm.setBitmap(bitmap, null, true,
+                                    WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
+                            } finally {
+                                bitmap.recycle()
+                            }
                         }
                     }
                 }
@@ -56,6 +58,15 @@ class DarkModeReceiver : BroadcastReceiver() {
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    companion object {
+        private val sharedClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
         }
     }
 }

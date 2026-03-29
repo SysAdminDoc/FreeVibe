@@ -120,10 +120,7 @@ class VideoWallpaperService : WallpaperService() {
                 val speed = getPlaybackSpeed()
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
-                    val wrappedHolder = object : SurfaceHolder by holder {
-                        override fun setKeepScreenOn(screenOn: Boolean) {}
-                    }
-                    setDisplay(wrappedHolder)
+                    setDisplay(holder)
                     isLooping = true
                     setVolume(0f, 0f)
                     prepare()
