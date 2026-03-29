@@ -69,6 +69,28 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchWallhaven(query: String, page: Int = 1) =
         getWallhaven(query = query, page = page)
 
+    /** Find wallpapers similar to a Wallhaven wallpaper by its ID (uses like: syntax) */
+    suspend fun findSimilar(wallhavenId: String, page: Int = 1): SearchResult<Wallpaper> =
+        getWallhaven(query = "like:$wallhavenId", page = page)
+
+    /** Get random wallpapers from Wallhaven */
+    suspend fun getRandomWallhaven(): SearchResult<Wallpaper> {
+        val apiKey = wallhavenApiKey()
+        val response = wallhavenApi.search(
+            sorting = "random",
+            categories = "111",
+            purity = wallhavenPurity(),
+            minResolution = wallhavenMinRes(),
+            apiKey = apiKey,
+        )
+        return SearchResult(
+            items = response.data.map { it.toWallpaper() },
+            totalCount = response.meta.total,
+            currentPage = 1,
+            hasMore = true,
+        )
+    }
+
     /** Search across all sources simultaneously */
     suspend fun searchAll(query: String, page: Int = 1): SearchResult<Wallpaper> = supervisorScope {
         val sources = listOf(

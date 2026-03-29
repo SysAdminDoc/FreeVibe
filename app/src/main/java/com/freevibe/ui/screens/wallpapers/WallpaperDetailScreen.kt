@@ -226,7 +226,46 @@ fun WallpaperDetailScreen(
                     }
                 }
 
-                // Action row: favorite, download, share, more
+                // Tag chips (from Wallhaven)
+                if (wp.tags.isNotEmpty()) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
+                    ) {
+                        wp.tags.take(8).forEach { tag ->
+                            item {
+                                SuggestionChip(
+                                    onClick = { viewModel.searchByTag(tag); onBack() },
+                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                                    colors = SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = Color.White.copy(alpha = 0.15f),
+                                        labelColor = Color.White,
+                                    ),
+                                    border = null,
+                                    modifier = Modifier.height(28.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Color palette dots — tap to search by color
+                if (wp.colors.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        wp.colors.take(5).forEach { hex ->
+                            val colorInt = runCatching { android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex") }.getOrDefault(0)
+                            Surface(
+                                onClick = { viewModel.searchByColor(hex.removePrefix("#")); onBack() },
+                                color = Color(colorInt),
+                                shape = CircleShape,
+                                modifier = Modifier.size(22.dp),
+                                content = {},
+                            )
+                        }
+                    }
+                }
+
+                // Action row: favorite, download, find similar, share, more
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -237,6 +276,7 @@ fun WallpaperDetailScreen(
                         onClick = { viewModel.toggleFavorite(wp) },
                     )
                     ActionCircle(Icons.Default.Download, onClick = { viewModel.downloadWallpaper(wp) })
+                    ActionCircle(Icons.Default.ImageSearch, onClick = { viewModel.findSimilar(wp); onBack() })
                     ActionCircle(Icons.Default.Share, onClick = {
                         val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
                         val intent = Intent(Intent.ACTION_SEND).apply {
