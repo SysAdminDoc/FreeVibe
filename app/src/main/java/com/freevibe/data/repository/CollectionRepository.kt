@@ -43,8 +43,7 @@ class CollectionRepository @Inject constructor(
         dao.removeItem(collectionId, wallpaperId)
 
     suspend fun delete(collectionId: Long) {
-        dao.deleteCollectionItems(collectionId)
-        dao.deleteCollection(collectionId)
+        dao.deleteCollectionWithItems(collectionId)
     }
 
     suspend fun rename(collectionId: Long, name: String) =

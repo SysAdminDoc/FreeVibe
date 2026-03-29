@@ -19,8 +19,12 @@ import javax.inject.Singleton
 @Singleton
 class YouTubeRepository @Inject constructor() {
 
-    // Cache resolved stream URLs to avoid re-extracting on replay
-    private val streamCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    // Cache resolved stream URLs to avoid re-extracting on replay (bounded LRU, synchronized)
+    private val streamCache = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 50
+        }
+    )
 
     /** Check if a video's audio URL is already cached (ready for instant playback) */
     fun isCached(videoId: String): Boolean = streamCache.containsKey(videoId)
