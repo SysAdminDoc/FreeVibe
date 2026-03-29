@@ -2,6 +2,7 @@ package com.freevibe.data.repository
 
 import android.content.Context
 import android.provider.Settings
+import android.util.Log
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -13,18 +14,21 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Community voting system backed by Firebase Realtime Database.
+ * Community voting + admin moderation via Firebase Realtime Database.
  *
- * Structure: /votes/{contentId}/upvotes = Int
- *            /voters/{contentId}/{deviceId} = true  (prevents double-voting)
+ * Firebase structure:
+ *   /votes/{contentId}/upvotes = Int           (community vote tally)
+ *   /voters/{contentId}/{deviceId} = true      (prevents double-voting)
+ *   /moderation/{contentId} = true             (admin global hide — removes for ALL users)
  *
- * Downvoting is local-only — hides the post for this device via DataStore.
+ * Regular downvote = local-only hide (SharedPreferences).
+ * Admin downvote = global hide via /moderation (visible to no one).
  */
 @Singleton
 class VoteRepository @Inject constructor(
@@ -33,24 +37,52 @@ class VoteRepository @Inject constructor(
     private val db = FirebaseDatabase.getInstance().reference
     private val votesRef = db.child("votes")
     private val votersRef = db.child("voters")
+    private val moderationRef = db.child("moderation")
 
-    // Stable anonymous device ID (no account needed)
     @Suppress("HardwareIds")
     private val deviceId: String by lazy {
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
     }
 
-    // Local cache of hidden (downvoted) content IDs
-    private val _hiddenIds = MutableStateFlow<Set<String>>(emptySet())
-    val hiddenIds: Flow<Set<String>> = _hiddenIds
+    /** Admin device IDs that can globally moderate content */
+    private val adminDeviceIds = setOf(
+        "9eb287ea039a5b73", // SysAdminDoc primary device
+    )
+
+    val isAdmin: Boolean get() = deviceId in adminDeviceIds
+
+    // ── Local hidden IDs (user's personal downvotes) ──
+
+    private val _localHiddenIds = MutableStateFlow<Set<String>>(emptySet())
 
     init {
-        // Load hidden IDs from SharedPreferences
         val prefs = context.getSharedPreferences("aura_votes", Context.MODE_PRIVATE)
-        _hiddenIds.value = prefs.getStringSet("hidden_ids", emptySet()) ?: emptySet()
+        _localHiddenIds.value = prefs.getStringSet("hidden_ids", emptySet()) ?: emptySet()
     }
 
-    /** Get live upvote count for a content item */
+    // ── Global moderation list (admin-hidden, synced from Firebase) ──
+
+    private val _moderatedIds = MutableStateFlow<Set<String>>(emptySet())
+
+    init {
+        // Listen for moderation list changes
+        moderationRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _moderatedIds.value = snapshot.children.mapNotNull { it.key }.toSet()
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.w("VoteRepo", "Moderation listener cancelled: ${error.message}")
+            }
+        })
+    }
+
+    /** Combined hidden IDs: local downvotes + global moderation */
+    val hiddenIds: Flow<Set<String>> = combine(_localHiddenIds, _moderatedIds) { local, moderated ->
+        local + moderated
+    }
+
+    // ── Voting ──
+
     fun getVoteCount(contentId: String): Flow<Int> = callbackFlow {
         val safeId = sanitizeKey(contentId)
         val ref = votesRef.child(safeId).child("upvotes")
@@ -58,88 +90,93 @@ class VoteRepository @Inject constructor(
             override fun onDataChange(snapshot: DataSnapshot) {
                 trySend(snapshot.getValue(Int::class.java) ?: 0)
             }
-            override fun onCancelled(error: DatabaseError) {
-                trySend(0)
-            }
+            override fun onCancelled(error: DatabaseError) { trySend(0) }
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
     }
 
-    /** Check if current device already voted on this item */
     suspend fun hasVoted(contentId: String): Boolean {
         val safeId = sanitizeKey(contentId)
         return try {
-            val snap = votersRef.child(safeId).child(deviceId).get().await()
-            snap.exists()
+            votersRef.child(safeId).child(deviceId).get().await().exists()
         } catch (_: Exception) { false }
     }
 
-    /** Upvote a content item (atomic increment, one vote per device) */
     suspend fun upvote(contentId: String): Boolean {
         val safeId = sanitizeKey(contentId)
-        // Check if already voted
         if (hasVoted(safeId)) return false
-
         return try {
-            // Atomic increment via transaction
             votesRef.child(safeId).child("upvotes").runTransaction(object : Transaction.Handler {
-                override fun doTransaction(currentData: MutableData): Transaction.Result {
-                    val current = currentData.getValue(Int::class.java) ?: 0
-                    currentData.value = current + 1
-                    return Transaction.success(currentData)
+                override fun doTransaction(data: MutableData): Transaction.Result {
+                    data.value = (data.getValue(Int::class.java) ?: 0) + 1
+                    return Transaction.success(data)
                 }
-                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {}
+                override fun onComplete(e: DatabaseError?, committed: Boolean, s: DataSnapshot?) {}
             })
-            // Mark this device as having voted
             votersRef.child(safeId).child(deviceId).setValue(true).await()
             true
         } catch (_: Exception) { false }
     }
 
-    /** Remove upvote (atomic decrement) */
-    suspend fun removeUpvote(contentId: String): Boolean {
+    // ── Downvote / Hide ──
+
+    /** Regular user: hide locally. Admin: hide globally for everyone. */
+    suspend fun downvote(contentId: String) {
+        if (isAdmin) {
+            moderateHide(contentId)
+        } else {
+            hideLocally(contentId)
+        }
+    }
+
+    /** Local-only hide (regular users) */
+    fun hideLocally(contentId: String) {
+        val updated = _localHiddenIds.value + contentId
+        _localHiddenIds.value = updated
+        context.getSharedPreferences("aura_votes", Context.MODE_PRIVATE)
+            .edit().putStringSet("hidden_ids", updated).apply()
+    }
+
+    /** Admin: globally hide content for ALL users via Firebase */
+    suspend fun moderateHide(contentId: String) {
         val safeId = sanitizeKey(contentId)
-        if (!hasVoted(safeId)) return false
-
-        return try {
-            votesRef.child(safeId).child("upvotes").runTransaction(object : Transaction.Handler {
-                override fun doTransaction(currentData: MutableData): Transaction.Result {
-                    val current = currentData.getValue(Int::class.java) ?: 0
-                    currentData.value = (current - 1).coerceAtLeast(0)
-                    return Transaction.success(currentData)
-                }
-                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {}
-            })
-            votersRef.child(safeId).child(deviceId).removeValue().await()
-            true
-        } catch (_: Exception) { false }
+        try {
+            moderationRef.child(safeId).setValue(true).await()
+            Log.d("VoteRepo", "Admin moderated: $contentId")
+        } catch (e: Exception) {
+            Log.e("VoteRepo", "Moderation failed: ${e.message}")
+            // Fallback to local hide
+            hideLocally(contentId)
+        }
     }
 
-    /** Downvote = hide locally (not stored in Firebase) */
-    fun hideContent(contentId: String) {
-        val updated = _hiddenIds.value + contentId
-        _hiddenIds.value = updated
+    /** Admin: remove global moderation (unhide for everyone) */
+    suspend fun moderateUnhide(contentId: String) {
+        val safeId = sanitizeKey(contentId)
+        try {
+            moderationRef.child(safeId).removeValue().await()
+        } catch (_: Exception) {}
+    }
+
+    /** Unhide locally */
+    fun unhideLocally(contentId: String) {
+        val updated = _localHiddenIds.value - contentId
+        _localHiddenIds.value = updated
         context.getSharedPreferences("aura_votes", Context.MODE_PRIVATE)
             .edit().putStringSet("hidden_ids", updated).apply()
     }
 
-    /** Unhide a previously downvoted item */
-    fun unhideContent(contentId: String) {
-        val updated = _hiddenIds.value - contentId
-        _hiddenIds.value = updated
-        context.getSharedPreferences("aura_votes", Context.MODE_PRIVATE)
-            .edit().putStringSet("hidden_ids", updated).apply()
-    }
+    fun isHidden(contentId: String): Boolean =
+        contentId in _localHiddenIds.value || contentId in _moderatedIds.value
 
-    fun isHidden(contentId: String): Boolean = contentId in _hiddenIds.value
+    // ── Batch ──
 
-    /** Batch fetch vote counts for a list of IDs (for grid display) */
     fun getVoteCounts(contentIds: List<String>): Flow<Map<String, Int>> = callbackFlow {
         val counts = mutableMapOf<String, Int>()
         val listeners = mutableListOf<Pair<String, ValueEventListener>>()
 
-        contentIds.take(50).forEach { id -> // Limit to prevent excessive listeners
+        contentIds.take(50).forEach { id ->
             val safeId = sanitizeKey(id)
             val ref = votesRef.child(safeId).child("upvotes")
             val listener = object : ValueEventListener {
@@ -152,7 +189,6 @@ class VoteRepository @Inject constructor(
             ref.addValueEventListener(listener)
             listeners.add(safeId to listener)
         }
-
         awaitClose {
             listeners.forEach { (safeId, listener) ->
                 votesRef.child(safeId).child("upvotes").removeEventListener(listener)
@@ -160,7 +196,6 @@ class VoteRepository @Inject constructor(
         }
     }
 
-    // Firebase keys can't contain . # $ [ ] /
     private fun sanitizeKey(id: String): String =
         id.replace(Regex("[.#$\\[\\]/]"), "_")
 }

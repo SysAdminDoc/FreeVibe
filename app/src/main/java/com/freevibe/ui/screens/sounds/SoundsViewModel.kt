@@ -269,7 +269,7 @@ class SoundsViewModel @Inject constructor(
 
     // -- Voting --
     fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
-    fun downvote(id: String) { voteRepo.hideContent(id) }
+    fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
 
     private fun startPlayback(sound: Sound) {
         stopPlayback()

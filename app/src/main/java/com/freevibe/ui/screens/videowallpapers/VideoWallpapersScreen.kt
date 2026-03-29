@@ -172,7 +172,7 @@ class VideoWallpapersViewModel @Inject constructor(
     fun getStreamUrl(id: String): String? = streamUrls[id]
 
     fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
-    fun downvote(id: String) { voteRepo.hideContent(id) }
+    fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
 
     fun applyVideoWallpaper(item: VideoWallpaperItem) {
         viewModelScope.launch {
