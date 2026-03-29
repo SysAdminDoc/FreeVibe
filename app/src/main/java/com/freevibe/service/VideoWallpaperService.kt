@@ -28,19 +28,36 @@ class VideoWallpaperService : WallpaperService() {
             getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
                 .getFloat("video_playback_speed", 1.0f).takeIf { it > 0 } ?: 1.0f
 
+        private fun resolveScreenSize() {
+            if (screenWidth > 0 && screenHeight > 0) return
+            try {
+                val wm = getSystemService(android.content.Context.WINDOW_SERVICE) as? android.view.WindowManager
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    wm?.currentWindowMetrics?.bounds?.let { bounds ->
+                        screenWidth = bounds.width()
+                        screenHeight = bounds.height()
+                    }
+                } else {
+                    val metrics = android.util.DisplayMetrics()
+                    @Suppress("DEPRECATION")
+                    wm?.defaultDisplay?.getRealMetrics(metrics)
+                    screenWidth = metrics.widthPixels
+                    screenHeight = metrics.heightPixels
+                }
+            } catch (_: Exception) {}
+        }
+
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceWidth = width
             surfaceHeight = height
-            if (screenWidth == 0 && screenHeight == 0) {
-                screenWidth = width
-                screenHeight = height
-            }
+            resolveScreenSize()
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
             currentHolder = holder
+            resolveScreenSize()
             initializePlayer(holder)
         }
 
@@ -92,7 +109,13 @@ class VideoWallpaperService : WallpaperService() {
                     setVolume(0f, 0f)
                     try { setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING) } catch (_: Exception) {}
                     prepare()
-                    applyCenterCrop(this, holder)
+                    // Use actual screen size for the surface so MediaPlayer's SCALE_TO_FIT_WITH_CROPPING
+                    // renders correctly without distortion. The scaling mode handles center-crop natively.
+                    val sw = if (screenWidth > 0) screenWidth else surfaceWidth
+                    val sh = if (screenHeight > 0) screenHeight else surfaceHeight
+                    if (sw > 0 && sh > 0) {
+                        try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
+                    }
                     try { playbackParams = playbackParams.setSpeed(speed) } catch (_: Exception) {}
                     start()
                 }
@@ -101,24 +124,6 @@ class VideoWallpaperService : WallpaperService() {
                 if (BuildConfig.DEBUG) android.util.Log.e("VideoWPService", "Init failed: ${e.message}")
                 releasePlayer()
             }
-        }
-
-        private fun applyCenterCrop(player: MediaPlayer, holder: SurfaceHolder) {
-            val sw = if (screenWidth > 0) screenWidth else surfaceWidth
-            val sh = if (screenHeight > 0) screenHeight else surfaceHeight
-            if (sw <= 0 || sh <= 0) return
-            val videoW = player.videoWidth
-            val videoH = player.videoHeight
-            if (videoW <= 0 || videoH <= 0) return
-
-            val screenRatio = sw.toFloat() / sh
-            val videoRatio = videoW.toFloat() / videoH
-            val (newW, newH) = if (videoRatio > screenRatio) {
-                (sh * videoRatio).toInt() to sh
-            } else {
-                sw to (sw / videoRatio).toInt()
-            }
-            try { holder.setFixedSize(newW, newH) } catch (_: Exception) {}
         }
 
         private fun releasePlayer() {

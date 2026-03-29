@@ -65,26 +65,65 @@ fun VideoCropScreen(
     DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-    var videoWidth by remember { mutableIntStateOf(1920) }
-    var videoHeight by remember { mutableIntStateOf(1080) }
+    var videoWidth by remember { mutableIntStateOf(0) }
+    var videoHeight by remember { mutableIntStateOf(0) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
     var isCropping by remember { mutableStateOf(false) }
+    var dimensionsReady by remember { mutableStateOf(false) }
 
+    // Detect actual video dimensions via ExoPlayer format or MediaMetadataRetriever fallback
     LaunchedEffect(Unit) {
-        repeat(30) {
+        // Try ExoPlayer format first (polls for up to 5s)
+        repeat(50) {
             kotlinx.coroutines.delay(100)
             exoPlayer.videoFormat?.let { format ->
-                videoWidth = format.width
-                videoHeight = format.height
-                return@LaunchedEffect
+                if (format.width > 0 && format.height > 0) {
+                    videoWidth = format.width
+                    videoHeight = format.height
+                    dimensionsReady = true
+                    return@LaunchedEffect
+                }
             }
+        }
+        // Fallback: use MediaMetadataRetriever for local/remote files
+        withContext(Dispatchers.IO) {
+            try {
+                val retriever = android.media.MediaMetadataRetriever()
+                try {
+                    if (videoUrl.startsWith("http")) {
+                        retriever.setDataSource(videoUrl, emptyMap())
+                    } else {
+                        retriever.setDataSource(videoUrl)
+                    }
+                    val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                    val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                    val rotation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                    if (w > 0 && h > 0) {
+                        // Apply rotation — 90/270 degrees means width/height are swapped
+                        if (rotation == 90 || rotation == 270) {
+                            videoWidth = h; videoHeight = w
+                        } else {
+                            videoWidth = w; videoHeight = h
+                        }
+                        dimensionsReady = true
+                    }
+                } finally {
+                    retriever.release()
+                }
+            } catch (e: Exception) {
+                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "MetadataRetriever failed: ${e.message}")
+            }
+        }
+        // Last resort: assume 1080x1920 portrait
+        if (!dimensionsReady) {
+            videoWidth = 1080; videoHeight = 1920; dimensionsReady = true
         }
     }
 
     // Calculate minimum scale so video always covers the viewport
-    val minScale = remember(viewSize, videoWidth, videoHeight) {
+    val minScale = remember(viewSize, videoWidth, videoHeight, dimensionsReady) {
         if (viewSize.width <= 0 || viewSize.height <= 0 || videoWidth <= 0 || videoHeight <= 0) 1f
         else {
             val fitScaleX = viewSize.width.toFloat() / videoWidth
@@ -197,7 +236,7 @@ fun VideoCropScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("${videoWidth}x${videoHeight}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (dimensionsReady) "${videoWidth}x${videoHeight}" else "Detecting...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("%.0f%%".format(scale * 100), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
 
@@ -218,7 +257,7 @@ fun VideoCropScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-                enabled = !isCropping,
+                enabled = !isCropping && dimensionsReady,
                 shape = RoundedCornerShape(16.dp),
             ) {
                 if (isCropping) {
