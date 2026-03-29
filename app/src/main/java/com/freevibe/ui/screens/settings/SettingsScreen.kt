@@ -122,6 +122,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setPexelsKey(key)
     }
 
+    fun setPixabayKey(key: String) = viewModelScope.launch {
+        prefs.setPixabayKey(key)
+    }
+
     fun setVideoFpsLimit(fps: Int) = viewModelScope.launch {
         prefs.setVideoFpsLimit(fps)
     }
@@ -627,6 +631,41 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showPexelsKey = false }) { Text("Cancel") }
+                    },
+                )
+            }
+            var showPixabayKey by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Key,
+                title = "Pixabay API Key",
+                subtitle = "Free key for photos + videos (pixabay.com/api/docs)",
+                onClick = { showPixabayKey = true },
+            )
+            if (showPixabayKey) {
+                var keyText by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showPixabayKey = false },
+                    title = { Text("Pixabay API Key") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Get a free key at pixabay.com/api/docs", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(
+                                value = keyText,
+                                onValueChange = { keyText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Paste API key here") },
+                                singleLine = true,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setPixabayKey(keyText.trim())
+                            showPixabayKey = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showPixabayKey = false }) { Text("Cancel") }
                     },
                 )
             }
