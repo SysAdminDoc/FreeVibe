@@ -67,11 +67,12 @@ class WallpaperEditorViewModel @Inject constructor(
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
                         val request = okhttp3.Request.Builder().url(wp.fullUrl).build()
-                        val response = okHttpClient.newCall(request).execute()
-                        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                        val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            ?: throw Exception("Failed to decode image")
+                        okHttpClient.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+                            val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                ?: throw Exception("Failed to decode image")
+                        }
                     }
                     setSourceBitmap(bitmap)
                     _state.update { it.copy(isLoadingImage = false) }
@@ -125,6 +126,9 @@ class WallpaperEditorViewModel @Inject constructor(
     }
 
     fun resetAll() {
+        val old = _state.value.editedBitmap
+        val original = _state.value.originalBitmap
+        if (old != null && old !== original) old.recycle()
         _state.update {
             it.copy(
                 editedBitmap = it.originalBitmap,
@@ -151,13 +155,34 @@ class WallpaperEditorViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isProcessing = true) }
             val s = _state.value
+            val oldEdited = _state.value.editedBitmap
             val result = withContext(Dispatchers.Default) {
                 var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation, s.warmth)
-                if (s.blurRadius > 0.5f) bmp = stackBlur(bmp, s.blurRadius.toInt().coerceIn(1, 25))
-                if (s.amoledCrush > 0.01f) bmp = applyAmoledCrush(bmp, s.amoledCrush)
-                if (s.vignette > 0.01f) bmp = applyVignette(bmp, s.vignette)
-                if (s.grain > 0.01f) bmp = applyGrain(bmp, s.grain)
+                if (s.blurRadius > 0.5f) {
+                    val prev = bmp
+                    bmp = stackBlur(bmp, s.blurRadius.toInt().coerceIn(1, 25))
+                    if (prev !== original && prev !== bmp) prev.recycle()
+                }
+                if (s.amoledCrush > 0.01f) {
+                    val prev = bmp
+                    bmp = applyAmoledCrush(bmp, s.amoledCrush)
+                    if (prev !== original && prev !== bmp) prev.recycle()
+                }
+                if (s.vignette > 0.01f) {
+                    val prev = bmp
+                    bmp = applyVignette(bmp, s.vignette)
+                    if (prev !== original && prev !== bmp) prev.recycle()
+                }
+                if (s.grain > 0.01f) {
+                    val prev = bmp
+                    bmp = applyGrain(bmp, s.grain)
+                    if (prev !== original && prev !== bmp) prev.recycle()
+                }
                 bmp
+            }
+            // Recycle previous edited bitmap if it's not the original
+            if (oldEdited != null && oldEdited !== original && oldEdited !== result) {
+                oldEdited.recycle()
             }
             _state.update { it.copy(editedBitmap = result, isProcessing = false) }
         }
