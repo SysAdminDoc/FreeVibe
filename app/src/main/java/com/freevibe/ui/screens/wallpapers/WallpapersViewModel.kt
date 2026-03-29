@@ -424,4 +424,64 @@ class WallpapersViewModel @Inject constructor(
             }
         }
     }
+
+    /** Find similar wallpapers via Wallhaven like: query + color search */
+    fun findSimilar(wallpaper: Wallpaper) {
+        val whId = wallpaper.id.removePrefix("wh_")
+        viewModelScope.launch {
+            _state.update { it.copy(selectedTab = WallpaperTab.SEARCH, query = "Similar", wallpapers = emptyList(), isLoading = true, currentPage = 1) }
+            try {
+                val results = mutableListOf<Wallpaper>()
+                // Tag-similar via Wallhaven like: syntax (only for Wallhaven wallpapers)
+                if (wallpaper.source == com.freevibe.data.model.ContentSource.WALLHAVEN) {
+                    val similar = wallpaperRepo.findSimilar(whId)
+                    results.addAll(similar.items)
+                }
+                // Color-similar via dominant color
+                if (wallpaper.colors.isNotEmpty()) {
+                    val colorResult = wallpaperRepo.searchByColor(wallpaper.colors.first().removePrefix("#"))
+                    results.addAll(colorResult.items.filter { it.id !in results.map { r -> r.id }.toSet() })
+                }
+                _state.update { it.copy(wallpapers = results, isLoading = false, hasMore = false) }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
+    }
+
+    /** Load random wallpapers from Wallhaven */
+    fun loadRandom() {
+        viewModelScope.launch {
+            _state.update { it.copy(selectedTab = WallpaperTab.SEARCH, query = "Random", wallpapers = emptyList(), isLoading = true, currentPage = 1) }
+            try {
+                val result = wallpaperRepo.getRandomWallhaven()
+                _state.update { it.copy(wallpapers = result.items, isLoading = false, hasMore = true) }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
+    }
+
+    /** Search by Wallhaven tag */
+    fun searchByTag(tagName: String) {
+        search(tagName)
+    }
+
+    /** Match wallpapers to system Material You colors */
+    fun matchMyTheme(context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val color = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                val hex = if (color) {
+                    val accent = context.getColor(android.R.color.system_accent1_500)
+                    String.format("%06x", accent and 0xFFFFFF)
+                } else {
+                    "424153" // Fallback: Catppuccin lavender-ish
+                }
+                searchByColor(hex)
+            } catch (_: Exception) {
+                searchByColor("424153")
+            }
+        }
+    }
 }
