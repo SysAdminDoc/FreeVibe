@@ -16,7 +16,8 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.freevibe.MainActivity
 import com.freevibe.R
-import com.freevibe.data.repository.WallpaperRepository
+import com.freevibe.data.remote.reddit.RedditApi
+import com.freevibe.data.remote.toWallpaper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -26,27 +27,49 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /**
- * Daily wallpaper notification — shows a curated "Wallpaper of the Day"
- * from Wallhaven's daily top-rated list with a preview thumbnail.
+ * Daily wallpaper notification — shows Reddit's most upvoted wallpaper of the day.
+ * Checks r/wallpapers + r/Amoledbackgrounds + r/MobileWallpaper sorted by top/day,
+ * picks the single highest-upvoted image post. Upvote count provides a real
+ * crowd-sourced quality metric.
  */
 @HiltWorker
 class DailyWallpaperWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val wallpaperRepo: WallpaperRepository,
+    private val redditApi: RedditApi,
     private val okHttpClient: OkHttpClient,
+    private val selectedContent: SelectedContentHolder,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         return try {
-            val result = wallpaperRepo.getWallhaven(page = 1)
-            val wallpaper = result.items.firstOrNull() ?: return Result.retry()
+            // Fetch today's top image posts from multiple wallpaper subreddits
+            val subreddits = listOf("wallpapers", "Amoledbackgrounds", "MobileWallpaper")
+            val topPost = subreddits.flatMap { sub ->
+                try {
+                    redditApi.getSubredditPosts(
+                        subreddit = sub,
+                        sort = "top",
+                        timeRange = "day",
+                        limit = 5,
+                    ).data.children.map { it.data }
+                } catch (_: Exception) { emptyList() }
+            }
+                .filter { it.isImage && !it.over18 }
+                .maxByOrNull { it.ups }
+                ?: return Result.retry()
+
+            val wallpaper = topPost.toWallpaper()
+
+            // Store in SelectedContentHolder so tapping notification opens the wallpaper
+            selectedContent.selectWallpaper(wallpaper)
 
             // Download thumbnail for notification
+            val thumbUrl = topPost.thumbUrl.takeIf { it.startsWith("http") }
+                ?: wallpaper.thumbnailUrl
             val bitmap = withContext(Dispatchers.IO) {
                 try {
-                    val request = Request.Builder().url(wallpaper.thumbnailUrl).build()
-                    okHttpClient.newCall(request).execute().use { resp ->
+                    okHttpClient.newCall(Request.Builder().url(thumbUrl).build()).execute().use { resp ->
                         resp.body?.bytes()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                     }
                 } catch (_: Exception) { null }
@@ -67,17 +90,24 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
+            val upvotes = formatUpvotes(topPost.ups)
+            val res = topPost.parsedResolution
+            val resText = if (res != null) "${res.first}x${res.second} " else ""
+            val subName = "r/${topPost.subreddit}"
+
             val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Wallpaper of the Day")
-                .setContentText("${wallpaper.width}x${wallpaper.height} from ${wallpaper.source.name.lowercase()}")
+                .setContentText("$upvotes upvotes on $subName ${resText}- tap to preview")
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .apply {
                     bitmap?.let {
                         setLargeIcon(it)
-                        setStyle(NotificationCompat.BigPictureStyle().bigPicture(it))
+                        setStyle(NotificationCompat.BigPictureStyle()
+                            .bigPicture(it)
+                            .setSummaryText("$upvotes upvotes on $subName"))
                     }
                 }
                 .build()
@@ -89,12 +119,18 @@ class DailyWallpaperWorker @AssistedInject constructor(
         }
     }
 
+    private fun formatUpvotes(ups: Int): String = when {
+        ups >= 10_000 -> "%.1fk".format(ups / 1000f)
+        ups >= 1_000 -> "%.1fk".format(ups / 1000f)
+        else -> "$ups"
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID, "Daily Wallpaper",
                 NotificationManager.IMPORTANCE_LOW,
-            ).apply { description = "Daily wallpaper recommendation" }
+            ).apply { description = "Today's most upvoted wallpaper from Reddit" }
             val manager = applicationContext.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
@@ -110,7 +146,7 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 24, TimeUnit.HOURS,
             )
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .setInitialDelay(8, TimeUnit.HOURS) // First notification ~8 hours after enable
+                .setInitialDelay(8, TimeUnit.HOURS)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
