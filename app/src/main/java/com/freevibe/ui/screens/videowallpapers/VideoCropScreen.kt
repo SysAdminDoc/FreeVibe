@@ -89,9 +89,8 @@ fun VideoCropScreen(
         else {
             val fitScaleX = viewSize.width.toFloat() / videoWidth
             val fitScaleY = viewSize.height.toFloat() / videoHeight
-            val fitScale = minOf(fitScaleX, fitScaleY)
+            val fitScale = minOf(fitScaleX, fitScaleY).coerceAtLeast(0.001f)
             val coverScale = maxOf(fitScaleX, fitScaleY)
-            // min user scale = cover/fit so video always fills viewport
             coverScale / fitScale
         }
     }
@@ -287,8 +286,8 @@ private suspend fun cropVideoConstrained(
         var cropH = (srcBottom - srcTop).toInt()
 
         // Force even dimensions for h264
-        cropW = (cropW and 0x7FFFFFFE).coerceIn(2, videoWidth - cropX)
-        cropH = (cropH and 0x7FFFFFFE).coerceIn(2, videoHeight - cropY)
+        cropW = ((cropW / 2) * 2).coerceIn(2, videoWidth - cropX)
+        cropH = ((cropH / 2) * 2).coerceIn(2, videoHeight - cropY)
 
         Log.d("VideoCrop", "Constrained crop: ${videoWidth}x${videoHeight} -> ${cropW}x${cropH} at ($cropX,$cropY)")
 

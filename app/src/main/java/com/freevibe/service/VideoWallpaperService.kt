@@ -59,8 +59,8 @@ class VideoWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceWidth = width
             surfaceHeight = height
-            // Store real screen size on first call (before we resize with setFixedSize)
-            if (screenWidth == 0 || (width <= screenWidth && height <= screenHeight)) {
+            // Store real screen size once (before setFixedSize inflates it)
+            if (screenWidth == 0 && screenHeight == 0) {
                 screenWidth = width
                 screenHeight = height
             }
@@ -126,6 +126,7 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         private fun initializePlayer(holder: SurfaceHolder) {
+            releasePlayer() // Always release old player first
             val path = getVideoPath()
             android.util.Log.d("VideoWPService", "initializePlayer path=$path")
             if (path == null) return
@@ -136,32 +137,28 @@ class VideoWallpaperService : WallpaperService() {
             }
             android.util.Log.d("VideoWPService", "File exists: ${file.length() / 1024}KB")
             try {
-                releasePlayer()
                 lastModified = file.lastModified()
                 val speed = getPlaybackSpeed()
+                val safeHolder = object : SurfaceHolder by holder {
+                    override fun setKeepScreenOn(screenOn: Boolean) {} // no-op — required for WallpaperService
+                }
                 mediaPlayer = MediaPlayer().apply {
                     setDataSource(path)
-                    // WallpaperService surfaces don't support setKeepScreenOn —
-                    // MediaPlayer.setDisplay() calls it internally, so we wrap the holder
-                    val safeHolder = object : SurfaceHolder by holder {
-                        override fun setKeepScreenOn(screenOn: Boolean) {} // no-op
-                    }
-                    setDisplay(safeHolder)
+                    setDisplay(safeHolder) // Must be before prepare on some devices
                     isLooping = true
                     setVolume(0f, 0f)
-                    // Use scale-to-fill mode (center crop)
                     try {
                         setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
                     } catch (_: Exception) {}
                     prepare()
-                    // Resize surface for center-crop fill
+                    // Apply center-crop after prepare (videoWidth/Height now available)
                     applyCenterCrop(this, holder)
                     try {
                         playbackParams = playbackParams.setSpeed(speed)
                     } catch (_: Exception) {}
                     start()
                 }
-                android.util.Log.d("VideoWPService", "Player started OK")
+                android.util.Log.d("VideoWPService", "Player started OK, video=${mediaPlayer?.videoWidth}x${mediaPlayer?.videoHeight}")
             } catch (e: Exception) {
                 android.util.Log.e("VideoWPService", "Player init failed: ${e.message}", e)
                 releasePlayer()
