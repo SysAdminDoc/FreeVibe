@@ -64,6 +64,7 @@ class WallpapersViewModel @Inject constructor(
     private val searchHistoryRepo: SearchHistoryRepository,
     private val prefs: PreferencesManager,
     private val colorExtractor: ColorExtractor,
+    private val cacheManager: com.freevibe.data.local.WallpaperCacheManager,
     val voteRepo: VoteRepository,
 ) : ViewModel() {
 
@@ -89,9 +90,29 @@ class WallpapersViewModel @Inject constructor(
     private val _dailyPick = MutableStateFlow<Wallpaper?>(null)
     val dailyPick = _dailyPick.asStateFlow()
 
+    /** Top community-upvoted wallpapers (resolved from cache) */
+    private val _topVoted = MutableStateFlow<List<Pair<Wallpaper, Int>>>(emptyList())
+    val topVoted = _topVoted.asStateFlow()
+
     init {
         consumePendingQueries()
         fetchDailyPick()
+        fetchTopVoted()
+    }
+
+    private fun fetchTopVoted() {
+        viewModelScope.launch {
+            try {
+                val topIds = voteRepo.getTopVotedIds(50)
+                if (topIds.isEmpty()) return@launch
+                val wallpapers = cacheManager.getByIds(topIds.map { it.first })
+                val voteMap = topIds.toMap()
+                val sorted = wallpapers
+                    .mapNotNull { wp -> voteMap[wp.id]?.let { wp to it } ?: voteMap[voteRepo.sanitizeKey(wp.id)]?.let { wp to it } }
+                    .sortedByDescending { it.second }
+                _topVoted.value = sorted
+            } catch (_: Exception) {}
+        }
     }
 
     private fun fetchDailyPick() {

@@ -76,6 +76,7 @@ fun WallpapersScreen(
     val recentSearches by viewModel.recentSearches.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val dailyPick by viewModel.dailyPick.collectAsState()
+    val topVoted by viewModel.topVoted.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
 
     // Vote counts for visible wallpapers
@@ -358,6 +359,7 @@ fun WallpapersScreen(
                                 onLoadMore = { viewModel.loadMore() },
                                 onSearch = { query -> viewModel.search(query) },
                                 isDiscoverTab = state.selectedTab == WallpaperTab.DISCOVER,
+                                topVoted = if (state.selectedTab == WallpaperTab.DISCOVER) topVoted else emptyList(),
                             )
                         }
                     }
@@ -460,6 +462,7 @@ private fun WallpaperGrid(
     onLoadMore: () -> Unit,
     onSearch: ((String) -> Unit)? = null,
     isDiscoverTab: Boolean = false,
+    topVoted: List<Pair<Wallpaper, Int>> = emptyList(),
 ) {
     val gridState = rememberLazyStaggeredGridState()
 
@@ -617,8 +620,35 @@ private fun WallpaperGrid(
             }
         }
 
+        // Top upvoted wallpapers section (Discover only, from community votes across all tabs)
+        if (isDiscoverTab && topVoted.isNotEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "top_voted_header") {
+                Text(
+                    "Community Favorites",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                )
+            }
+            val topVotedIds = topVoted.map { it.first.id }.toSet()
+            topVoted.filter { it.first.id !in hiddenIds }.take(10).forEach { (wp, votes) ->
+                item(key = "top_${wp.id}") {
+                    val isFav = wp.id in favoriteIds
+                    WallpaperCard(
+                        wallpaper = wp,
+                        isFavorite = isFav,
+                        voteCount = votes,
+                        onClick = { onWallpaperClick(wp) },
+                        onFavoriteClick = onLongPress?.let { { it(wp) } },
+                        onLongPress = onDownvote?.let { { it(wp.id) } },
+                        onUpvote = onUpvote?.let { { it(wp.id) } },
+                    )
+                }
+            }
+        }
+
+        val topVotedIds = if (isDiscoverTab) topVoted.map { it.first.id }.toSet() else emptySet()
         val visibleWallpapers = wallpapers
-            .filter { it.id !in hiddenIds }
+            .filter { it.id !in hiddenIds && it.id !in topVotedIds }
             .sortedByDescending { voteCounts[it.id] ?: 0 }
         items(visibleWallpapers, key = { it.id }) { wallpaper ->
             val isFav = wallpaper.id in favoriteIds

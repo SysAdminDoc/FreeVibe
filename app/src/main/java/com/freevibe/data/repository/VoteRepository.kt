@@ -198,6 +198,18 @@ class VoteRepository @Inject constructor(
         }
     }
 
-    private fun sanitizeKey(id: String): String =
+    /** Get top upvoted content IDs globally, sorted by vote count descending */
+    suspend fun getTopVotedIds(limit: Int = 50): List<Pair<String, Int>> {
+        return try {
+            val snapshot = votesRef.orderByChild("upvotes").limitToLast(limit).get().await()
+            snapshot.children.mapNotNull { child ->
+                val key = child.key ?: return@mapNotNull null
+                val upvotes = child.child("upvotes").getValue(Int::class.java) ?: 0
+                if (upvotes > 0) key to upvotes else null
+            }.sortedByDescending { it.second }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun sanitizeKey(id: String): String =
         id.replace(Regex("[.#$\\[\\]/]"), "_")
 }

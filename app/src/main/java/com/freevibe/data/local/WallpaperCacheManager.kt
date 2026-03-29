@@ -34,6 +34,12 @@ class WallpaperCacheManager @Inject constructor(
         return if (entries.isNotEmpty()) entries.map { it.toWallpaper() } else null
     }
 
+    /** Get cached wallpapers by their IDs (across all cache keys) */
+    suspend fun getByIds(ids: List<String>): List<Wallpaper> {
+        if (ids.isEmpty()) return emptyList()
+        return cacheDao.getByIds(ids).map { it.toWallpaper() }
+    }
+
     /** Cache wallpapers with key */
     suspend fun cache(cacheKey: String, wallpapers: List<Wallpaper>) {
         cacheDao.evictByKey(cacheKey)
