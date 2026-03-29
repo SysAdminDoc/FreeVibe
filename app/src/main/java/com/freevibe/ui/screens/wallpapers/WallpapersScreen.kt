@@ -80,6 +80,18 @@ fun WallpapersScreen(
     var showColorPicker by remember { mutableStateOf(false) }
     var showSearchHistory by remember { mutableStateOf(false) }
 
+    // Pick up pending queries from detail/category screens when screen becomes visible
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.consumePendingQueries()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Search bar with color filter button
