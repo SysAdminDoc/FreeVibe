@@ -3,8 +3,6 @@ package com.freevibe.ui.screens.editor
 import android.graphics.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -420,11 +418,14 @@ fun WallpaperEditorScreen(
             }
 
             // Preset chips
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(presets) { preset ->
+                presets.forEach { preset ->
                     SuggestionChip(
                         onClick = {
                             viewModel.applyPreset(preset.b, preset.c, preset.s, preset.bl, preset.v, preset.g, preset.a, preset.w)
@@ -438,18 +439,21 @@ fun WallpaperEditorScreen(
                 }
             }
 
-            // Filter selector
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            // Filter selector — two rows so all 8 filters are visible
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(filters) { filter ->
+                filters.forEach { filter ->
                     FilterChip(
                         selected = selectedFilter == filter.name,
                         onClick = { selectedFilter = filter.name },
-                        label = { Text(filter.name) },
+                        label = { Text(filter.name, style = MaterialTheme.typography.labelSmall) },
                         leadingIcon = {
-                            Icon(filter.icon, null, modifier = Modifier.size(16.dp))
+                            Icon(filter.icon, null, modifier = Modifier.size(14.dp))
                         },
                     )
                 }
