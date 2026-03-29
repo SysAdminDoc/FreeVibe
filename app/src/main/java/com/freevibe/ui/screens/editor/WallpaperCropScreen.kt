@@ -78,10 +78,11 @@ class WallpaperCropViewModel @Inject constructor(
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     val request = Request.Builder().url(url).build()
-                    val response = okHttpClient.newCall(request).execute()
-                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                    val bytes = response.body?.bytes() ?: throw Exception("Empty body")
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    okHttpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+                        val bytes = response.body?.bytes() ?: throw Exception("Empty body")
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
                 }
                 _state.update { it.copy(bitmap = bitmap, isLoading = false) }
             } catch (e: Exception) {
@@ -108,18 +109,22 @@ class WallpaperCropViewModel @Inject constructor(
 
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true) }
+            var cropped: Bitmap? = null
             try {
-                val cropped = withContext(Dispatchers.Default) {
+                cropped = withContext(Dispatchers.Default) {
                     cropBitmap(bmp, s.scale, s.offsetX, s.offsetY, viewportWidth, viewportHeight)
                 }
                 wallpaperApplier.applyFromBitmap(cropped, target)
                     .onSuccess {
+                        cropped.recycle()
                         _state.update { it.copy(isApplying = false, success = "Applied") }
                     }
                     .onFailure { e ->
+                        cropped.recycle()
                         _state.update { it.copy(isApplying = false, error = e.message) }
                     }
             } catch (e: Exception) {
+                cropped?.recycle()
                 _state.update { it.copy(isApplying = false, error = e.message) }
             }
         }
