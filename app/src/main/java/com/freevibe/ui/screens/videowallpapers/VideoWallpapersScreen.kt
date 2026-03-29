@@ -135,11 +135,23 @@ class VideoWallpapersViewModel @Inject constructor(
         "\\bbackgrounds\\b",
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
-    private val youtubeQueries = listOf(
+    private val youtubePortraitQueries = listOf(
         "phone live wallpaper vertical loop",
         "AMOLED live wallpaper vertical phone loop",
         "vertical video wallpaper phone 4K loop",
         "live wallpaper android vertical abstract",
+    )
+    private val youtubeLandscapeQueries = listOf(
+        "live wallpaper desktop 4K loop",
+        "landscape live wallpaper widescreen loop",
+        "cinematic background loop 4K",
+        "nature landscape video wallpaper loop",
+    )
+    private val youtubeAllQueries = listOf(
+        "live wallpaper loop 4K",
+        "AMOLED live wallpaper loop",
+        "abstract video wallpaper loop",
+        "live wallpaper android loop",
     )
 
     private val pexelsQueries = listOf(
@@ -399,7 +411,17 @@ class VideoWallpapersViewModel @Inject constructor(
                 val ytJob = async(Dispatchers.IO) {
                     try {
                         val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-                        val query = searchQ?.let { "$it vertical wallpaper" } ?: youtubeQueries[s.ytQueryIndex % youtubeQueries.size]
+                        val ytQueries = when (s.orientation) {
+                            OrientationFilter.PORTRAIT -> youtubePortraitQueries
+                            OrientationFilter.LANDSCAPE -> youtubeLandscapeQueries
+                            OrientationFilter.ALL -> youtubeAllQueries
+                        }
+                        val orientSuffix = when (s.orientation) {
+                            OrientationFilter.PORTRAIT -> " vertical wallpaper"
+                            OrientationFilter.LANDSCAPE -> " landscape wallpaper"
+                            OrientationFilter.ALL -> " wallpaper"
+                        }
+                        val query = searchQ?.let { "$it$orientSuffix" } ?: ytQueries[s.ytQueryIndex % ytQueries.size]
                         val extractor = service.getSearchExtractor(query)
                         extractor.fetchPage()
                         extractor.initialPage.items
@@ -410,7 +432,12 @@ class VideoWallpapersViewModel @Inject constructor(
                             .sortedByDescending { it.viewCount }
                             .map { item ->
                                 val vid = item.url.substringAfter("v=").substringBefore("&")
-                                VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount)
+                                // Use thumbnail dimensions as proxy for video orientation
+                                val thumb = item.thumbnails.firstOrNull { it.width > 0 && it.height > 0 }
+                                    ?: item.thumbnails.firstOrNull()
+                                val tw = thumb?.width?.takeIf { it > 0 } ?: 0
+                                val th = thumb?.height?.takeIf { it > 0 } ?: 0
+                                VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = thumb?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount, videoWidth = tw, videoHeight = th)
                             }
                     } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
                 }
