@@ -68,7 +68,7 @@ class RedditRepository @Inject constructor(
 
     /** Get combined wallpapers from multiple subreddits */
     suspend fun getMultiSubreddit(
-        subreddits: List<String> = listOf("wallpapers", "Amoledbackgrounds", "MobileWallpaper"),
+        subreddits: List<String> = listOf("wallpapers", "MobileWallpaper"),
     ): SearchResult<Wallpaper> {
         val allWallpapers = subreddits.flatMap { sub ->
             try {
@@ -88,7 +88,7 @@ class RedditRepository @Inject constructor(
 
     /** Get today's single most-upvoted wallpaper across key subreddits */
     suspend fun getDailyTopWallpaper(): Wallpaper? {
-        val subs = listOf("wallpapers", "Amoledbackgrounds", "MobileWallpaper")
+        val subs = listOf("wallpapers", "MobileWallpaper")
         return subs.flatMap { sub ->
             try {
                 redditApi.getSubredditPosts(
