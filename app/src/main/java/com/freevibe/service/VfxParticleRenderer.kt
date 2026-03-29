@@ -30,7 +30,13 @@ class VfxParticleRenderer(
         var rotation: Float = 0f, var rotSpeed: Float = 0f,
         var phase: Float = 0f, // for sine wave movement
         var color: Int = Color.WHITE,
-    )
+    ) {
+        fun copyFrom(other: VfxParticle) {
+            x = other.x; y = other.y; speed = other.speed; size = other.size
+            alpha = other.alpha; drift = other.drift; rotation = other.rotation
+            rotSpeed = other.rotSpeed; phase = other.phase; color = other.color
+        }
+    }
 
     fun setEffect(effect: VfxEffect) {
         this.effect = effect
@@ -131,8 +137,7 @@ class VfxParticleRenderer(
                     p.rotation += p.rotSpeed
                     if (p.y > screenHeight + 20 || p.x < -30) {
                         val fresh = createParticle()
-                        p.x = fresh.x; p.y = fresh.y; p.speed = fresh.speed
-                        p.drift = fresh.drift; p.rotation = fresh.rotation
+                        p.copyFrom(fresh)
                     }
                 }
                 VfxEffect.EMBERS -> {
@@ -142,7 +147,7 @@ class VfxParticleRenderer(
                     p.alpha = (1f - (screenHeight - p.y).coerceAtLeast(0f) / screenHeight * 1.5f).coerceIn(0.1f, 1f)
                     if (p.y < -20) {
                         val fresh = createParticle()
-                        p.x = fresh.x; p.y = fresh.y; p.speed = fresh.speed; p.alpha = 1f
+                        p.copyFrom(fresh)
                     }
                 }
                 VfxEffect.BUBBLES -> {
@@ -151,7 +156,7 @@ class VfxParticleRenderer(
                     p.phase += 0.02f
                     if (p.y < -30) {
                         val fresh = createParticle()
-                        p.x = fresh.x; p.y = fresh.y; p.speed = fresh.speed
+                        p.copyFrom(fresh)
                     }
                 }
                 VfxEffect.SPARKLES -> {
@@ -165,6 +170,8 @@ class VfxParticleRenderer(
 
     fun draw(canvas: Canvas) {
         if (effect == VfxEffect.NONE) return
+        paint.style = Paint.Style.FILL
+        paint.strokeWidth = 1f
         particles.forEach { p ->
             paint.color = p.color
             paint.alpha = (p.alpha * 255).toInt().coerceIn(0, 255)

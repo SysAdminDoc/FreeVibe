@@ -692,7 +692,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Aura",
-                subtitle = "v4.2.0 - Open source device personalization",
+                subtitle = "v4.3.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(

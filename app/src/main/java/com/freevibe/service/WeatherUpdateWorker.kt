@@ -51,17 +51,21 @@ class WeatherUpdateWorker @AssistedInject constructor(
     }
 
     private fun getLastKnownLocation(): Pair<Double, Double>? {
-        if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.ACCESS_COARSE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) return null
+        val hasFine = ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!hasFine && !hasCoarse) return null
 
         val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return null
 
-        // Try GPS first, then network
         val location = try {
             @Suppress("DEPRECATION")
-            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            if (hasFine) {
+                lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            } else {
+                lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            }
         } catch (_: Exception) { null }
 
         return location?.let { it.latitude to it.longitude }
