@@ -665,18 +665,25 @@ fun VideoWallpapersScreen(
                             if (shouldLoadMore && !state.isLoadingMore) viewModel.loadMore()
                         }
 
-                        // Only auto-play the single most-visible card to limit memory
+                        // Filter + sort outside LazyColumn for stable list
+                        val visibleItems = remember(state.items, hiddenIds, voteCounts) {
+                            state.items
+                                .filter { it.id !in hiddenIds }
+                                .sortedByDescending { voteCounts[it.id] ?: 0 }
+                        }
+
+                        // Only auto-play the single most-visible card
                         val playingId by remember {
                             androidx.compose.runtime.derivedStateOf {
                                 listState.layoutInfo.visibleItemsInfo
-                                    .filter { it.index < state.items.size }
+                                    .filter { it.index < visibleItems.size }
                                     .maxByOrNull { info ->
                                         val viewportH = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
                                         val itemTop = info.offset.coerceAtLeast(listState.layoutInfo.viewportStartOffset)
                                         val itemBottom = (info.offset + info.size).coerceAtMost(listState.layoutInfo.viewportEndOffset)
                                         (itemBottom - itemTop).toFloat() / viewportH
                                     }
-                                    ?.let { state.items.getOrNull(it.index)?.id }
+                                    ?.let { visibleItems.getOrNull(it.index)?.id }
                             }
                         }
 
@@ -685,9 +692,6 @@ fun VideoWallpapersScreen(
                             contentPadding = PaddingValues(8.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            val visibleItems = state.items
-                                .filter { it.id !in hiddenIds }
-                                .sortedByDescending { voteCounts[it.id] ?: 0 }
                             items(visibleItems, key = { it.id }) { item ->
                                 val isResolved = item.id in resolvedIds
                                 val shouldPlay = item.id == playingId
