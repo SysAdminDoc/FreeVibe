@@ -274,6 +274,16 @@ fun VideoCropScreen(
     }
 }
 
+/**
+ * Find the bundled ffmpeg binary from the native lib directory.
+ * youtubedl-android ships it as libffmpeg.so in the APK's native libs.
+ */
+private fun findFfmpegBinary(context: Context): File? {
+    val nativeLibDir = context.applicationInfo.nativeLibraryDir
+    val ffmpeg = File(nativeLibDir, "libffmpeg.so")
+    return if (ffmpeg.exists() && ffmpeg.canExecute()) ffmpeg else null
+}
+
 private suspend fun cropVideoConstrained(
     context: Context,
     videoUrl: String,
@@ -325,34 +335,86 @@ private suspend fun cropVideoConstrained(
         var cropH = (srcBottom - srcTop).toInt()
 
         // Force even dimensions for h264
+        cropX = ((cropX / 2) * 2).coerceIn(0, videoWidth - 2)
+        cropY = ((cropY / 2) * 2).coerceIn(0, videoHeight - 2)
         cropW = ((cropW / 2) * 2).coerceIn(2, videoWidth - cropX)
         cropH = ((cropH / 2) * 2).coerceIn(2, videoHeight - cropY)
 
         if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "Constrained crop: ${videoWidth}x${videoHeight} -> ${cropW}x${cropH} at ($cropX,$cropY)")
 
-        try {
-            val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
-            request.addOption("--enable-file-urls")
-            request.addOption("-o", outputFile.absolutePath)
-            request.addOption("--recode-video", "mp4")
-            request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
-            request.addOption("--force-overwrites")
-            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "Crop done: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
+        // Delete existing output to avoid stale files
+        if (outputFile.exists()) outputFile.delete()
 
-            if (!outputFile.exists() || outputFile.length() == 0L) {
-                inputFile.copyTo(outputFile, overwrite = true)
+        val ffmpeg = findFfmpegBinary(context)
+        var cropSucceeded = false
+
+        if (ffmpeg != null) {
+            // Primary: call ffmpeg directly for reliable cropping
+            try {
+                val tempOutput = File(context.cacheDir, "crop_output.mp4")
+                if (tempOutput.exists()) tempOutput.delete()
+
+                val cmd = listOf(
+                    ffmpeg.absolutePath,
+                    "-y",
+                    "-i", inputFile.absolutePath,
+                    "-vf", "crop=$cropW:$cropH:$cropX:$cropY",
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-c:a", "copy",
+                    "-movflags", "+faststart",
+                    tempOutput.absolutePath,
+                )
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg cmd: ${cmd.joinToString(" ")}")
+
+                val process = ProcessBuilder(cmd)
+                    .redirectErrorStream(true)
+                    .directory(context.cacheDir)
+                    .start()
+
+                // Read all output to prevent pipe deadlock
+                val processOutput = process.inputStream.bufferedReader().readText()
+                val exitCode = process.waitFor()
+
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg exit=$exitCode, output size=${tempOutput.length() / 1024}KB")
+                if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: $processOutput")
+
+                if (exitCode == 0 && tempOutput.exists() && tempOutput.length() > 1024) {
+                    tempOutput.copyTo(outputFile, overwrite = true)
+                    tempOutput.delete()
+                    cropSucceeded = true
+                } else {
+                    if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg crop produced invalid output")
+                    tempOutput.delete()
+                }
+            } catch (e: Exception) {
+                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg direct crop failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Crop failed: ${e.message}, copying original")
-            inputFile.copyTo(outputFile, overwrite = true)
         }
 
+        // Fallback: try yt-dlp postprocessor
+        if (!cropSucceeded) {
+            try {
+                val request = com.yausername.youtubedl_android.YoutubeDLRequest("file://${inputFile.absolutePath}")
+                request.addOption("--enable-file-urls")
+                request.addOption("-o", outputFile.absolutePath)
+                request.addOption("--recode-video", "mp4")
+                request.addOption("--postprocessor-args", "VideoConvertor:-vf crop=$cropW:$cropH:$cropX:$cropY -c:v libx264 -preset ultrafast")
+                request.addOption("--force-overwrites")
+                val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "yt-dlp crop: exit=${response.exitCode}, output=${outputFile.length() / 1024}KB")
+                cropSucceeded = outputFile.exists() && outputFile.length() > 1024
+            } catch (e: Exception) {
+                if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "yt-dlp crop failed: ${e.message}")
+            }
+        }
+
+        // Clean up input cache
         if (inputFile.absolutePath.contains("crop_input")) {
             try { inputFile.delete() } catch (_: Exception) {}
         }
 
-        if (outputFile.exists() && outputFile.length() > 0) outputFile else null
+        if (cropSucceeded && outputFile.exists() && outputFile.length() > 1024) outputFile else null
     } catch (e: Exception) {
         if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Crop failed: ${e.message}", e)
         try { File(context.cacheDir, "crop_input.mp4").delete() } catch (_: Exception) {}
