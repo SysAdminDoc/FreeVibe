@@ -32,6 +32,8 @@ class VideoWallpaperService : WallpaperService() {
         private var lastModified: Long = 0
         private var surfaceWidth = 0
         private var surfaceHeight = 0
+        private var screenWidth = 0
+        private var screenHeight = 0
 
         // Touch ripple effect
         private val ripples = mutableListOf<TouchRipple>()
@@ -57,8 +59,11 @@ class VideoWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceWidth = width
             surfaceHeight = height
-            // Re-apply crop scaling if player is active
-            mediaPlayer?.let { applyCenterCrop(it, holder) }
+            // Store real screen size on first call (before we resize with setFixedSize)
+            if (screenWidth == 0 || (width <= screenWidth && height <= screenHeight)) {
+                screenWidth = width
+                screenHeight = height
+            }
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -169,27 +174,29 @@ class VideoWallpaperService : WallpaperService() {
          * and excess is cropped off-screen.
          */
         private fun applyCenterCrop(player: MediaPlayer, holder: SurfaceHolder) {
-            if (surfaceWidth <= 0 || surfaceHeight <= 0) return
+            val sw = if (screenWidth > 0) screenWidth else surfaceWidth
+            val sh = if (screenHeight > 0) screenHeight else surfaceHeight
+            if (sw <= 0 || sh <= 0) return
             val videoW = player.videoWidth
             val videoH = player.videoHeight
             if (videoW <= 0 || videoH <= 0) return
 
-            val surfaceRatio = surfaceWidth.toFloat() / surfaceHeight
+            val screenRatio = sw.toFloat() / sh
             val videoRatio = videoW.toFloat() / videoH
 
-            val (newW, newH) = if (videoRatio > surfaceRatio) {
-                // Video is wider than surface — match height, crop sides
-                val w = (surfaceHeight * videoRatio).toInt()
-                w to surfaceHeight
+            val (newW, newH) = if (videoRatio > screenRatio) {
+                // Video is wider — match height, crop sides
+                val w = (sh * videoRatio).toInt()
+                w to sh
             } else {
-                // Video is taller than surface — match width, crop top/bottom
-                val h = (surfaceWidth / videoRatio).toInt()
-                surfaceWidth to h
+                // Video is taller — match width, crop top/bottom
+                val h = (sw / videoRatio).toInt()
+                sw to h
             }
 
             try {
                 holder.setFixedSize(newW, newH)
-                android.util.Log.d("VideoWPService", "Center-crop: video=${videoW}x${videoH} surface=${surfaceWidth}x${surfaceHeight} -> ${newW}x${newH}")
+                android.util.Log.d("VideoWPService", "Center-crop: video=${videoW}x${videoH} screen=${sw}x${sh} -> ${newW}x${newH}")
             } catch (_: Exception) {}
         }
 
