@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    id("com.google.gms.google-services")
 }
 
 val localProps = Properties().apply {
@@ -141,6 +142,10 @@ dependencies {
     // Glance Widgets
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+
+    // Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-database-ktx")
 
     // NewPipe Extractor (YouTube search without API key)
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
