@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -292,6 +293,7 @@ fun WallpapersScreen(
                             onRefresh = { viewModel.refresh() },
                         ) {
                             WallpaperGrid(
+                                showDailyPick = state.selectedTab == WallpaperTab.DISCOVER,
                                 wallpapers = state.wallpapers,
                                 isLoadingMore = state.isLoadingMore,
                                 columns = gridColumns,
@@ -382,6 +384,7 @@ private fun WallpaperGrid(
     wallpapers: List<Wallpaper>,
     isLoadingMore: Boolean,
     columns: Int = 2,
+    showDailyPick: Boolean = false,
     onWallpaperClick: (Wallpaper) -> Unit,
     onLongPress: ((Wallpaper) -> Unit)? = null,
     favoriteIds: Set<String> = emptySet(),
@@ -408,6 +411,43 @@ private fun WallpaperGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalItemSpacing = 8.dp,
     ) {
+        // Wallpaper of the Day banner
+        if (showDailyPick && wallpapers.isNotEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "daily_pick") {
+                val pick = wallpapers.first()
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onWallpaperClick(pick) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        SubcomposeAsyncImage(
+                            model = pick.thumbnailUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)),
+                        ) {
+                            when (painter.state) {
+                                is AsyncImagePainter.State.Loading -> ShimmerBox(Modifier.fillMaxSize(), RoundedCornerShape(0.dp))
+                                else -> SubcomposeAsyncImageContent()
+                            }
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Wallpaper of the Day", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            Text("${pick.width}x${pick.height} from ${pick.source.name.lowercase()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+
         items(wallpapers, key = { it.id }) { wallpaper ->
             val isFav = wallpaper.id in favoriteIds
             WallpaperCard(
