@@ -26,6 +26,7 @@ class WallpaperRepository @Inject constructor(
     private val prefs: PreferencesManager,
 ) {
     private suspend fun wallhavenApiKey(): String = prefs.wallhavenApiKey.first()
+    private suspend fun pixabayApiKey(): String = prefs.pixabayApiKey.first()
 
     private suspend fun wallhavenPurity(): String {
         val key = wallhavenApiKey()
@@ -165,10 +166,12 @@ class WallpaperRepository @Inject constructor(
 
     // -- Pixabay --
 
-    suspend fun getPixabay(page: Int = 1, query: String = ""): SearchResult<Wallpaper> =
-        withCacheFallback("pixabay_${query.hashCode()}_$page", ContentSource.PIXABAY) {
+    suspend fun getPixabay(page: Int = 1, query: String = ""): SearchResult<Wallpaper> {
+        val key = pixabayApiKey()
+        if (key.isBlank()) return SearchResult(emptyList(), 0, 1, false)
+        return withCacheFallback("pixabay_${query.hashCode()}_$page", ContentSource.PIXABAY) {
             val response = pixabayApi.searchPhotos(
-                apiKey = PixabayApi.API_KEY,
+                apiKey = key,
                 query = query.ifBlank { "wallpaper" },
                 page = page,
                 editorsChoice = query.isBlank(),
@@ -180,6 +183,7 @@ class WallpaperRepository @Inject constructor(
                 hasMore = page * 30 < response.totalHits,
             )
         }
+    }
 
     suspend fun searchPixabay(query: String, page: Int = 1) =
         getPixabay(page = page, query = query)

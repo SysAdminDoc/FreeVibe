@@ -395,9 +395,11 @@ class VideoWallpapersViewModel @Inject constructor(
                 // 4. Pixabay Videos (animated loops + short videos)
                 val pixabayJob = async(Dispatchers.IO) {
                     try {
+                        val pbKey = prefs.pixabayApiKey.first()
+                        if (pbKey.isBlank()) return@async emptyList<VideoWallpaperItem>()
                         val query = searchQ ?: "abstract loop"
                         val response = pixabayApi.searchVideos(
-                            apiKey = com.freevibe.data.remote.pixabay.PixabayApi.API_KEY,
+                            apiKey = pbKey,
                             query = query,
                             videoType = if (searchQ == null) "animation" else "all",
                             page = s.pixabayPage,

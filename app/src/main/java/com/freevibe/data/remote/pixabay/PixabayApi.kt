@@ -46,8 +46,6 @@ interface PixabayApi {
 
     companion object {
         const val BASE_URL = "https://pixabay.com/"
-        // Free API key — register at pixabay.com/api/docs/
-        const val API_KEY = "48aborc-placeholder"
     }
 }
 
