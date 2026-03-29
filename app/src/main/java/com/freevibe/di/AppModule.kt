@@ -142,7 +142,7 @@ object AppModule {
     @Singleton
     fun provideFreesoundApi(client: OkHttpClient, moshi: Moshi): FreesoundApi =
         Retrofit.Builder()
-            .baseUrl("https://freesound.org/")
+            .baseUrl("https://api.openverse.org/")
             .client(client)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
