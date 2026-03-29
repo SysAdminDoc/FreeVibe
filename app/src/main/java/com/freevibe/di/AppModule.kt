@@ -20,6 +20,7 @@ import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.reddit.RedditApi
+import com.freevibe.data.remote.freesound.FreesoundApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import com.squareup.moshi.Moshi
 import dagger.Module
@@ -136,6 +137,16 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(PixabayApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideFreesoundApi(client: OkHttpClient, moshi: Moshi): FreesoundApi =
+        Retrofit.Builder()
+            .baseUrl("https://freesound.org/")
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(FreesoundApi::class.java)
 
     @Provides
     @Singleton

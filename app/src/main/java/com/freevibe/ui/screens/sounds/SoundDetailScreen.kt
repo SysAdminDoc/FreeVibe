@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -47,6 +49,7 @@ fun SoundDetailScreen(
     val context = LocalContext.current
 
     val autoPreview by viewModel.autoPreview.collectAsState()
+    val playbackProgress by viewModel.playbackProgress.collectAsState()
 
     // Similar sounds
     val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
@@ -146,6 +149,11 @@ fun SoundDetailScreen(
                 DetailWaveform(
                     duration = s.duration,
                     isPlaying = state.playingId == s.id,
+                    progress = if (state.playingId == s.id) playbackProgress else 0f,
+                    onSeek = { fraction ->
+                        if (state.playingId != s.id) viewModel.togglePlayback(s)
+                        viewModel.seekTo(fraction)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -536,6 +544,8 @@ private fun ApplyButton(
 private fun DetailWaveform(
     duration: Double,
     isPlaying: Boolean,
+    progress: Float = 0f,
+    onSeek: ((Float) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val barColor = if (isPlaying) MaterialTheme.colorScheme.primary
@@ -551,22 +561,20 @@ private fun DetailWaveform(
         }
     }
 
-    val progress = if (isPlaying) {
-        val infiniteTransition = rememberInfiniteTransition(label = "detail_wave")
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = (duration * 1000).toInt().coerceIn(2000, 30000),
-                    easing = LinearEasing,
-                ),
+    Canvas(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(
+                if (onSeek != null) {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                            onSeek(fraction)
+                        }
+                    }
+                } else Modifier,
             ),
-            label = "wave_progress",
-        ).value
-    } else 0f
-
-    Canvas(modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainer)) {
+    ) {
         val barWidth = size.width / barCount
         val gap = 1.5f
         heights.forEachIndexed { i, height ->
@@ -579,6 +587,16 @@ private fun DetailWaveform(
                 end = Offset(x, size.height / 2 + barH / 2),
                 strokeWidth = (barWidth - gap).coerceAtLeast(1f),
                 cap = StrokeCap.Round,
+            )
+        }
+        // Playhead indicator
+        if (isPlaying && progress > 0f) {
+            val px = size.width * progress
+            drawLine(
+                color = activeColor,
+                start = Offset(px, 0f),
+                end = Offset(px, size.height),
+                strokeWidth = 2f,
             )
         }
     }

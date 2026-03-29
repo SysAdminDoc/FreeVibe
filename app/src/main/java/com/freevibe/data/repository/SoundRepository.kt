@@ -142,7 +142,7 @@ class SoundRepository @Inject constructor(
                 } ?: run {
                     semaphore.acquire()
                     try {
-                        withTimeoutOrNull(4000L) {
+                        withTimeoutOrNull(8000L) {
                             resolveMetadata(doc, minDuration, maxDuration)
                         }
                     } finally {

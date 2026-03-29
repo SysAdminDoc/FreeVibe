@@ -45,6 +45,9 @@ fun SoundsScreen(
     val state by viewModel.state.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val cachedYtIds by viewModel.cachedYtIds.collectAsState()
+    val trendingSounds by viewModel.trendingSounds.collectAsState()
+    val soundOfTheDay by viewModel.soundOfTheDay.collectAsState()
+    val playbackProgress by viewModel.playbackProgress.collectAsState()
     val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
     val voteCounts by remember(state.sounds) {
         if (state.sounds.isNotEmpty()) viewModel.voteRepo.getVoteCounts(state.sounds.map { it.id })
@@ -289,6 +292,9 @@ fun SoundsScreen(
                             onUpvote = { viewModel.upvote(it) },
                             onDownvote = { viewModel.downvote(it) },
                             onLoadMore = { viewModel.loadMore() },
+                            playbackProgress = playbackProgress,
+                            soundOfTheDay = if (state.selectedTab == SoundTab.RINGTONES) soundOfTheDay else null,
+                            trendingSounds = if (state.selectedTab == SoundTab.RINGTONES) trendingSounds else emptyList(),
                         )
                     }
                 }
@@ -309,6 +315,9 @@ private fun SoundsList(
     onUpvote: (String) -> Unit = {},
     onDownvote: (String) -> Unit = {},
     onLoadMore: () -> Unit,
+    playbackProgress: Float = 0f,
+    soundOfTheDay: Sound? = null,
+    trendingSounds: List<Sound> = emptyList(),
 ) {
     val listState = rememberLazyListState()
 
@@ -328,6 +337,90 @@ private fun SoundsList(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // Sound of the Day hero card
+        if (soundOfTheDay != null) {
+            item(key = "sotd") {
+                val sotd = soundOfTheDay
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onSoundClick(sotd) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Icon(Icons.Default.AutoAwesome, null, Modifier.size(24.dp), tint = Color(0xFFFFD700))
+                            }
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Sound of the Day", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(sotd.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${String.format("%.1f", sotd.duration)}s - ${sotd.uploaderName}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { onPlayClick(sotd) }, modifier = Modifier.size(40.dp)) {
+                            Icon(if (playingId == sotd.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+
+        // Trending sounds horizontal row
+        if (trendingSounds.isNotEmpty()) {
+            item(key = "trending_header") {
+                Text("Popular Sounds", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 4.dp))
+            }
+            item(key = "trending_row") {
+                androidx.compose.foundation.lazy.LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    trendingSounds.forEach { sound ->
+                        item(key = "tr_${sound.id}") {
+                            Card(
+                                modifier = Modifier.width(160.dp).clickable { onSoundClick(sound) },
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        IconButton(onClick = { onPlayClick(sound) }, modifier = Modifier.size(32.dp)) {
+                                            Icon(if (playingId == sound.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                                        }
+                                        Column(Modifier.weight(1f)) {
+                                            Text(sound.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${String.format("%.1f", sound.duration)}s", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    // Format badge
+                                    if (sound.fileType.isNotEmpty()) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        ) {
+                                            Text(sound.fileType.uppercase(), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+
         items(sounds, key = { it.id }) { sound ->
             val isYt = sound.id.startsWith("yt_")
             val isReady = !isYt || sound.id in cachedYtIds
@@ -431,15 +524,35 @@ private fun SoundCard(
                     }
                 }
 
+                // Format badge
+                if (sound.fileType.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text(
+                            sound.fileType.uppercase(),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                }
+
                 // License badge
                 if (sound.license.contains("CC0", ignoreCase = true) ||
-                    sound.license.contains("Public Domain", ignoreCase = true)) {
+                    sound.license.contains("Public Domain", ignoreCase = true) ||
+                    sound.license.contains("CC BY", ignoreCase = true)) {
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp),
                     ) {
                         Text(
-                            if (sound.license.contains("CC0", ignoreCase = true)) "CC0" else "PD",
+                            when {
+                                sound.license.contains("CC0", ignoreCase = true) -> "CC0"
+                                sound.license.contains("Public Domain", ignoreCase = true) -> "PD"
+                                else -> sound.license.take(6)
+                            },
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.secondary,
