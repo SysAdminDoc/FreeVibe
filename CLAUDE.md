@@ -18,7 +18,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v4.2.0** (versionCode 32)
+- **v4.3.0** (versionCode 33)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -82,6 +82,7 @@ DataStore: Settings, Onboarding
 - Fastlane metadata completely outdated
 
 ## Version History
+- v4.3.0: Bitmap memory leaks fixed in WallpaperEditorScreen (intermediate bitmaps recycled between filter stages, old editedBitmap recycled on reset/reapply). VfxParticleRenderer: complete particle state reset on respawn (was missing alpha/size/phase/color), paint style reset at draw start. WeatherUpdateWorker: proper FINE vs COARSE location permission check (was using GPS with only COARSE). FreeVibeApp: crash log trim via RandomAccessFile seek instead of full 500KB readText(). WallpaperEditorScreen: HTTP response leak fixed in image download.
 - v4.2.0: API keys moved to BuildConfig (overridable via local.properties). Signing credentials moved to local.properties. DB v6: ForeignKey CASCADE on wallpaper_collection_items (auto-cleanup on collection delete). VideoWallpapersScreen: single ExoPlayer for most-visible card (was per-card), response leaks fixed in applyVideoWallpaper. WallpapersViewModel: robust image extension detection. CollectionRepository.delete() simplified (FK CASCADE handles items).
 - v4.1.0: Comprehensive audit fixes. DB v5: composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey). Fix 16 bugs across data/service/UI layers.
 - v3.0.0+audit: Fix Discover tab navigation. Remove r/wallpaperengine. Fix 20+ resource leaks and edge cases.
