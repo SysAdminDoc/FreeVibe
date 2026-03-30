@@ -26,6 +26,7 @@
     <!-- Scheduling -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Location (weather effects) -->
@@ -87,6 +88,30 @@
             <meta-data
                 android:name="android.service.wallpaper"
                 android:resource="@xml/weather_wallpaper" />
+        </service>
+
+        <!-- Parallax Depth Live Wallpaper Service -->
+        <service
+            android:name=".service.ParallaxWallpaperService"
+            android:exported="true"
+            android:label="Aura Parallax"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/parallax_wallpaper" />
+        </service>
+
+        <!-- Audio Playback Service (MediaSession) -->
+        <service
+            android:name=".service.AudioPlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
         </service>
 
         <!-- Home Screen Widget -->
