@@ -34,10 +34,12 @@ import javax.inject.Singleton
 class VoteRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val db = FirebaseDatabase.getInstance().reference
-    private val votesRef = db.child("votes")
-    private val votersRef = db.child("voters")
-    private val moderationRef = db.child("moderation")
+    private val db by lazy {
+        try { FirebaseDatabase.getInstance().reference } catch (_: Exception) { null }
+    }
+    private val votesRef get() = db?.child("votes")
+    private val votersRef get() = db?.child("voters")
+    private val moderationRef get() = db?.child("moderation")
 
     @Suppress("HardwareIds")
     private val deviceId: String by lazy {
@@ -67,14 +69,18 @@ class VoteRepository @Inject constructor(
 
     init {
         // Listen for moderation list changes
-        moderationRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                _moderatedIds.value = snapshot.children.mapNotNull { it.key }.toSet()
-            }
-            override fun onCancelled(error: DatabaseError) {
-                if (com.freevibe.BuildConfig.DEBUG) Log.w("VoteRepo", "Moderation listener cancelled: ${error.message}")
-            }
-        })
+        try {
+            moderationRef?.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    _moderatedIds.value = snapshot.children.mapNotNull { it.key }.toSet()
+                }
+                override fun onCancelled(error: DatabaseError) {
+                    if (com.freevibe.BuildConfig.DEBUG) Log.w("VoteRepo", "Moderation listener cancelled: ${error.message}")
+                }
+            })
+        } catch (e: Exception) {
+            if (com.freevibe.BuildConfig.DEBUG) Log.w("VoteRepo", "Firebase init failed: ${e.message}")
+        }
     }
 
     /** Combined hidden IDs: local downvotes + global moderation */
@@ -85,8 +91,10 @@ class VoteRepository @Inject constructor(
     // ── Voting ──
 
     fun getVoteCount(contentId: String): Flow<Int> = callbackFlow {
+        val votesRefInstance = votesRef
+        if (votesRefInstance == null) { trySend(0); awaitClose {}; return@callbackFlow }
         val safeId = sanitizeKey(contentId)
-        val ref = votesRef.child(safeId).child("upvotes")
+        val ref = votesRefInstance.child(safeId).child("upvotes")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 trySend(snapshot.getValue(Int::class.java) ?: 0)
@@ -98,24 +106,27 @@ class VoteRepository @Inject constructor(
     }
 
     suspend fun hasVoted(contentId: String): Boolean {
+        val votersRefInstance = votersRef ?: return false
         val safeId = sanitizeKey(contentId)
         return try {
-            votersRef.child(safeId).child(deviceId).get().await().exists()
+            votersRefInstance.child(safeId).child(deviceId).get().await().exists()
         } catch (_: Exception) { false }
     }
 
     suspend fun upvote(contentId: String): Boolean {
+        val votesRefInstance = votesRef ?: return false
+        val votersRefInstance = votersRef ?: return false
         val safeId = sanitizeKey(contentId)
         if (hasVoted(safeId)) return false
         return try {
-            votesRef.child(safeId).child("upvotes").runTransaction(object : Transaction.Handler {
+            votesRefInstance.child(safeId).child("upvotes").runTransaction(object : Transaction.Handler {
                 override fun doTransaction(data: MutableData): Transaction.Result {
                     data.value = (data.getValue(Int::class.java) ?: 0) + 1
                     return Transaction.success(data)
                 }
                 override fun onComplete(e: DatabaseError?, committed: Boolean, s: DataSnapshot?) {}
             })
-            votersRef.child(safeId).child(deviceId).setValue(true).await()
+            votersRefInstance.child(safeId).child(deviceId).setValue(true).await()
             true
         } catch (_: Exception) { false }
     }
@@ -142,10 +153,12 @@ class VoteRepository @Inject constructor(
 
     /** Admin: globally hide content for ALL users via Firebase */
     suspend fun moderateHide(contentId: String) {
+        val moderationRefInstance = moderationRef
+        if (moderationRefInstance == null) { hideLocally(contentId); return }
         val safeId = sanitizeKey(contentId)
         if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "moderateHide: safeId=$safeId path=moderation/$safeId")
         try {
-            moderationRef.child(safeId).setValue(true).await()
+            moderationRefInstance.child(safeId).setValue(true).await()
             if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "Admin moderated OK: $contentId")
         } catch (e: Exception) {
             if (com.freevibe.BuildConfig.DEBUG) Log.e("VoteRepo", "Moderation FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
@@ -155,9 +168,10 @@ class VoteRepository @Inject constructor(
 
     /** Admin: remove global moderation (unhide for everyone) */
     suspend fun moderateUnhide(contentId: String) {
+        val moderationRefInstance = moderationRef ?: return
         val safeId = sanitizeKey(contentId)
         try {
-            moderationRef.child(safeId).removeValue().await()
+            moderationRefInstance.child(safeId).removeValue().await()
         } catch (_: Exception) {}
     }
 
@@ -175,12 +189,14 @@ class VoteRepository @Inject constructor(
     // ── Batch ──
 
     fun getVoteCounts(contentIds: List<String>): Flow<Map<String, Int>> = callbackFlow {
+        val votesRefInstance = votesRef
+        if (votesRefInstance == null) { trySend(emptyMap()); awaitClose {}; return@callbackFlow }
         val counts = mutableMapOf<String, Int>()
         val listeners = mutableListOf<Pair<String, ValueEventListener>>()
 
         contentIds.take(50).forEach { id ->
             val safeId = sanitizeKey(id)
-            val ref = votesRef.child(safeId).child("upvotes")
+            val ref = votesRefInstance.child(safeId).child("upvotes")
             val listener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     counts[id] = snapshot.getValue(Int::class.java) ?: 0
@@ -193,15 +209,16 @@ class VoteRepository @Inject constructor(
         }
         awaitClose {
             listeners.forEach { (safeId, listener) ->
-                votesRef.child(safeId).child("upvotes").removeEventListener(listener)
+                votesRefInstance.child(safeId).child("upvotes").removeEventListener(listener)
             }
         }
     }
 
     /** Get top upvoted content IDs globally, sorted by vote count descending */
     suspend fun getTopVotedIds(limit: Int = 50): List<Pair<String, Int>> {
+        val votesRefInstance = votesRef ?: return emptyList()
         return try {
-            val snapshot = votesRef.get().await()
+            val snapshot = votesRefInstance.get().await()
             snapshot.children.mapNotNull { child ->
                 val key = child.key ?: return@mapNotNull null
                 val upvotes = child.child("upvotes").getValue(Int::class.java) ?: 0

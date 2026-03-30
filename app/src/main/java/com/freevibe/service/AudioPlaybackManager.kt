@@ -53,17 +53,27 @@ class AudioPlaybackManager @Inject constructor(
     private fun ensureConnected(onReady: (MediaController) -> Unit) {
         controller?.let { if (it.isConnected) { onReady(it); return } }
 
-        val token = SessionToken(
-            context,
-            ComponentName(context, AudioPlaybackService::class.java),
-        )
-        controllerFuture = MediaController.Builder(context, token).buildAsync().also { future ->
-            future.addListener({
-                val mc = future.get()
-                controller = mc
-                mc.addListener(playerListener)
-                onReady(mc)
-            }, MoreExecutors.directExecutor())
+        try {
+            val token = SessionToken(
+                context,
+                ComponentName(context, AudioPlaybackService::class.java),
+            )
+            controllerFuture = MediaController.Builder(context, token).buildAsync().also { future ->
+                future.addListener({
+                    try {
+                        val mc = future.get()
+                        controller = mc
+                        mc.addListener(playerListener)
+                        onReady(mc)
+                    } catch (e: Exception) {
+                        _currentSoundId.value = null
+                        _isPlaying.value = false
+                    }
+                }, MoreExecutors.directExecutor())
+            }
+        } catch (e: Exception) {
+            _currentSoundId.value = null
+            _isPlaying.value = false
         }
     }
 
