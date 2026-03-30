@@ -1,5 +1,7 @@
 package com.freevibe.ui.screens.wallpapers
 
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -30,6 +32,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.service.ParallaxWallpaperService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,8 +95,27 @@ fun WallpaperDetailScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.applySuccess) {
-        state.applySuccess?.let {
-            snackbarHostState.showSnackbar(it)
+        state.applySuccess?.let { msg ->
+            if (msg == "parallax_ready") {
+                // Launch the system live wallpaper picker for ParallaxWallpaperService
+                try {
+                    val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                        putExtra(
+                            WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                            ComponentName(context, ParallaxWallpaperService::class.java),
+                        )
+                    }
+                    context.startActivity(intent)
+                } catch (_: Exception) {
+                    // Fallback: open generic live wallpaper picker
+                    try {
+                        context.startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
+                    } catch (_: Exception) {}
+                }
+                snackbarHostState.showSnackbar("Parallax wallpaper prepared")
+            } else {
+                snackbarHostState.showSnackbar(msg)
+            }
             viewModel.clearSuccess()
         }
     }
@@ -301,6 +323,10 @@ fun WallpaperDetailScreen(
                         showApplyOptions = false
                         viewModel.applySplitCrop(wp)
                     },
+                    onParallax = {
+                        showApplyOptions = false
+                        viewModel.applyParallax(wp)
+                    },
                 )
             }
 
@@ -392,6 +418,7 @@ private fun ApplyOptionsSheet(
     onDismiss: () -> Unit,
     onApply: (WallpaperTarget) -> Unit,
     onSplitCrop: () -> Unit,
+    onParallax: () -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -407,6 +434,7 @@ private fun ApplyOptionsSheet(
             SheetOption(Icons.Default.Smartphone, "Both") { onApply(WallpaperTarget.BOTH) }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             SheetOption(Icons.Default.Splitscreen, "Split crop (different home & lock)") { onSplitCrop() }
+            SheetOption(Icons.Default.Layers, "Parallax depth (3D tilt effect)") { onParallax() }
         }
     }
 }

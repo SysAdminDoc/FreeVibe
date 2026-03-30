@@ -1,5 +1,8 @@
 package com.freevibe.ui.screens.sounds
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -54,6 +57,27 @@ fun SoundsScreen(
     val focusManager = LocalFocusManager.current
     val isYouTubeTab = state.selectedTab == SoundTab.YOUTUBE
 
+    // Upload state
+    var showUploadDialog by remember { mutableStateOf(false) }
+    var selectedAudioUri by remember { mutableStateOf<Uri?>(null) }
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> if (uri != null) { selectedAudioUri = uri; showUploadDialog = true } }
+
+    // Upload dialog
+    if (showUploadDialog && selectedAudioUri != null) {
+        UploadDialog(
+            isUploading = state.isUploading,
+            uploadProgress = state.uploadProgress,
+            onUpload = { name, category ->
+                viewModel.uploadSound(selectedAudioUri!!, name, category)
+                showUploadDialog = false
+                selectedAudioUri = null
+            },
+            onDismiss = { showUploadDialog = false; selectedAudioUri = null },
+        )
+    }
+
     // Quick Apply bottom sheet
     if (quickApplySound != null) {
         QuickApplySheet(
@@ -80,13 +104,25 @@ fun SoundsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onCreateRingtone,
-                icon = { Icon(Icons.Default.ContentCut, null) },
-                text = { Text("Create") },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { audioPickerLauncher.launch("audio/*") },
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ) {
+                    Icon(Icons.Default.Upload, "Upload Sound")
+                }
+                ExtendedFloatingActionButton(
+                    onClick = onCreateRingtone,
+                    icon = { Icon(Icons.Default.ContentCut, null) },
+                    text = { Text("Create") },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         },
     ) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
@@ -401,9 +437,21 @@ private fun SoundCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Source badge
-                        if (sound.source == ContentSource.YOUTUBE) {
+                        if (sound.source == ContentSource.BUNDLED) {
+                            Surface(color = Color(0xFFFFB300).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+                                Text("Aura Picks", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
+                            }
+                        } else if (sound.source == ContentSource.YOUTUBE) {
                             Surface(color = Color(0xFFFF0000).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
                                 Text("YT", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF0000))
+                            }
+                        } else if (sound.source == ContentSource.SOUNDCLOUD) {
+                            Surface(color = Color(0xFFFF5500).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                                Text("SC", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF5500))
+                            }
+                        } else if (sound.source == ContentSource.COMMUNITY) {
+                            Surface(color = Color(0xFF4CAF50).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                                Text("Community", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
                             }
                         }
                         Text(
@@ -526,4 +574,67 @@ private fun QuickApplyRow(label: String, icon: androidx.compose.ui.graphics.vect
             Text(label, style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
         }
     }
+}
+
+// -- Upload Dialog --
+
+@Composable
+private fun UploadDialog(
+    isUploading: Boolean,
+    uploadProgress: Float,
+    onUpload: (name: String, category: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("ringtone") }
+    val categories = listOf("ringtone" to "Ringtone", "notification" to "Notification", "alarm" to "Alarm")
+
+    AlertDialog(
+        onDismissRequest = { if (!isUploading) onDismiss() },
+        title = { Text("Upload Sound") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Sound Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Category", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    categories.forEach { (key, label) ->
+                        FilterChip(
+                            selected = selectedCategory == key,
+                            onClick = { selectedCategory = key },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                if (isUploading) {
+                    LinearProgressIndicator(
+                        progress = { uploadProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "${(uploadProgress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onUpload(name.ifBlank { "Untitled" }, selectedCategory) },
+                enabled = !isUploading,
+            ) { Text("Upload") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isUploading,
+            ) { Text("Cancel") }
+        },
+    )
 }

@@ -32,8 +32,8 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 50
-        versionName = "5.0.0"
+        versionCode = 51
+        versionName = "5.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -41,6 +41,7 @@ android {
         buildConfigField("String", "PEXELS_API_KEY", "\"${localProps.getProperty("pexels.api.key", "3AN2RtNJNs6cT4M04xUzN1EuojlmC9283l6l3yPKaYQ7ez0rcFLwvpHP")}\"")
         buildConfigField("String", "PIXABAY_API_KEY", "\"${localProps.getProperty("pixabay.api.key", "24952670-25430be562a78b27d4746e060")}\"")
         buildConfigField("String", "FREESOUND_API_KEY", "\"${localProps.getProperty("freesound.api.key", "")}\"")
+        buildConfigField("String", "SOUNDCLOUD_CLIENT_ID", "\"${localProps.getProperty("soundcloud.client.id", "")}\"")
     }
 
     buildTypes {
@@ -118,6 +119,7 @@ dependencies {
 
     // Media Playback
     implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
     implementation(libs.media3.ui)
 
     // WorkManager
@@ -147,6 +149,7 @@ dependencies {
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
 
     // NewPipe Extractor (YouTube search without API key)
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
@@ -154,4 +157,7 @@ dependencies {
     // yt-dlp for Android (YouTube stream URL extraction)
     implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
+
+    // ML Kit Subject Segmentation (parallax depth wallpaper)
+    implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
 }

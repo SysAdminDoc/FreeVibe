@@ -1,6 +1,9 @@
 package com.freevibe
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -37,6 +40,7 @@ class FreeVibeApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         setupCrashLogging()
+        createMediaNotificationChannel()
         evictStaleCaches()
         initYtDlp()
     }
@@ -50,6 +54,19 @@ class FreeVibeApp : Application(), Configuration.Provider {
             } catch (e: Throwable) {
                 Log.e("AuraApp", "yt-dlp init failed: ${e.message}")
             }
+        }
+    }
+
+    private fun createMediaNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "media_playback",
+                "Sound Preview",
+                NotificationManager.IMPORTANCE_LOW,
+            )
+            channel.description = "Playback controls for sound previews"
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
         }
     }
 
