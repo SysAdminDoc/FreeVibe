@@ -10,17 +10,17 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4)
 
-> Open-source alternative to Zedge — wallpapers, video wallpapers, ringtones, and sounds for Android. **YouTube integration, yt-dlp powered. Zero configuration. Install and go.**
+> Open-source alternative to Zedge — wallpapers, video wallpapers, ringtones, and sounds for Android. **YouTube integration, yt-dlp powered.**
 
 ![Aura Screenshot](screenshot.png)
 
 ## What Makes Aura Different
 
-- **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction. No API keys needed.
+- **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction.
 - **Video wallpapers from YouTube** — browse, preview with ExoPlayer auto-play, crop landscape to portrait, apply as live wallpaper.
 - **Progressive loading** — sounds appear as they resolve instead of waiting for all results. YouTube results load instantly, Internet Archive streams in alongside.
 - **Instant startup** — Discover feed is cached locally. On subsequent launches wallpapers appear immediately while fresh results load in the background.
-- **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings — everything in one app.
+- **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ Open in Android Studio and run. Everything works out of the box.
 
 | Feature | Description |
 |---------|-------------|
-| **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Unsplash, Bing & Reddit |
+| **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Unsplash & Reddit |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview |
 | **Video Crop Editor** | Convert landscape videos to portrait with draggable 9:16 crop overlay |
 | **YouTube Sounds** | Search YouTube for ringtones, notifications, alarms — powered by yt-dlp |
@@ -66,12 +66,9 @@ Open in Android Studio and run. Everything works out of the box.
 | [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None (optional key for NSFW) |
 | [Pexels](https://pexels.com) | Curated HD photos | Built-in key |
 | [Pixabay](https://pixabay.com) | Editor's choice photos | Built-in key |
-| [Lorem Picsum](https://picsum.photos) | Curated Unsplash photos | None |
-| [Bing Daily](https://www.bing.com) | Curated daily photos, UHD | None |
 | [Reddit](https://reddit.com) | 7 wallpaper + 4 video subreddits | None |
 | [YouTube](https://youtube.com) | Video wallpapers + sounds via NewPipe + yt-dlp | None |
 | [Openverse](https://openverse.org) | CC-licensed audio (Freesound, Jamendo, Wikimedia) | None |
-| [Internet Archive](https://archive.org) | CC/Public Domain audio clips | None |
 
 ## Architecture
 
