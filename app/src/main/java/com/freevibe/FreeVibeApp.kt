@@ -4,7 +4,6 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.freevibe.data.local.IAAudioCacheDao
 import com.freevibe.data.local.WallpaperCacheManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -27,9 +26,6 @@ class FreeVibeApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var wallpaperCacheManager: WallpaperCacheManager
-
-    @Inject
-    lateinit var iaAudioCacheDao: IAAudioCacheDao
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -90,9 +86,6 @@ class FreeVibeApp : Application(), Configuration.Provider {
         appScope.launch {
             try {
                 wallpaperCacheManager.evictExpired()
-                // IA audio cache: evict entries older than 7 days
-                val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
-                iaAudioCacheDao.evictOlderThan(sevenDaysAgo)
             } catch (e: Exception) {
                 Log.w("FreeVibeApp", "Cache eviction failed", e)
             }

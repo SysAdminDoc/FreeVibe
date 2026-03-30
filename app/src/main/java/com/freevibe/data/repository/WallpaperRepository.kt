@@ -13,6 +13,7 @@ import com.freevibe.data.remote.wallhaven.WallhavenApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -214,40 +215,48 @@ class WallpaperRepository @Inject constructor(
 
     // -- Discover feed (mixed from ALL sources for diversity) --
 
+    /** Return cached discover results if available (instant, no network) */
+    suspend fun getCachedDiscover(page: Int = 1): List<Wallpaper>? {
+        return cacheManager.getStaleCached("discover_$page")
+    }
+
     suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null, pexelsApi: com.freevibe.data.remote.pexels.PexelsApi? = null, pexelsKey: String = ""): SearchResult<Wallpaper> = supervisorScope {
+        val perSourceTimeout = 6000L // Don't let any single source hold up the feed
         val sources = mutableListOf(
-            async { runCatching { getWallhaven(page = page) }.getOrNull() },
-            async { runCatching { getPicsum(page = page) }.getOrNull() },
-            async { runCatching { getPixabay(page = page) }.getOrNull() },
-            async { runCatching { getBingDaily(page = page) }.getOrNull() },
+            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getWallhaven(page = page) }.getOrNull() } },
+            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPicsum(page = page) }.getOrNull() } },
+            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPixabay(page = page) }.getOrNull() } },
+            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getBingDaily(page = page) }.getOrNull() } },
         )
         // Reddit
         if (redditRepo != null) {
-            sources.add(async { runCatching { redditRepo.getMultiSubreddit() }.getOrNull() })
+            sources.add(async { withTimeoutOrNull(perSourceTimeout) { runCatching { redditRepo.getMultiSubreddit() }.getOrNull() } })
         }
         // Pexels
         if (pexelsApi != null && pexelsKey.isNotBlank()) {
             sources.add(async {
-                runCatching {
-                    val resp = pexelsApi.curatedPhotos(apiKey = pexelsKey, page = page)
-                    SearchResult(
-                        items = resp.photos.map { photo ->
-                            Wallpaper(
-                                id = "px_${photo.id}",
-                                source = ContentSource.PEXELS,
-                                thumbnailUrl = photo.src.medium,
-                                fullUrl = photo.src.original,
-                                width = photo.width,
-                                height = photo.height,
-                                sourcePageUrl = photo.url,
-                                uploaderName = photo.photographer,
-                            )
-                        },
-                        totalCount = resp.totalResults,
-                        currentPage = resp.page,
-                        hasMore = resp.nextPage != null,
-                    )
-                }.getOrNull()
+                withTimeoutOrNull(perSourceTimeout) {
+                    runCatching {
+                        val resp = pexelsApi.curatedPhotos(apiKey = pexelsKey, page = page)
+                        SearchResult(
+                            items = resp.photos.map { photo ->
+                                Wallpaper(
+                                    id = "px_${photo.id}",
+                                    source = ContentSource.PEXELS,
+                                    thumbnailUrl = photo.src.medium,
+                                    fullUrl = photo.src.original,
+                                    width = photo.width,
+                                    height = photo.height,
+                                    sourcePageUrl = photo.url,
+                                    uploaderName = photo.photographer,
+                                )
+                            },
+                            totalCount = resp.totalResults,
+                            currentPage = resp.page,
+                            hasMore = resp.nextPage != null,
+                        )
+                    }.getOrNull()
+                }
             })
         }
 
@@ -262,6 +271,11 @@ class WallpaperRepository @Inject constructor(
             }
             idx++
             if (idx > 200) break
+        }
+
+        // Cache combined discover result for instant startup next time
+        if (interleaved.isNotEmpty()) {
+            cacheManager.cache("discover_$page", interleaved)
         }
 
         SearchResult(

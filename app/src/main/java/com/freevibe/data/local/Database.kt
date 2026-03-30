@@ -3,7 +3,6 @@ package com.freevibe.data.local
 import androidx.room.*
 import com.freevibe.data.model.DownloadEntity
 import com.freevibe.data.model.FavoriteEntity
-import com.freevibe.data.model.IAAudioCacheEntity
 import com.freevibe.data.model.SearchHistoryEntity
 import com.freevibe.data.model.WallpaperCacheEntity
 import com.freevibe.data.model.WallpaperCollectionEntity
@@ -20,11 +19,10 @@ import kotlinx.coroutines.flow.Flow
         SearchHistoryEntity::class,
         WallpaperCacheEntity::class,
         WallpaperHistoryEntity::class,
-        IAAudioCacheEntity::class,
         WallpaperCollectionEntity::class,
         WallpaperCollectionItemEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class FreeVibeDatabase : RoomDatabase() {
@@ -33,7 +31,6 @@ abstract class FreeVibeDatabase : RoomDatabase() {
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun wallpaperCacheDao(): WallpaperCacheDao
     abstract fun wallpaperHistoryDao(): WallpaperHistoryDao
-    abstract fun iaAudioCacheDao(): IAAudioCacheDao
     abstract fun collectionDao(): CollectionDao
 }
 
@@ -158,27 +155,6 @@ interface WallpaperHistoryDao {
 
     @Query("DELETE FROM wallpaper_history")
     suspend fun clearAll()
-}
-
-// -- Internet Archive Audio Cache DAO (#7) --
-
-@Dao
-interface IAAudioCacheDao {
-
-    @Query("SELECT * FROM ia_audio_cache WHERE identifier = :identifier")
-    suspend fun get(identifier: String): IAAudioCacheEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entry: IAAudioCacheEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(entries: List<IAAudioCacheEntity>)
-
-    @Query("SELECT * FROM ia_audio_cache WHERE identifier IN (:identifiers)")
-    suspend fun getByIdentifiers(identifiers: List<String>): List<IAAudioCacheEntity>
-
-    @Query("DELETE FROM ia_audio_cache WHERE cachedAt < :threshold")
-    suspend fun evictOlderThan(threshold: Long)
 }
 
 // -- Wallpaper Collections DAO --

@@ -8,13 +8,11 @@ import com.freevibe.data.local.CollectionDao
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.local.FavoriteDao
 import com.freevibe.data.local.FreeVibeDatabase
-import com.freevibe.data.local.IAAudioCacheDao
 import com.freevibe.data.local.SearchHistoryDao
 import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
 import com.freevibe.data.remote.bing.BingDailyApi
-import com.freevibe.data.remote.internetarchive.InternetArchiveApi
-import com.freevibe.data.remote.klipy.KlipyApi
+import com.freevibe.data.remote.freesound.FreesoundV2Api
 import com.freevibe.data.remote.weather.OpenMeteoApi
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
@@ -55,7 +53,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/4.5.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/5.0.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -90,13 +88,13 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideInternetArchiveApi(client: OkHttpClient, moshi: Moshi): InternetArchiveApi =
+    fun provideFreesoundV2Api(client: OkHttpClient, moshi: Moshi): FreesoundV2Api =
         Retrofit.Builder()
-            .baseUrl(InternetArchiveApi.BASE_URL)
+            .baseUrl(FreesoundV2Api.BASE_URL)
             .client(client)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
-            .create(InternetArchiveApi::class.java)
+            .create(FreesoundV2Api::class.java)
 
     @Provides
     @Singleton
@@ -158,15 +156,6 @@ object AppModule {
             .build()
             .create(OpenMeteoApi::class.java)
 
-    @Provides
-    @Singleton
-    fun provideKlipyApi(client: OkHttpClient, moshi: Moshi): KlipyApi =
-        Retrofit.Builder()
-            .baseUrl(KlipyApi.BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(KlipyApi::class.java)
 
     // -- Database --
 
@@ -210,7 +199,7 @@ object AppModule {
         }
     }
 
-    // v5→6: Add ForeignKey + index on wallpaper_collection_items.collectionId (CASCADE delete)
+    // v5→6: Add ForeignKey + index on wallpaper_collection_items.collectionId
     private val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collection_items_new` (`collectionId` INTEGER NOT NULL, `wallpaperId` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `source` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `addedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `wallpaperId`), FOREIGN KEY(`collectionId`) REFERENCES `wallpaper_collections`(`collectionId`) ON DELETE CASCADE)")
@@ -221,11 +210,18 @@ object AppModule {
         }
     }
 
+    // v6→7: Drop ia_audio_cache table (Internet Archive removed)
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `ia_audio_cache`")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 
@@ -243,9 +239,6 @@ object AppModule {
 
     @Provides
     fun provideWallpaperHistoryDao(db: FreeVibeDatabase): WallpaperHistoryDao = db.wallpaperHistoryDao()
-
-    @Provides
-    fun provideIAAudioCacheDao(db: FreeVibeDatabase): IAAudioCacheDao = db.iaAudioCacheDao()
 
     @Provides
     fun provideCollectionDao(db: FreeVibeDatabase): CollectionDao = db.collectionDao()

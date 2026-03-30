@@ -367,7 +367,7 @@ fun WallpapersScreen(
             }
         }
 
-        // FABs: Shuffle + Match My Theme
+        // FABs: AI Generate + Shuffle + Match My Theme
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)

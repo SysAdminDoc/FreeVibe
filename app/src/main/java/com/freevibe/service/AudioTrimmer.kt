@@ -149,7 +149,7 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(file.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().readText()
+            process.inputStream.bufferedReader().use { it.readText() }
             val exitCode = process.waitFor()
 
             if (exitCode == 0 && tempOut.exists() && tempOut.length() > 1024) {
@@ -193,7 +193,7 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(input.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().readText()
+            process.inputStream.bufferedReader().use { it.readText() }
             val exitCode = process.waitFor()
 
             if (exitCode == 0 && output.exists() && output.length() > 1024) {
@@ -229,7 +229,7 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(input.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().readText()
+            process.inputStream.bufferedReader().use { it.readText() }
             val exitCode = process.waitFor()
 
             if (exitCode == 0 && output.exists() && output.length() > 100) {

@@ -22,16 +22,31 @@ class FreesoundRepository @Inject constructor(
         maxDuration: Double = 60.0,
         page: Int = 1,
     ): SearchResult<Sound> {
+        // Openverse anonymous limit is page_size=20
         val response = api.search(query = query, page = page, pageSize = 20)
         val filtered = response.results
             .filter { audio ->
                 val durSec = (audio.duration ?: 0) / 1000.0
-                durSec in minDuration..maxDuration && audio.url.isNotBlank()
+                durSec in minDuration..maxDuration && durSec > 0 && audio.url.isNotBlank()
             }
             .map { it.toSound() }
 
+        // If heavy duration filtering left very few results and there are more pages, fetch page 2
+        val items = if (filtered.size < 5 && page == 1 && response.pageCount > 1) {
+            try {
+                val page2 = api.search(query = query, page = 2, pageSize = 20)
+                val extra = page2.results
+                    .filter { audio ->
+                        val durSec = (audio.duration ?: 0) / 1000.0
+                        durSec in minDuration..maxDuration && durSec > 0 && audio.url.isNotBlank()
+                    }
+                    .map { it.toSound() }
+                filtered + extra
+            } catch (_: Exception) { filtered }
+        } else filtered
+
         return SearchResult(
-            items = filtered,
+            items = items,
             totalCount = response.resultCount,
             currentPage = page,
             hasMore = page < response.pageCount,
@@ -51,7 +66,7 @@ class FreesoundRepository @Inject constructor(
 
     suspend fun getRingtones(page: Int = 1): SearchResult<Sound> = search(
         query = "ringtone phone ring melody",
-        minDuration = 5.0,
+        minDuration = 8.0,
         maxDuration = 30.0,
         page = page,
     )
@@ -80,7 +95,7 @@ class FreesoundRepository @Inject constructor(
             else -> license.uppercase().take(8)
         }
         val durationSec = (duration ?: 0) / 1000.0
-        val format = filetype?.removePrefix("mp3")?.let { filetype } ?: "MP3"
+        val format = filetype?.uppercase()?.ifBlank { null } ?: "MP3"
 
         return Sound(
             id = "ov_$id",
@@ -91,7 +106,7 @@ class FreesoundRepository @Inject constructor(
             downloadUrl = url,
             duration = durationSec,
             sampleRate = sampleRate ?: 0,
-            fileType = format.uppercase().replace("MP32", "MP3"),
+            fileType = format,
             fileSize = filesize ?: 0,
             tags = tags.map { it.name }.take(10),
             license = licenseName,

@@ -166,6 +166,9 @@ fun FreeVibeRoot() {
                     onSoundClick = { sound ->
                         navController.navigate(Screen.SoundDetail.createRoute(sound.id))
                     },
+                    onCreateRingtone = {
+                        navController.navigate(Screen.SoundEditor.route)
+                    },
                 )
             }
             composable(Screen.Favorites.route) {

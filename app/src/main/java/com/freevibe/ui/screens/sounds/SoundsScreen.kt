@@ -1,16 +1,14 @@
 package com.freevibe.ui.screens.sounds
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,211 +25,174 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.ui.components.SearchHistoryDropdown
-import com.freevibe.ui.components.ShimmerSoundList
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SoundsScreen(
     onSoundClick: (Sound) -> Unit,
+    onCreateRingtone: () -> Unit = {},
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val cachedYtIds by viewModel.cachedYtIds.collectAsState()
-    val trendingSounds by viewModel.trendingSounds.collectAsState()
-    val soundOfTheDay by viewModel.soundOfTheDay.collectAsState()
+    val topHits by viewModel.topHits.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
-    val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
-    val voteCounts by remember(state.sounds) {
-        if (state.sounds.isNotEmpty()) viewModel.voteRepo.getVoteCounts(state.sounds.map { it.id })
-        else kotlinx.coroutines.flow.flowOf(emptyMap())
-    }.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf("") }
     var showSearchHistory by remember { mutableStateOf(false) }
+    var quickApplySound by remember { mutableStateOf<Sound?>(null) }
     val focusManager = LocalFocusManager.current
+    val isYouTubeTab = state.selectedTab == SoundTab.YOUTUBE
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar with history
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search sounds...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            showSearchHistory = false
-                            focusManager.clearFocus()
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        viewModel.search(searchQuery)
-                        showSearchHistory = false
-                        focusManager.clearFocus()
-                    },
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
-                ),
+    // Quick Apply bottom sheet
+    if (quickApplySound != null) {
+        QuickApplySheet(
+            sound = quickApplySound!!,
+            canApply = viewModel.canWriteSettings(),
+            isApplying = state.isApplying,
+            onApply = { sound, type -> viewModel.applySound(sound, type); quickApplySound = null },
+            onDownload = { viewModel.downloadSound(it); quickApplySound = null },
+            onDismiss = { quickApplySound = null },
+        )
+    }
+
+    // Snackbar for success/error feedback
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.applySuccess) {
+        state.applySuccess?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
+    }
+    LaunchedEffect(state.error) {
+        if (state.sounds.isNotEmpty()) {
+            state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onCreateRingtone,
+                icon = { Icon(Icons.Default.ContentCut, null) },
+                text = { Text("Create") },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             )
-            SearchHistoryDropdown(
-                recentQueries = recentSearches,
-                isVisible = showSearchHistory && searchQuery.isEmpty(),
-                onQueryClick = { query ->
-                    searchQuery = query
-                    viewModel.search(query)
-                    showSearchHistory = false
-                    focusManager.clearFocus()
-                },
-                onDeleteQuery = { viewModel.removeSearch(it) },
-                onClearAll = { viewModel.clearSearchHistory() },
-                modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
-            )
-        }
-
-        // Tab row
-        val visibleTabs = SoundTab.entries.filter {
-            it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
-        }
-        key(visibleTabs.size) {
-            ScrollableTabRow(
-                selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.primary,
-                edgePadding = 16.dp,
-                divider = {},
-            ) {
-                visibleTabs.forEach { tab ->
-                    Tab(
-                        selected = state.selectedTab == tab,
-                        onClick = { viewModel.selectTab(tab) },
-                        text = {
-                            Text(
-                                text = tab.name.lowercase().replaceFirstChar { it.uppercase() },
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        },
-                    )
-                }
-            }
-        }
-
-        // Duration filter chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            DurationFilter.entries.forEach { filter ->
-                FilterChip(
-                    selected = state.durationFilter == filter,
-                    onClick = { viewModel.setDurationFilter(filter) },
-                    label = { Text(filter.label, style = MaterialTheme.typography.labelSmall) },
-                    leadingIcon = if (state.durationFilter == filter) {
-                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
-                    } else null,
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.height(32.dp),
-                )
-            }
-        }
-
-        // Category chips (horizontal scroll)
-        AnimatedVisibility(
-            visible = state.selectedTab != SoundTab.SEARCH,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
+        },
+    ) { scaffoldPadding ->
+        Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
+            // Search bar
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SoundCategory.entries.forEach { cat ->
-                    AssistChip(
-                        onClick = { viewModel.selectCategory(cat) },
-                        label = { Text(cat.label, style = MaterialTheme.typography.labelSmall) },
-                        leadingIcon = {
-                            Text(cat.emoji, style = MaterialTheme.typography.labelSmall)
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.height(32.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (state.selectedCategory == cat)
-                                MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ),
-                    )
-                }
-            }
-        }
-
-        // Content
-        Box(modifier = Modifier.fillMaxSize()) {
-            when {
-                state.isLoading -> {
-                    Column(Modifier.fillMaxSize()) {
-                        ShimmerSoundList(Modifier.weight(1f))
-                        state.loadingProgress?.let { progress ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                    Text(
-                                        progress,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            if (isYouTubeTab) "Search YouTube or paste URL..."
+                            else "Search sounds..."
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
+                            null,
+                            tint = if (isYouTubeTab) Color(0xFFFF0000) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = {
+                                searchQuery = ""; showSearchHistory = false; focusManager.clearFocus()
+                            }) { Icon(Icons.Default.Clear, "Clear") }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        if (searchQuery.isNotBlank()) {
+                            if (isYouTubeTab && isYouTubeUrl(searchQuery)) {
+                                viewModel.importYouTubeUrl(searchQuery)
+                            } else if (isYouTubeTab) {
+                                viewModel.searchYouTube(searchQuery)
+                            } else {
+                                viewModel.search(searchQuery)
                             }
                         }
+                        showSearchHistory = false; focusManager.clearFocus()
+                    }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.Transparent,
+                    ),
+                )
+            }
+
+            // Search history dropdown
+            if (showSearchHistory && searchQuery.isEmpty() && recentSearches.isNotEmpty()) {
+                SearchHistoryDropdown(
+                    recentQueries = recentSearches, isVisible = true,
+                    onQueryClick = {
+                        searchQuery = it
+                        if (isYouTubeTab) viewModel.searchYouTube(it) else viewModel.search(it)
+                        showSearchHistory = false; focusManager.clearFocus()
+                    },
+                    onDeleteQuery = { viewModel.removeSearch(it) },
+                    onClearAll = { viewModel.clearSearchHistory() },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                )
+            }
+
+            // Tab row
+            val visibleTabs = SoundTab.entries.filter {
+                it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
+            }
+            key(visibleTabs.size) {
+                ScrollableTabRow(
+                    selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    edgePadding = 16.dp, divider = {},
+                ) {
+                    visibleTabs.forEach { tab ->
+                        Tab(
+                            selected = state.selectedTab == tab,
+                            onClick = { viewModel.selectTab(tab) },
+                            text = {
+                                Text(
+                                    tab.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            },
+                        )
                     }
                 }
-                state.error != null -> {
+            }
+
+            // Content
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (state.error != null && state.sounds.isEmpty() && !state.isLoading) {
                     Column(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Icon(
-                            Icons.Default.CloudOff,
-                            null,
-                            Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                        )
+                        Icon(Icons.Default.CloudOff, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
                         Spacer(Modifier.height(12.dp))
                         Text(state.error ?: "Error", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(16.dp))
@@ -241,60 +202,21 @@ fun SoundsScreen(
                             Text("Retry")
                         }
                     }
-                }
-                state.sounds.isEmpty() && !state.isRefreshing -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(32.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.MusicOff,
-                                null,
-                                Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                if (state.selectedTab == SoundTab.SEARCH) "No results for \"${state.query}\""
-                                else if (state.selectedCategory != null) "No ${state.selectedCategory!!.label.lowercase()} sounds found"
-                                else "No sounds found",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (state.durationFilter != DurationFilter.ALL) {
-                                Spacer(Modifier.height(8.dp))
-                                FilledTonalButton(onClick = { viewModel.setDurationFilter(DurationFilter.ALL) }) {
-                                    Text("Clear duration filter")
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    PullToRefreshBox(
-                        isRefreshing = state.isRefreshing,
-                        onRefresh = { viewModel.refresh() },
-                    ) {
+                } else {
+                    PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { viewModel.refresh() }) {
                         SoundsList(
-                            sounds = state.sounds
-                                .filter { it.id !in hiddenIds }
-                                .sortedByDescending { voteCounts[it.id] ?: 0 },
+                            sounds = state.sounds,
+                            isLoading = state.isLoading,
                             playingId = state.playingId,
                             isLoadingMore = state.isLoadingMore,
                             cachedYtIds = cachedYtIds,
-                            voteCounts = voteCounts,
-                            onSoundClick = { sound ->
-                                viewModel.selectSound(sound)
-                                onSoundClick(sound)
-                            },
+                            filterKey = state.filterKey,
+                            onSoundClick = { viewModel.selectSound(it); onSoundClick(it) },
+                            onLongPress = { quickApplySound = it },
                             onPlayClick = { viewModel.togglePlayback(it) },
-                            onUpvote = { viewModel.upvote(it) },
-                            onDownvote = { viewModel.downvote(it) },
                             onLoadMore = { viewModel.loadMore() },
                             playbackProgress = playbackProgress,
-                            soundOfTheDay = if (state.selectedTab == SoundTab.RINGTONES) soundOfTheDay else null,
-                            trendingSounds = if (state.selectedTab == SoundTab.RINGTONES) trendingSounds else emptyList(),
+                            topHits = if (state.selectedTab == SoundTab.RINGTONES && state.query.isBlank()) topHits else emptyList(),
                         )
                     }
                 }
@@ -303,132 +225,147 @@ fun SoundsScreen(
     }
 }
 
+private fun isYouTubeUrl(text: String): Boolean {
+    val t = text.trim()
+    return t.contains("youtube.com/") || t.contains("youtu.be/") || t.contains("youtube.com/shorts/")
+}
+
+// -- Sounds List --
+
 @Composable
 private fun SoundsList(
     sounds: List<Sound>,
+    isLoading: Boolean,
     playingId: String?,
     isLoadingMore: Boolean,
-    cachedYtIds: Set<String> = emptySet(),
-    voteCounts: Map<String, Int> = emptyMap(),
+    cachedYtIds: Set<String>,
+    filterKey: Int,
     onSoundClick: (Sound) -> Unit,
+    onLongPress: (Sound) -> Unit,
     onPlayClick: (Sound) -> Unit,
-    onUpvote: (String) -> Unit = {},
-    onDownvote: (String) -> Unit = {},
     onLoadMore: () -> Unit,
-    playbackProgress: Float = 0f,
-    soundOfTheDay: Sound? = null,
-    trendingSounds: List<Sound> = emptyList(),
+    playbackProgress: Float,
+    topHits: List<Sound>,
 ) {
     val listState = rememberLazyListState()
+    LaunchedEffect(filterKey) { listState.scrollToItem(0) }
 
     val shouldLoadMore by remember {
         derivedStateOf {
-            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= listState.layoutInfo.totalItemsCount - 5
+            val info = listState.layoutInfo
+            info.totalItemsCount > 5 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 5
         }
     }
-
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) onLoadMore()
-    }
+    LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) onLoadMore() }
 
     LazyColumn(
         state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        // Sound of the Day hero card
-        if (soundOfTheDay != null) {
-            item(key = "sotd") {
-                val sotd = soundOfTheDay
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onSoundClick(sotd) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+        // Top 5 This Week (Ringtones tab only)
+        if (topHits.isNotEmpty()) {
+            item(key = "tophits_header") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                Icon(Icons.Default.AutoAwesome, null, Modifier.size(24.dp), tint = Color(0xFFFFD700))
-                            }
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("Sound of the Day", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                            Text(sotd.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${String.format("%.1f", sotd.duration)}s - ${sotd.uploaderName}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { onPlayClick(sotd) }, modifier = Modifier.size(40.dp)) {
-                            Icon(if (playingId == sotd.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
+                    Icon(Icons.Default.TrendingUp, null, Modifier.size(20.dp), tint = Color(0xFFFF4444))
+                    Text("Top 5 This Week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(8.dp))
+            }
+            items(topHits, key = { "hit_${it.id}" }) { sound ->
+                SoundCard(
+                    sound = sound,
+                    isPlaying = playingId == sound.id,
+                    isResolving = sound.id.startsWith("yt_") && sound.id !in cachedYtIds && playingId == sound.id,
+                    playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
+                    onClick = { onSoundClick(sound) },
+                    onLongPress = { onLongPress(sound) },
+                    onPlayClick = { onPlayClick(sound) },
+                )
+            }
+            item(key = "tophits_divider") {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
         }
 
-        // Popular sounds shown as regular cards at the top, then the rest deduped
-        val trendingIds = trendingSounds.map { it.id }.toSet()
-        val combinedSounds = trendingSounds + sounds.filter { it.id !in trendingIds }
+        // Main list
+        val topHitIds = topHits.map { it.id }.toSet()
+        val filteredSounds = sounds.filter { it.id !in topHitIds }
 
-        items(combinedSounds, key = { it.id }) { sound ->
-            val isYt = sound.id.startsWith("yt_")
-            val isReady = !isYt || sound.id in cachedYtIds
+        items(filteredSounds, key = { it.id }) { sound ->
             SoundCard(
                 sound = sound,
                 isPlaying = playingId == sound.id,
-                isResolving = isYt && !isReady && playingId == sound.id,
-                voteCount = voteCounts[sound.id] ?: 0,
+                isResolving = sound.id.startsWith("yt_") && sound.id !in cachedYtIds && playingId == sound.id,
+                playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
                 onClick = { onSoundClick(sound) },
+                onLongPress = { onLongPress(sound) },
                 onPlayClick = { onPlayClick(sound) },
-                onUpvote = { onUpvote(sound.id) },
-                onDownvote = { onDownvote(sound.id) },
             )
         }
 
-        if (isLoadingMore) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        // Loading spinner
+        if (isLoading && sounds.isEmpty()) {
+            item(key = "loading") {
+                Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
                 }
             }
         }
+
+        // Empty state
+        if (!isLoading && sounds.isEmpty() && topHits.isEmpty()) {
+            item(key = "empty") {
+                Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.MusicOff, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(12.dp))
+                    Text("No sounds found", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        // Load more spinner
+        if (isLoadingMore) {
+            item(key = "loading_more") {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            }
+        }
+
+        // Bottom spacer for FAB
+        item(key = "bottom_spacer") { Spacer(Modifier.height(80.dp)) }
     }
 }
 
+// -- Sound Card --
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SoundCard(
     sound: Sound,
     isPlaying: Boolean,
     isResolving: Boolean = false,
-    voteCount: Int = 0,
+    playbackProgress: Float = 0f,
     onClick: () -> Unit,
+    onLongPress: () -> Unit = {},
     onPlayClick: () -> Unit,
-    onUpvote: () -> Unit = {},
-    onDownvote: () -> Unit = {},
 ) {
     Surface(
-        onClick = onClick,
-        color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        else Color.Transparent,
+        color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent,
         shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp, horizontal = 12.dp),
-        ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 12.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Play/pause button
+                // Play button
                 IconButton(
                     onClick = onPlayClick,
                     modifier = Modifier
@@ -440,164 +377,83 @@ private fun SoundCard(
                         ),
                 ) {
                     if (isResolving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White,
-                        )
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
                     } else {
                         Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            null,
                             tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp),
                         )
                     }
                 }
 
-                // Sound info
-                Column(modifier = Modifier.weight(1f)) {
+                // Info
+                Column(Modifier.weight(1f)) {
                     Text(
-                        text = sound.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        sound.name,
+                        style = MaterialTheme.typography.bodyLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Source badge
+                        if (sound.source == ContentSource.YOUTUBE) {
+                            Surface(color = Color(0xFFFF0000).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                                Text("YT", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF0000))
+                            }
+                        }
                         Text(
-                            text = formatDuration(sound.duration),
-                            style = MaterialTheme.typography.labelSmall,
+                            formatDuration(sound.duration),
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (sound.uploaderName.isNotEmpty()) {
+                        if (sound.uploaderName.isNotEmpty() && sound.uploaderName != "Unknown") {
                             Text(
-                                text = sound.uploaderName,
-                                style = MaterialTheme.typography.labelSmall,
+                                sound.uploaderName,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                         }
                     }
                 }
 
-                // Format badge
-                if (sound.fileType.isNotEmpty()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = RoundedCornerShape(4.dp),
-                    ) {
-                        Text(
-                            sound.fileType.uppercase(),
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-                }
-
-                // License badge
-                if (sound.license.contains("CC0", ignoreCase = true) ||
-                    sound.license.contains("Public Domain", ignoreCase = true) ||
-                    sound.license.contains("CC BY", ignoreCase = true)) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(4.dp),
-                    ) {
-                        Text(
-                            when {
-                                sound.license.contains("CC0", ignoreCase = true) -> "CC0"
-                                sound.license.contains("Public Domain", ignoreCase = true) -> "PD"
-                                else -> sound.license.take(6)
-                            },
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
-                }
-
-                // Vote buttons
-                IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.ThumbUp, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                        if (voteCount > 0) Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 2.dp))
-                    }
-                }
-                IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.VisibilityOff, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
+                // Chevron
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
             }
 
-            // Mini waveform
-            if (sound.duration > 0) {
+            // Playback waveform
+            if (isPlaying && sound.duration > 0) {
                 Spacer(Modifier.height(6.dp))
-                MiniWaveform(
-                    duration = sound.duration,
-                    isPlaying = isPlaying,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 56.dp),
-                )
+                MiniWaveform(sound.duration, true, playbackProgress, Modifier.fillMaxWidth().padding(start = 56.dp))
             }
         }
     }
 }
 
 @Composable
-private fun MiniWaveform(
-    duration: Double,
-    isPlaying: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val barColor = if (isPlaying) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+private fun MiniWaveform(duration: Double, isPlaying: Boolean, progress: Float, modifier: Modifier = Modifier) {
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
     val activeColor = MaterialTheme.colorScheme.primary
-
-    val barCount = 40
+    val barCount = 50
     val heights = remember(duration) {
         val seed = (duration * 1000).toInt()
-        List(barCount) { i ->
-            val angle = (seed + i * 37) % 360
-            (0.2f + 0.8f * ((sin(angle * 0.0174533) + 1f) / 2f).toFloat())
-        }
+        List(barCount) { i -> (0.2f + 0.8f * ((sin((seed + i * 37) % 360 * 0.0174533) + 1f) / 2f).toFloat()) }
     }
-
-    val progress = if (isPlaying) {
-        val infiniteTransition = rememberInfiniteTransition(label = "waveform")
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = (duration * 1000).toInt().coerceIn(2000, 30000),
-                    easing = LinearEasing,
-                ),
-            ),
-            label = "waveform_progress",
-        ).value
-    } else 0f
-
-    Canvas(
-        modifier = modifier.height(20.dp),
-    ) {
+    Canvas(modifier.height(24.dp)) {
         val barWidth = size.width / barCount
         val gap = 1.dp.toPx()
-
         heights.forEachIndexed { i, height ->
             val x = i * barWidth + barWidth / 2
             val barH = size.height * height
-            val isActive = isPlaying && (i.toFloat() / barCount) < progress
-
             drawLine(
-                color = if (isActive) activeColor else barColor,
+                color = if (isPlaying && (i.toFloat() / barCount) < progress) activeColor else inactiveColor,
                 start = Offset(x, size.height / 2 - barH / 2),
                 end = Offset(x, size.height / 2 + barH / 2),
                 strokeWidth = (barWidth - gap).coerceAtLeast(1f),
@@ -608,8 +464,66 @@ private fun MiniWaveform(
 }
 
 private fun formatDuration(seconds: Double): String {
-    val totalSeconds = seconds.toInt()
-    val mins = totalSeconds / 60
-    val secs = totalSeconds % 60
-    return if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+    val total = seconds.toInt()
+    val m = total / 60
+    val s = total % 60
+    return if (m > 0) "${m}:${s.toString().padStart(2, '0')}" else "0:${s.toString().padStart(2, '0')}"
+}
+
+// -- Quick Apply Bottom Sheet --
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickApplySheet(
+    sound: Sound,
+    canApply: Boolean,
+    isApplying: Boolean,
+    onApply: (Sound, ContentType) -> Unit,
+    onDownload: (Sound) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(sound.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${formatDuration(sound.duration)}${if (sound.uploaderName.isNotEmpty() && sound.uploaderName != "Unknown") " - ${sound.uploaderName}" else ""}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            QuickApplyRow("Set as Ringtone", Icons.Default.Call, canApply && !isApplying) { onApply(sound, ContentType.RINGTONE) }
+            QuickApplyRow("Set as Notification", Icons.Default.Notifications, canApply && !isApplying) { onApply(sound, ContentType.NOTIFICATION) }
+            QuickApplyRow("Set as Alarm", Icons.Default.Alarm, canApply && !isApplying) { onApply(sound, ContentType.ALARM) }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            QuickApplyRow("Download", Icons.Default.Download, !isApplying) { onDownload(sound) }
+
+            if (isApplying) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickApplyRow(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = Color.Transparent,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(icon, null, tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(24.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+        }
+    }
 }

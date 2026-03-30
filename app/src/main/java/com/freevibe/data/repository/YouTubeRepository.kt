@@ -52,6 +52,7 @@ class YouTubeRepository @Inject constructor() {
             "top \\d+", "\\d+ best", "compilation", "mix 20\\d\\d", "playlist",
             "ranked", "tier list", "reaction", "review", "tutorial", "how to",
             "part \\d+", "episode", "ep\\.", "podcast", "interview", "live stream",
+            "hindi", "telugu", "pack",
         ).map { Regex(it, RegexOption.IGNORE_CASE) }
     }
 
@@ -59,22 +60,25 @@ class YouTubeRepository @Inject constructor() {
         query: String,
         maxDuration: Int = 240,
         minDuration: Int = 0,
+        blockedWords: List<String> = emptyList(),
     ): SearchResult<Sound> = withContext(Dispatchers.IO) {
         try {
             if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Searching YouTube for: $query")
             val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Got YouTube service")
             val searchExtractor = service.getSearchExtractor(query)
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Created search extractor, fetching page...")
             searchExtractor.fetchPage()
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Page fetched, items: ${searchExtractor.initialPage.items.size}")
+
+            // Combine hardcoded + user-provided blocked words
+            val allBlocked = junkPatterns + blockedWords
+                .filter { it.isNotBlank() }
+                .map { Regex(Regex.escape(it.trim()), RegexOption.IGNORE_CASE) }
 
             val sounds = searchExtractor.initialPage.items
                 .filterIsInstance<StreamInfoItem>()
                 .filter { it.duration > 0 }
                 .filter { it.duration in minDuration.toLong()..maxDuration.toLong() }
-                .filter { item -> junkPatterns.none { it.containsMatchIn(item.name) } }
-                .filter { !it.name.contains("#") } // Skip hashtag-heavy titles
+                .filter { item -> allBlocked.none { it.containsMatchIn(item.name) } }
+                .filter { !it.name.contains("#") }
                 .map { it.toSound() }
 
             SearchResult(
