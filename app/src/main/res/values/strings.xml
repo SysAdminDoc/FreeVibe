@@ -3,5 +3,6 @@
     <string name="app_name">Aura</string>
     <string name="video_wallpaper_label">Aura Video Wallpaper</string>
     <string name="weather_wallpaper_desc">Wallpaper with live weather effects (rain, snow, fog)</string>
+    <string name="parallax_wallpaper_desc">Depth parallax wallpaper that responds to device tilt</string>
     <string name="widget_description">Quick wallpaper changer - shuffle, set home, or set lock screen</string>
 </resources>

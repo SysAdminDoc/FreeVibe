@@ -66,6 +66,31 @@ class WallpaperApplier @Inject constructor(
         }
     }
 
+    /**
+     * Download image from URL, save to internal storage, and store path in
+     * SharedPreferences for ParallaxWallpaperService to read.
+     * Returns the saved file path on success.
+     */
+    suspend fun prepareParallaxWallpaper(url: String, fileName: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder().url(url).build()
+            val response = okHttpClient.newCall(request).execute()
+            response.use { resp ->
+                val bytes = resp.body?.bytes() ?: throw IllegalStateException("Empty response")
+                val dir = java.io.File(context.filesDir, "parallax")
+                dir.mkdirs()
+                val file = java.io.File(dir, fileName)
+                file.writeBytes(bytes)
+                // Store path for ParallaxWallpaperService
+                context.getSharedPreferences("freevibe_parallax", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("image_path", file.absolutePath)
+                    .apply()
+                file.absolutePath
+            }
+        }
+    }
+
     /** Check if wallpaper operations are supported */
     fun isSupported(): Boolean {
         return wallpaperManager.isWallpaperSupported &&

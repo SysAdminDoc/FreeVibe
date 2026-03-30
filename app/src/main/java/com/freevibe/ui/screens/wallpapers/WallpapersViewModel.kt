@@ -272,6 +272,20 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
+    fun applyParallax(wallpaper: Wallpaper) {
+        viewModelScope.launch {
+            _state.update { it.copy(isApplying = true, applySuccess = null) }
+            val ext = guessImageExtension(wallpaper.fileType, wallpaper.fullUrl)
+            wallpaperApplier.prepareParallaxWallpaper(wallpaper.fullUrl, "parallax_wp.$ext")
+                .onSuccess {
+                    _state.update { it.copy(isApplying = false, applySuccess = "parallax_ready") }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isApplying = false, error = e.message) }
+                }
+        }
+    }
+
     fun downloadWallpaper(wallpaper: Wallpaper) {
         viewModelScope.launch {
             val ext = guessImageExtension(wallpaper.fileType, wallpaper.fullUrl)

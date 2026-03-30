@@ -19,6 +19,7 @@ import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.freesound.FreesoundApi
+import com.freevibe.data.remote.soundcloud.SoundCloudApi
 import com.freevibe.data.remote.wallhaven.WallhavenApi
 import com.squareup.moshi.Moshi
 import dagger.Module
@@ -53,7 +54,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/5.0.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/5.1.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -156,6 +157,15 @@ object AppModule {
             .build()
             .create(OpenMeteoApi::class.java)
 
+    @Provides
+    @Singleton
+    fun provideSoundCloudApi(client: OkHttpClient, moshi: Moshi): SoundCloudApi =
+        Retrofit.Builder()
+            .baseUrl(SoundCloudApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(SoundCloudApi::class.java)
 
     // -- Database --
 

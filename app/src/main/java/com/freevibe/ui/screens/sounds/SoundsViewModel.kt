@@ -3,8 +3,6 @@ package com.freevibe.ui.screens.sounds
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
@@ -13,8 +11,12 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.FreesoundV2Repository
 import com.freevibe.data.repository.SearchHistoryRepository
+import com.freevibe.data.repository.SoundCloudRepository
+import com.freevibe.data.repository.UploadRepository
 import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.YouTubeRepository
+import com.freevibe.service.AudioPlaybackManager
+import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
@@ -44,9 +46,11 @@ data class SoundsUiState(
     val isApplying: Boolean = false,
     val applySuccess: String? = null,
     val filterKey: Int = 0,
+    val isUploading: Boolean = false,
+    val uploadProgress: Float = 0f,
 )
 
-enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, YOUTUBE, SEARCH }
+enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, YOUTUBE, COMMUNITY, SEARCH }
 
 @HiltViewModel
 class SoundsViewModel @Inject constructor(
@@ -62,6 +66,10 @@ class SoundsViewModel @Inject constructor(
     private val audioTrimmer: com.freevibe.service.AudioTrimmer,
     private val prefs: PreferencesManager,
     val voteRepo: VoteRepository,
+    private val bundledContent: BundledContentProvider,
+    private val audioPlaybackManager: AudioPlaybackManager,
+    private val soundCloudRepo: SoundCloudRepository,
+    val uploadRepo: UploadRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
@@ -82,26 +90,27 @@ class SoundsViewModel @Inject constructor(
     private val _topHits = MutableStateFlow<List<Sound>>(emptyList())
     val topHits = _topHits.asStateFlow()
 
-    private var exoPlayer: ExoPlayer? = null
     private var loadJob: Job? = null
     private var progressJob: Job? = null
 
-    private val playerListener = object : androidx.media3.common.Player.Listener {
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                _state.update { it.copy(playingId = null) }
-                _playbackProgress.value = 0f
-                progressJob?.cancel()
-            }
-        }
-    }
-
     private val titleBlocklist = Regex("hindi|telugu|pack", RegexOption.IGNORE_CASE)
     private val hasFreesoundV2Key = com.freevibe.BuildConfig.FREESOUND_API_KEY.isNotBlank()
+    private val hasSoundCloudKey = com.freevibe.BuildConfig.SOUNDCLOUD_CLIENT_ID.isNotBlank()
+
+    private val _communityUploads = MutableStateFlow<List<Sound>>(emptyList())
+    val communityUploads = _communityUploads.asStateFlow()
 
     init {
         loadSounds()
         fetchTopHits()
+        loadCommunityUploads()
+        // Sync playingId from AudioPlaybackManager
+        viewModelScope.launch {
+            audioPlaybackManager.currentSoundId.collect { soundId ->
+                _state.update { it.copy(playingId = soundId) }
+                if (soundId == null) _playbackProgress.value = 0f
+            }
+        }
     }
 
     // -- Top 5 This Week --
@@ -164,7 +173,8 @@ class SoundsViewModel @Inject constructor(
                 currentPage = 1, hasMore = true, error = null, filterKey = nextFilterKey(),
             )
         }
-        if (tab != SoundTab.YOUTUBE) loadSounds()
+        if (tab == SoundTab.COMMUNITY) loadCommunityTab()
+        else if (tab != SoundTab.YOUTUBE) loadSounds()
     }
 
     fun search(query: String) {
@@ -331,36 +341,28 @@ class SoundsViewModel @Inject constructor(
 
     private fun startPlayback(sound: Sound) {
         stopPlayback()
-        if (exoPlayer == null) {
-            exoPlayer = ExoPlayer.Builder(context).build().also { it.addListener(playerListener) }
-        }
-        exoPlayer?.apply {
-            stop(); clearMediaItems()
-            setMediaItem(MediaItem.fromUri(sound.previewUrl))
-            prepare(); volume = previewVolume.value; play()
-        }
-        _state.update { it.copy(playingId = sound.id) }
+        audioPlaybackManager.play(sound, sound.previewUrl, previewVolume.value)
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
-            while (_state.value.playingId == sound.id) {
-                val player = exoPlayer
-                if (player != null && player.duration > 0) {
-                    _playbackProgress.value = player.currentPosition.toFloat() / player.duration
-                }
+            while (audioPlaybackManager.currentSoundId.value == sound.id) {
+                audioPlaybackManager.pollProgress()
+                val dur = audioPlaybackManager.duration.value
+                val pos = audioPlaybackManager.currentPosition.value
+                _playbackProgress.value = if (dur > 0) pos.toFloat() / dur else 0f
                 delay(50)
             }
         }
     }
 
     fun seekTo(fraction: Float) {
-        exoPlayer?.let { if (it.duration > 0) it.seekTo((fraction * it.duration).toLong()) }
+        val dur = audioPlaybackManager.duration.value
+        if (dur > 0) audioPlaybackManager.seekTo((fraction * dur).toLong())
     }
 
     private fun stopPlayback() {
         progressJob?.cancel()
         _playbackProgress.value = 0f
-        exoPlayer?.apply { stop(); clearMediaItems() }
-        _state.update { it.copy(playingId = null) }
+        audioPlaybackManager.stop()
     }
 
     // -- Apply & Download --
@@ -447,15 +449,15 @@ class SoundsViewModel @Inject constructor(
 
     override fun onCleared() {
         loadJob?.cancel(); progressJob?.cancel()
-        exoPlayer?.removeListener(playerListener)
-        exoPlayer?.release(); exoPlayer = null
+        audioPlaybackManager.stop()
         super.onCleared()
     }
 
     // -- Main Load --
 
     private fun loadSounds(loadMore: Boolean = false, isRefresh: Boolean = false) {
-        if (_state.value.selectedTab == SoundTab.YOUTUBE) return // YouTube tab uses searchYouTube()
+        val tab = _state.value.selectedTab
+        if (tab == SoundTab.YOUTUBE || tab == SoundTab.COMMUNITY) return
 
         if (!loadMore) loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -464,6 +466,19 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = true, error = null) }
             } else if (loadMore) {
                 _state.update { it.copy(isLoadingMore = true) }
+            }
+
+            // Show bundled content immediately while APIs load
+            if (!loadMore && !isRefresh) {
+                val bundled = when (s.selectedTab) {
+                    SoundTab.RINGTONES -> bundledContent.getRingtones()
+                    SoundTab.NOTIFICATIONS -> bundledContent.getNotifications()
+                    SoundTab.ALARMS -> bundledContent.getAlarms()
+                    else -> emptyList()
+                }
+                if (bundled.isNotEmpty()) {
+                    _state.update { it.copy(sounds = bundled, isLoading = true) }
+                }
             }
 
             val allResults = java.util.concurrent.CopyOnWriteArrayList<Sound>()
@@ -556,6 +571,25 @@ class SoundsViewModel @Inject constructor(
                             }
                         }
                     }
+
+                    // SoundCloud (CC-licensed)
+                    if (hasSoundCloudKey && queries.ovQueries.isNotEmpty()) {
+                        queries.ovQueries.take(1).forEach { q ->
+                            launch {
+                                try {
+                                    val result = soundCloudRepo.search(
+                                        query = q,
+                                        minDurationMs = cappedMin * 1000,
+                                        maxDurationMs = cappedMax * 1000,
+                                        offset = (s.currentPage - 1) * 20,
+                                    )
+                                    var added = false
+                                    result.items.forEach { if (addUnique(it)) added = true }
+                                    if (added) flushToUi()
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
                 }
 
                 val combined = allResults.toList().sortedByDescending { qualityScore(it) }
@@ -594,7 +628,8 @@ class SoundsViewModel @Inject constructor(
                 listOf("alarm clock morning wake", "alarm buzzer bell siren"),
                 listOf(ytAlarmQ, "alarm clock tone morning 2025"),
             )
-            SoundTab.YOUTUBE -> QuerySet(emptyList(), emptyList()) // handled by searchYouTube()
+            SoundTab.YOUTUBE -> QuerySet(emptyList(), emptyList())
+            SoundTab.COMMUNITY -> QuerySet(emptyList(), emptyList())
             SoundTab.SEARCH -> QuerySet(
                 listOf(s.query, "${s.query} sound effect"),
                 listOf("${s.query} sound", "${s.query} ringtone"),
@@ -607,14 +642,18 @@ class SoundsViewModel @Inject constructor(
         SoundTab.NOTIFICATIONS -> 0 to 10
         SoundTab.ALARMS -> 5 to 60
         SoundTab.YOUTUBE -> 0 to 600
+        SoundTab.COMMUNITY -> 0 to 600
         SoundTab.SEARCH -> 0 to 60
     }
 
     private fun qualityScore(sound: Sound): Int {
         var score = 50
         score += when (sound.source) {
+            ContentSource.BUNDLED -> 25
             ContentSource.FREESOUND -> 15
             ContentSource.YOUTUBE -> 15
+            ContentSource.SOUNDCLOUD -> 14
+            ContentSource.COMMUNITY -> 12
             else -> 10
         }
         val name = sound.name
@@ -626,11 +665,55 @@ class SoundsViewModel @Inject constructor(
             SoundTab.NOTIFICATIONS -> 1.0..3.0
             SoundTab.ALARMS -> 10.0..30.0
             SoundTab.YOUTUBE -> 0.0..600.0
+            SoundTab.COMMUNITY -> 0.0..600.0
             SoundTab.SEARCH -> 3.0..30.0
         }
         if (sound.duration in idealRange) score += 10
         if (sound.tags.size >= 3) score += 5
         if (sound.uploaderName.isNotEmpty() && sound.uploaderName != "Unknown") score += 3
         return score
+    }
+
+    // -- Community Uploads --
+
+    private fun loadCommunityUploads() {
+        viewModelScope.launch {
+            uploadRepo.getCommunityUploads(limit = 30).collect { sounds ->
+                _communityUploads.value = sounds
+            }
+        }
+    }
+
+    private fun loadCommunityTab() {
+        _state.update { it.copy(isLoading = true, error = null) }
+        viewModelScope.launch {
+            uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
+                _state.update { it.copy(sounds = sounds, isLoading = false, hasMore = false) }
+            }
+        }
+    }
+
+    fun uploadSound(
+        localUri: android.net.Uri,
+        name: String,
+        category: String,
+        tags: List<String> = emptyList(),
+    ) {
+        viewModelScope.launch {
+            _state.update { it.copy(isUploading = true, uploadProgress = 0f) }
+            uploadRepo.uploadSound(
+                localUri = localUri,
+                name = name,
+                category = category,
+                tags = tags,
+                onProgress = { progress ->
+                    _state.update { it.copy(uploadProgress = progress) }
+                },
+            ).onSuccess {
+                _state.update { it.copy(isUploading = false, uploadProgress = 0f, applySuccess = "Upload complete") }
+            }.onFailure { e ->
+                _state.update { it.copy(isUploading = false, uploadProgress = 0f, error = "Upload failed: ${e.message}") }
+            }
+        }
     }
 }
