@@ -348,7 +348,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             file?.let {
                                 val item = VideoWallpaperItem(id = "px_${video.id}", title = "by ${video.user.name}", thumbnailUrl = video.image, source = "Pexels", duration = video.duration.toLong(), uploaderName = video.user.name, videoWidth = video.width, videoHeight = video.height)
                                 streamUrls[item.id] = it.link
-                                _resolvedIds.value = _resolvedIds.value + item.id
+                                _resolvedIds.update { it + item.id }
                                 item
                             }
                         }
@@ -366,7 +366,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             val after = s.redditAfters[sub]
                             val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
                             val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
-                            val req = Request.Builder().url(url).header("User-Agent", "Aura/5.1.0 (Android; Open Source)").build()
+                            val req = Request.Builder().url(url).header("User-Agent", "Aura/5.2.0 (Android; Open Source)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) { resp.close(); continue }
                             val body = resp.use { it.body?.string() } ?: continue
@@ -402,7 +402,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                     val item = VideoWallpaperItem(id = "rd_${videoUrl.hashCode()}", title = title, thumbnailUrl = thumb, source = "Reddit", uploaderName = "r/$sub", popularity = ups, videoWidth = vw, videoHeight = vh)
                                     items.add(item)
                                     streamUrls[item.id] = videoUrl.trimEnd('/') + "/DASH_720.mp4"
-                                    _resolvedIds.value = _resolvedIds.value + item.id
+                                    _resolvedIds.update { it + item.id }
                                 }
                             }
                         } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
@@ -473,7 +473,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                     videoHeight = it.height,
                                 )
                                 streamUrls[item.id] = it.url
-                                _resolvedIds.value = _resolvedIds.value + item.id
+                                _resolvedIds.update { it + item.id }
                                 item
                             }
                         }
@@ -531,7 +531,7 @@ class VideoWallpapersViewModel @Inject constructor(
                 ytItems.forEach { item ->
                     launch {
                         sem.acquire()
-                        try { youtubeRepo.getVideoStreamUrl(item.videoId)?.let { streamUrls[item.id] = it; _resolvedIds.value = _resolvedIds.value + item.id } } catch (_: Throwable) {} finally { sem.release() }
+                        try { youtubeRepo.getVideoStreamUrl(item.videoId)?.let { streamUrls[item.id] = it; _resolvedIds.update { it + item.id } } } catch (_: Throwable) {} finally { sem.release() }
                     }
                 }
             }

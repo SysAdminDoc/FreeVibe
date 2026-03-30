@@ -169,8 +169,9 @@ class AudioTrimmer @Inject constructor(
             val cls = ytdl::class.java
             val ffmpegField = cls.getDeclaredField("ffmpegPath").apply { isAccessible = true }
             val ldField = cls.getDeclaredField("ENV_LD_LIBRARY_PATH").apply { isAccessible = true }
-            val ffmpegPath = ffmpegField.get(null) as? File ?: return null
-            val ldPath = ldField.get(null) as? String ?: ""
+            // Try instance field first, then static
+            val ffmpegPath = (ffmpegField.get(ytdl) ?: ffmpegField.get(null)) as? File ?: return null
+            val ldPath = (ldField.get(ytdl) ?: ldField.get(null)) as? String ?: ""
             if (ffmpegPath.exists()) Pair(ffmpegPath, ldPath) else null
         } catch (_: Exception) { null }
     }

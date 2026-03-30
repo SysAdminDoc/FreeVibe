@@ -33,6 +33,11 @@ class DarkModeReceiver : BroadcastReceiver() {
         val isDark = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
 
+        // Skip if mode hasn't actually changed (avoids re-downloading on screen rotation, etc.)
+        val lastMode = prefs.getBoolean("last_was_dark", false)
+        if (isDark == lastMode) return
+        prefs.edit().putBoolean("last_was_dark", isDark).apply()
+
         val url = if (isDark) darkUrl else lightUrl
         if (url.isNullOrEmpty()) return
 

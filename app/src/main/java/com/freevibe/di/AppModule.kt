@@ -54,7 +54,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/5.1.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/5.2.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }

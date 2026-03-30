@@ -83,9 +83,14 @@ class ContactPickerViewModel @Inject constructor(
             _state.update { it.copy(error = "No sound selected") }
             return
         }
+        val dlUrl = sound.downloadUrl.ifEmpty { sound.previewUrl }
+        if (dlUrl.isBlank()) {
+            _state.update { it.copy(error = "No download URL available for this sound") }
+            return
+        }
         _state.update { it.copy(isApplying = true) }
         viewModelScope.launch {
-            soundApplier.downloadOnly(sound.downloadUrl, sound.name, ContentType.RINGTONE)
+            soundApplier.downloadOnly(dlUrl, sound.name, ContentType.RINGTONE)
                 .onSuccess { uri ->
                     contactService.setContactRingtone(contactId, uri)
                         .onSuccess {

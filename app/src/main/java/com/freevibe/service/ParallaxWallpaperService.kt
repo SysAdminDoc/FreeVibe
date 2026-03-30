@@ -148,6 +148,7 @@ class ParallaxWallpaperService : WallpaperService() {
                 val file = java.io.File(path)
                 if (!file.exists()) return
                 val bmp = BitmapFactory.decodeFile(path) ?: return
+                originalBitmap?.recycle()
                 originalBitmap = bmp
                 if (screenWidth > 0 && screenHeight > 0) {
                     scaleAndSegment(bmp)
@@ -184,6 +185,7 @@ class ParallaxWallpaperService : WallpaperService() {
                 segmenter.process(inputImage)
                     .addOnSuccessListener { mask ->
                         try {
+                            if (bitmap.isRecycled) return@addOnSuccessListener
                             val maskBuffer = mask.buffer
                             val maskWidth = mask.width
                             val maskHeight = mask.height

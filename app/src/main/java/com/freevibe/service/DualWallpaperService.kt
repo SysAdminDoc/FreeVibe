@@ -28,7 +28,12 @@ class DualWallpaperService @Inject constructor(
             val homeBitmap = async { downloadBitmap(pair.home.fullUrl) }
             val lockBitmap = async { downloadBitmap(pair.lock.fullUrl) }
 
-            val home = homeBitmap.await()
+            val home = try {
+                homeBitmap.await()
+            } catch (e: Exception) {
+                lockBitmap.cancel()
+                throw e
+            }
             val lock = try {
                 lockBitmap.await()
             } catch (e: Exception) {
@@ -69,8 +74,8 @@ class DualWallpaperService @Inject constructor(
                 wallpaperApplier.applyFromBitmap(homeCrop, WallpaperTarget.HOME).getOrThrow()
                 wallpaperApplier.applyFromBitmap(lockCrop, WallpaperTarget.LOCK).getOrThrow()
             } finally {
-                homeCrop?.recycle()
-                lockCrop?.recycle()
+                if (homeCrop !== bitmap) homeCrop?.recycle()
+                if (lockCrop !== bitmap) lockCrop?.recycle()
                 bitmap.recycle()
             }
         }
