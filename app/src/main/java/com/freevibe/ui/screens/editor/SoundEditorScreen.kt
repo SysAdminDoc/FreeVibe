@@ -130,7 +130,7 @@ class SoundEditorViewModel @Inject constructor(
             try {
                 val file = withContext(Dispatchers.IO) { downloadToCache(url, name) }
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
-                val duration = getAudioDuration(file.absolutePath)
+                val duration = withContext(Dispatchers.IO) { getAudioDuration(file.absolutePath) }
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -152,7 +152,7 @@ class SoundEditorViewModel @Inject constructor(
                 val file = withContext(Dispatchers.IO) { copyUriToCache(uri) }
                 val name = file.nameWithoutExtension
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
-                val duration = getAudioDuration(file.absolutePath)
+                val duration = withContext(Dispatchers.IO) { getAudioDuration(file.absolutePath) }
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -260,25 +260,27 @@ class SoundEditorViewModel @Inject constructor(
         try {
             player = android.media.MediaPlayer().apply {
                 setDataSource(path)
-                prepare()
-                seekTo(startMs)
-                start()
-                _state.update { it.copy(isPlaying = true) }
+                setOnPreparedListener { mp ->
+                    mp.seekTo(startMs)
+                    mp.start()
+                    _state.update { it.copy(isPlaying = true) }
 
-                setOnCompletionListener { stopPlayback() }
-            }
-
-            viewModelScope.launch {
-                try {
-                    while (_state.value.isPlaying) {
-                        val p = player ?: break
-                        val pos = p.currentPosition
-                        if (pos >= endMs) break
-                        _state.update { it.copy(playbackPosition = pos.toFloat() / p.duration) }
-                        kotlinx.coroutines.delay(50)
+                    viewModelScope.launch {
+                        try {
+                            while (_state.value.isPlaying) {
+                                val p = player ?: break
+                                val pos = p.currentPosition
+                                if (pos >= endMs) break
+                                _state.update { it.copy(playbackPosition = pos.toFloat() / p.duration) }
+                                kotlinx.coroutines.delay(50)
+                            }
+                        } catch (_: Exception) {}
+                        stopPlayback()
                     }
-                } catch (_: Exception) {}
-                stopPlayback()
+                }
+                setOnCompletionListener { stopPlayback() }
+                setOnErrorListener { _, _, _ -> stopPlayback(); true }
+                prepareAsync()
             }
         } catch (_: Exception) {
             stopPlayback()
@@ -391,14 +393,13 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     private fun getAudioDuration(path: String): Long {
+        val mp = android.media.MediaPlayer()
         return try {
-            val mp = android.media.MediaPlayer()
             mp.setDataSource(path)
             mp.prepare()
-            val dur = mp.duration.toLong()
-            mp.release()
-            dur
+            mp.duration.toLong()
         } catch (_: Exception) { 0L }
+        finally { try { mp.release() } catch (_: Exception) {} }
     }
 }
 

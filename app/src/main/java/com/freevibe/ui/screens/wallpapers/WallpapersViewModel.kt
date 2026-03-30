@@ -499,8 +499,9 @@ class WallpapersViewModel @Inject constructor(
                 }
                 // Color-similar via dominant color
                 if (wallpaper.colors.isNotEmpty()) {
+                    val existingIds = results.map { it.id }.toSet()
                     val colorResult = wallpaperRepo.searchByColor(wallpaper.colors.first().removePrefix("#"))
-                    results.addAll(colorResult.items.filter { it.id !in results.map { r -> r.id }.toSet() })
+                    results.addAll(colorResult.items.filter { it.id !in existingIds })
                 }
                 _state.update { it.copy(wallpapers = results, isLoading = false, hasMore = false) }
             } catch (e: Exception) {

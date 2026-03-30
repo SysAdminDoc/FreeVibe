@@ -23,9 +23,13 @@ import javax.inject.Singleton
 class UploadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val storage = Firebase.storage
-    private val database = Firebase.database
-    private val uploadsRef = database.reference.child("community_sounds")
+    private val storage by lazy {
+        try { Firebase.storage } catch (_: Exception) { null }
+    }
+    private val database by lazy {
+        try { Firebase.database } catch (_: Exception) { null }
+    }
+    private val uploadsRef by lazy { database?.reference?.child("community_sounds") }
 
     @Suppress("HardwareIds")
     private val deviceId: String by lazy {
@@ -43,10 +47,13 @@ class UploadRepository @Inject constructor(
         tags: List<String>,
         onProgress: (Float) -> Unit = {},
     ): Result<String> = try {
+        val storageInstance = storage ?: throw IllegalStateException("Firebase Storage not available")
+        val uploadsRefInstance = uploadsRef ?: throw IllegalStateException("Firebase Database not available")
+
         val timestamp = System.currentTimeMillis()
         val sanitizedName = name.replace(Regex("[^a-zA-Z0-9_\\- ]"), "").take(40)
         val storagePath = "sounds/$deviceId/${timestamp}_${sanitizedName}.mp3"
-        val storageRef = storage.reference.child(storagePath)
+        val storageRef = storageInstance.reference.child(storagePath)
 
         // Upload file
         val uploadTask = storageRef.putFile(localUri)
@@ -60,7 +67,7 @@ class UploadRepository @Inject constructor(
         val downloadUrl = storageRef.downloadUrl.await().toString()
 
         // Write metadata to RTDB
-        val pushRef = uploadsRef.push()
+        val pushRef = uploadsRefInstance.push()
         val metadata = mapOf(
             "name" to name,
             "category" to category,
@@ -81,10 +88,17 @@ class UploadRepository @Inject constructor(
      * Get community-uploaded sounds, sorted by votes descending (client-side).
      */
     fun getCommunityUploads(category: String? = null, limit: Int = 30): Flow<List<Sound>> = callbackFlow {
+        val uploadsRefInstance = uploadsRef
+        if (uploadsRefInstance == null) {
+            trySend(emptyList())
+            awaitClose {}
+            return@callbackFlow
+        }
+
         val ref = if (category != null) {
-            uploadsRef.orderByChild("category").equalTo(category)
+            uploadsRefInstance.orderByChild("category").equalTo(category)
         } else {
-            uploadsRef.limitToLast(limit)
+            uploadsRefInstance.limitToLast(limit)
         }
 
         val listener = object : ValueEventListener {

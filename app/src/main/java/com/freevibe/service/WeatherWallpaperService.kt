@@ -40,7 +40,9 @@ class WeatherWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             renderer = WeatherParticleRenderer(width, height)
             vfxRenderer = VfxParticleRenderer(width, height)
+            val oldScaled = scaledBitmap
             scaledBitmap = wallpaperBitmap?.let { scaleBitmap(it, width, height) }
+            if (oldScaled !== wallpaperBitmap && oldScaled !== scaledBitmap) oldScaled?.recycle()
             loadWeatherFromPrefs()
             loadVfxFromPrefs()
             if (visible) scheduleDraw()
@@ -67,8 +69,8 @@ class WeatherWallpaperService : WallpaperService() {
         override fun onDestroy() {
             super.onDestroy()
             handler.removeCallbacks(drawRunner)
+            if (scaledBitmap !== wallpaperBitmap) scaledBitmap?.recycle()
             wallpaperBitmap?.recycle()
-            scaledBitmap?.recycle()
         }
 
         private fun loadWallpaperBitmap() {

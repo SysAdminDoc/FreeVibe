@@ -4,6 +4,7 @@ import android.content.Context
 import com.freevibe.data.local.FavoriteDao
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -71,8 +72,13 @@ class OfflineFavoritesManager @Inject constructor(
     /** Get total cache size in bytes */
     fun getCacheSize(): Long = offlineDir.listFiles()?.sumOf { it.length() } ?: 0L
 
-    /** Clear all offline caches */
+    /** Clear all offline caches and reset DB paths */
     suspend fun clearAll() = withContext(Dispatchers.IO) {
         offlineDir.listFiles()?.forEach { it.delete() }
+        // Clear stale offlinePath values in DB so favorites don't reference deleted files
+        val allFavs = favoriteDao.getAll().first()
+        allFavs.filter { it.offlinePath.isNotEmpty() }.forEach { fav ->
+            favoriteDao.updateOfflinePath(fav.id, null)
+        }
     }
 }

@@ -59,6 +59,7 @@ class WallpaperEditorViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(EditorState())
     val state = _state.asStateFlow()
+    private var filterJob: kotlinx.coroutines.Job? = null
 
     init {
         selectedContent.selectedWallpaper.value?.let { wp ->
@@ -126,10 +127,10 @@ class WallpaperEditorViewModel @Inject constructor(
     }
 
     fun resetAll() {
-        val old = _state.value.editedBitmap
-        val original = _state.value.originalBitmap
-        if (old != null && old !== original) old.recycle()
+        filterJob?.cancel()
         _state.update {
+            // Don't recycle old bitmap here — Compose may still reference it.
+            // Let GC handle it after Compose moves to the new state.
             it.copy(
                 editedBitmap = it.originalBitmap,
                 brightness = 0f, contrast = 1f, saturation = 1f, blurRadius = 0f,
@@ -144,7 +145,7 @@ class WallpaperEditorViewModel @Inject constructor(
             _state.update { it.copy(isApplying = true) }
             wallpaperApplier.applyFromBitmap(bitmap, target)
                 .onSuccess { _state.update { it.copy(isApplying = false, success = "Applied") } }
-                .onFailure { _state.update { it.copy(isApplying = false) } }
+                .onFailure { e -> _state.update { it.copy(isApplying = false, error = e.message) } }
         }
     }
 
@@ -152,10 +153,10 @@ class WallpaperEditorViewModel @Inject constructor(
 
     private fun applyFilters() {
         val original = _state.value.originalBitmap ?: return
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             _state.update { it.copy(isProcessing = true) }
             val s = _state.value
-            val oldEdited = _state.value.editedBitmap
             val result = withContext(Dispatchers.Default) {
                 var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation, s.warmth)
                 if (s.blurRadius > 0.5f) {
@@ -180,10 +181,8 @@ class WallpaperEditorViewModel @Inject constructor(
                 }
                 bmp
             }
-            // Recycle previous edited bitmap if it's not the original
-            if (oldEdited != null && oldEdited !== original && oldEdited !== result) {
-                oldEdited.recycle()
-            }
+            // Don't recycle old bitmap — Compose rendering pipeline may still reference it.
+            // Let GC handle the old bitmap after Compose moves to the new state.
             _state.update { it.copy(editedBitmap = result, isProcessing = false) }
         }
     }

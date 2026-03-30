@@ -92,6 +92,7 @@ class SoundsViewModel @Inject constructor(
 
     private var loadJob: Job? = null
     private var progressJob: Job? = null
+    private var communityJob: Job? = null
 
     private val titleBlocklist = Regex("hindi|telugu|pack", RegexOption.IGNORE_CASE)
     private val hasFreesoundV2Key = com.freevibe.BuildConfig.FREESOUND_API_KEY.isNotBlank()
@@ -99,6 +100,9 @@ class SoundsViewModel @Inject constructor(
 
     private val _communityUploads = MutableStateFlow<List<Sound>>(emptyList())
     val communityUploads = _communityUploads.asStateFlow()
+
+    private val _playbackProgress = MutableStateFlow(0f)
+    val playbackProgress = _playbackProgress.asStateFlow()
 
     init {
         loadSounds()
@@ -152,7 +156,7 @@ class SoundsViewModel @Inject constructor(
                             sem.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))
-                                _cachedYtIds.value = _cachedYtIds.value + hit.id
+                                _cachedYtIds.update { it + hit.id }
                             } catch (_: Exception) {} finally { sem.release() }
                         }
                     }
@@ -336,9 +340,6 @@ class SoundsViewModel @Inject constructor(
         }
     }
 
-    private val _playbackProgress = MutableStateFlow(0f)
-    val playbackProgress = _playbackProgress.asStateFlow()
-
     private fun startPlayback(sound: Sound) {
         stopPlayback()
         audioPlaybackManager.play(sound, sound.previewUrl, previewVolume.value)
@@ -448,7 +449,7 @@ class SoundsViewModel @Inject constructor(
     fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
 
     override fun onCleared() {
-        loadJob?.cancel(); progressJob?.cancel()
+        loadJob?.cancel(); progressJob?.cancel(); communityJob?.cancel()
         audioPlaybackManager.stop()
         super.onCleared()
     }
@@ -678,17 +679,24 @@ class SoundsViewModel @Inject constructor(
 
     private fun loadCommunityUploads() {
         viewModelScope.launch {
-            uploadRepo.getCommunityUploads(limit = 30).collect { sounds ->
-                _communityUploads.value = sounds
-            }
+            try {
+                uploadRepo.getCommunityUploads(limit = 30).collect { sounds ->
+                    _communityUploads.value = sounds
+                }
+            } catch (_: Exception) {}
         }
     }
 
     private fun loadCommunityTab() {
+        communityJob?.cancel()
         _state.update { it.copy(isLoading = true, error = null) }
-        viewModelScope.launch {
-            uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
-                _state.update { it.copy(sounds = sounds, isLoading = false, hasMore = false) }
+        communityJob = viewModelScope.launch {
+            try {
+                uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
+                    _state.update { it.copy(sounds = sounds, isLoading = false, hasMore = false) }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }
     }

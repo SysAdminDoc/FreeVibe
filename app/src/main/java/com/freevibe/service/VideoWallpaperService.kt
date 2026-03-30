@@ -165,7 +165,8 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun releasePlayer() {
             mediaPlayer?.apply {
-                try { if (isPlaying) stop(); release() } catch (_: Exception) {}
+                try { if (isPlaying) stop() } catch (_: Exception) {}
+                try { release() } catch (_: Exception) {}
             }
             mediaPlayer = null
         }

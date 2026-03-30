@@ -20,7 +20,7 @@ JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
 Gradle 8.12 pinned via wrapper. AGP 8.7.3.
 
 ## Version
-- **v5.0.0** (versionCode 50)
+- **v5.2.0** (versionCode 52)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -101,6 +101,10 @@ DataStore: Settings, Onboarding, User Styles
 - **Video crop viewport** constrained to real screen pixel aspect ratio (WindowMetrics)
 - **r/Amoledbackgrounds** removed from all sources
 - **Icons.Default.YouTube** doesn't exist — use `Icons.Default.SmartDisplay`
+- **Firebase RTDB refs MUST be lazy** — `FirebaseDatabase.getInstance()` throws if databaseURL missing from google-services.json. VoteRepository and UploadRepository use `by lazy` with try/catch.
+- **MutableStateFlow read-modify-write** — Always use `.update { it + newVal }` not `.value = .value + newVal` for thread safety in concurrent coroutines.
+- **Bitmap.createBitmap** can return the same object as source — always check `!==` before recycling to avoid double-recycle crash.
+- **MediaPlayer.stop() + release()** — Always separate into two try blocks; if stop() throws, release() must still be called.
 - Package is `com.freevibe`, display name is "Aura"
 
 ## Key Files
@@ -127,8 +131,11 @@ DataStore: Settings, Onboarding, User Styles
 - Fastlane metadata outdated
 - YouTube videos use thumbnail dimensions as orientation proxy
 - Community Favorites only shows wallpapers in local Room cache
+- SoundCloud requires API key registration (optional, graceful degradation)
 
 ## Version History
+- v5.2.0: Full codebase audit (78 source files). Fixed Sounds tab crash (Firebase RTDB lazy init in VoteRepository + UploadRepository). Fixed 20+ bugs: AudioPlaybackManager connection crash, bitmap leaks in DualWallpaperService/ParallaxWallpaperService/WeatherWallpaperService, VideoWallpaperService player release leak, SoundEditorScreen blocking MediaPlayer.prepare, race conditions on MutableStateFlow updates (VideoWallpapersScreen + SoundsViewModel), community tab double-collect leak, ContactPicker empty URL crash, recycled bitmap access in ParallaxWallpaperService segmentation callback.
+- v5.1.0: Added parallax wallpapers, bundled content, SoundCloud, community uploads, MediaSession audio service.
 - v5.0.0: Sounds overhaul (YouTube tab, one-tap apply, Top 5 This Week, paste URL import). Removed AI wallpaper generation, Internet Archive, KlipyApi, SoundCollections dead code. Onboarding style picker. Full codebase audit: fixed AudioTrimmer stream leaks, DualWallpaperService bitmap leak, DownloadManager progress calc, removed r/Amoledbackgrounds from defaults. DB v7.
 - v4.5.0: Major discovery + sounds overhaul + video wallpaper fixes + startup performance.
 - v4.4.0: Response leaks, crop fixes, DisposableEffect cleanup.

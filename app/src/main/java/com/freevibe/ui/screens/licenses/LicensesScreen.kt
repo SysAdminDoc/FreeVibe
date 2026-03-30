@@ -44,8 +44,13 @@ private val contentSources = listOf(
     OssLicense("Wallhaven", "https://wallhaven.cc/help/api", "Various per image", "Wallpaper source"),
     OssLicense("Lorem Picsum", "https://picsum.photos/", "Unsplash License", "Curated photos from Unsplash"),
     OssLicense("Bing Image of the Day", "https://www.bing.com", "Wallpaper use", "Daily curated photos"),
-    OssLicense("Reddit", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper subreddits"),
-    OssLicense("Internet Archive", "https://archive.org/", "Various CC / Public Domain", "Audio search & download"),
+    OssLicense("Reddit", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper & video subreddits"),
+    OssLicense("Pexels", "https://www.pexels.com/api/", "Pexels License", "Photos & videos"),
+    OssLicense("Pixabay", "https://pixabay.com/api/docs/", "Pixabay License", "Photos & videos"),
+    OssLicense("Freesound", "https://freesound.org/docs/api/", "Various CC", "Sound search"),
+    OssLicense("Openverse", "https://api.openverse.org/", "Various CC", "Audio aggregator"),
+    OssLicense("NewPipe Extractor", "https://github.com/TeamNewPipe/NewPipeExtractor", "GPL-3.0", "YouTube search"),
+    OssLicense("SoundCloud", "https://developers.soundcloud.com/", "Various CC", "CC-licensed audio"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
