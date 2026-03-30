@@ -27,6 +27,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 data class WallpapersUiState(
@@ -103,7 +104,7 @@ class WallpapersViewModel @Inject constructor(
     private fun fetchTopVoted() {
         viewModelScope.launch {
             try {
-                val topIds = voteRepo.getTopVotedIds(50)
+                val topIds = withTimeoutOrNull(5000L) { voteRepo.getTopVotedIds(50) } ?: return@launch
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Top voted IDs from Firebase: ${topIds.size} entries, first=${topIds.firstOrNull()}")
                 if (topIds.isEmpty()) return@launch
 
@@ -132,7 +133,7 @@ class WallpapersViewModel @Inject constructor(
     private fun fetchDailyPick() {
         viewModelScope.launch {
             try {
-                _dailyPick.value = redditRepo.getDailyTopWallpaper()
+                _dailyPick.value = withTimeoutOrNull(5000L) { redditRepo.getDailyTopWallpaper() }
             } catch (_: Exception) {}
         }
     }
@@ -394,6 +395,16 @@ class WallpapersViewModel @Inject constructor(
             } else if (loadMore) {
                 _state.update { it.copy(isLoadingMore = true) }
             }
+
+            // Instant cache hit for Discover — show cached results immediately while refreshing
+            if (s.selectedTab == WallpaperTab.DISCOVER && !loadMore && !isRefresh) {
+                val cached = wallpaperRepo.getCachedDiscover(s.currentPage)
+                if (!cached.isNullOrEmpty()) {
+                    _state.update { it.copy(wallpapers = cached, isLoading = false, hasMore = true) }
+                    // Continue loading fresh results in background (isRefresh-like)
+                }
+            }
+
             try {
                 val result = when (s.selectedTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(

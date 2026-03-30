@@ -35,6 +35,7 @@ import javax.inject.Inject
 
 data class OnboardingState(
     val isComplete: Boolean = false,
+    val selectedStyles: Set<String> = emptySet(),
 )
 
 @HiltViewModel
@@ -44,7 +45,17 @@ class OnboardingViewModel @Inject constructor(
     private val _state = MutableStateFlow(OnboardingState())
     val state = _state.asStateFlow()
 
+    fun toggleStyle(style: String) {
+        _state.update { st ->
+            val updated = if (style in st.selectedStyles) st.selectedStyles - style else st.selectedStyles + style
+            st.copy(selectedStyles = updated)
+        }
+    }
+
     fun complete() {
+        viewModelScope.launch {
+            prefs.setUserStyles(_state.value.selectedStyles.joinToString(","))
+        }
         _state.update { it.copy(isComplete = true) }
     }
 
@@ -59,7 +70,7 @@ fun OnboardingScreen(
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(state.isComplete) {
@@ -84,7 +95,7 @@ fun OnboardingScreen(
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                if (pagerState.currentPage < 2) {
+                if (pagerState.currentPage < 3) {
                     TextButton(onClick = { viewModel.skip() }) {
                         Text("Skip", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -99,7 +110,8 @@ fun OnboardingScreen(
                 when (page) {
                     0 -> WelcomePage()
                     1 -> FeaturesPage()
-                    2 -> ReadyPage()
+                    2 -> StylePickerPage(state.selectedStyles) { viewModel.toggleStyle(it) }
+                    3 -> ReadyPage()
                 }
             }
 
@@ -111,7 +123,7 @@ fun OnboardingScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                repeat(3) { i ->
+                repeat(4) { i ->
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
@@ -143,7 +155,7 @@ fun OnboardingScreen(
 
                 Button(
                     onClick = {
-                        if (pagerState.currentPage < 2) {
+                        if (pagerState.currentPage < 3) {
                             scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
                         } else {
                             viewModel.complete()
@@ -152,7 +164,7 @@ fun OnboardingScreen(
                     modifier = Modifier.weight(1f).height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                 ) {
-                    Text(if (pagerState.currentPage == 2) "Get Started" else "Next")
+                    Text(if (pagerState.currentPage == 3) "Get Started" else "Next")
                 }
             }
         }
@@ -174,7 +186,7 @@ private fun FeaturesPage() {
     val features = listOf(
         Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "6 sources: Wallhaven, Pexels, Pixabay, Reddit, Unsplash, Bing"),
         Triple(Icons.Default.VideoLibrary, "Video Wallpapers", "Pexels, Pixabay loops, YouTube, Reddit cinemagraphs"),
-        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "YouTube + Internet Archive, trim & fade editor"),
+        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "YouTube + Freesound, trim & fade editor"),
         Triple(Icons.Default.Schedule, "Smart Scheduler", "Auto-rotate by interval, source, or time of day"),
         Triple(Icons.Default.Cloud, "Weather Effects", "Rain, snow, fog overlay from real-time weather"),
         Triple(Icons.Default.DarkMode, "AMOLED Editor", "Black crush, vignette, grain, warmth + 10 presets"),
@@ -228,6 +240,79 @@ private fun FeatureRow(icon: ImageVector, title: String, subtitle: String) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun StylePickerPage(selectedStyles: Set<String>, onToggle: (String) -> Unit) {
+    val styles = listOf(
+        "minimal" to "\u2B1C Minimal",
+        "nature" to "\uD83C\uDF3F Nature",
+        "electronic" to "\uD83C\uDFB9 Electronic",
+        "retro" to "\uD83D\uDD79\uFE0F Retro",
+        "classical" to "\uD83C\uDFBB Classical",
+        "pop" to "\uD83C\uDFA4 Pop",
+        "cinematic" to "\uD83C\uDFAC Cinematic",
+        "lofi" to "\uD83C\uDF19 Lo-Fi",
+        "dark" to "\uD83D\uDD2E Dark Aesthetic",
+        "anime" to "\uD83C\uDFAD Anime",
+        "space" to "\uD83D\uDE80 Space",
+        "neon" to "\uD83D\uDCA0 Neon/Cyberpunk",
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("What's your style?", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Pick your favorites to personalize your feed",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+
+        // Grid of style cards
+        val columns = 3
+        styles.chunked(columns).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { (id, label) ->
+                    val selected = id in selectedStyles
+                    Surface(
+                        onClick = { onToggle(id) },
+                        modifier = Modifier.weight(1f).aspectRatio(1.1f),
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = if (selected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(label.substringBefore(" "), style = MaterialTheme.typography.headlineSmall)
+                                Text(
+                                    label.substringAfter(" "),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+                // Fill remaining cells if row is not complete
+                repeat(columns - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }

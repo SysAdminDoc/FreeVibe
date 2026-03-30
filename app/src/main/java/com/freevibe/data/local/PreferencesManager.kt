@@ -63,11 +63,23 @@ class PreferencesManager @Inject constructor(
 
     // ── Reddit settings ───────────────────────────────────────────
 
-    val redditSubreddits: Flow<String> = get(Keys.REDDIT_SUBS, "wallpapers,Amoledbackgrounds,MobileWallpaper")
-    val redditVideoSubreddits: Flow<String> = get(Keys.REDDIT_VIDEO_SUBS, "livewallpapers,LiveWallpaper,Amoledbackgrounds,Cinemagraphs,perfectloops")
+    val redditSubreddits: Flow<String> = get(Keys.REDDIT_SUBS, "wallpapers,MobileWallpaper,wallpaper,WQHD_Wallpaper,MinimalWallpaper,phonewallpapers,iWallpaper")
+    val redditVideoSubreddits: Flow<String> = get(Keys.REDDIT_VIDEO_SUBS, "livewallpapers,LiveWallpaper,Cinemagraphs,perfectloops")
 
     suspend fun setRedditSubreddits(subs: String) = set(Keys.REDDIT_SUBS, subs)
     suspend fun setRedditVideoSubreddits(subs: String) = set(Keys.REDDIT_VIDEO_SUBS, subs)
+
+    // ── YouTube sound search ──────────────────────────────────────
+
+    val ytSoundQueryRingtones: Flow<String> = get(Keys.YT_SOUND_RINGTONES, "best ringtone 2025 2026 trending phone ringtone download")
+    val ytSoundQueryNotifications: Flow<String> = get(Keys.YT_SOUND_NOTIFICATIONS, "short notification sound effect beep chime ding alert")
+    val ytSoundQueryAlarms: Flow<String> = get(Keys.YT_SOUND_ALARMS, "alarm clock tone buzzer morning wake up sound")
+    val ytSoundBlockedWords: Flow<String> = get(Keys.YT_SOUND_BLOCKED, "compilation,mix,playlist,ranked,tier list,reaction,review,tutorial,how to,podcast,interview,live stream,part,episode")
+
+    suspend fun setYtSoundQueryRingtones(q: String) = set(Keys.YT_SOUND_RINGTONES, q)
+    suspend fun setYtSoundQueryNotifications(q: String) = set(Keys.YT_SOUND_NOTIFICATIONS, q)
+    suspend fun setYtSoundQueryAlarms(q: String) = set(Keys.YT_SOUND_ALARMS, q)
+    suspend fun setYtSoundBlockedWords(words: String) = set(Keys.YT_SOUND_BLOCKED, words)
 
     // ── Wallpaper scheduler ─────────────────────────────────────
 
@@ -115,6 +127,11 @@ class PreferencesManager @Inject constructor(
     suspend fun setDarkModeWallpaperId(id: String) = set(Keys.DARK_WALLPAPER_ID, id)
     suspend fun setLightModeWallpaperId(id: String) = set(Keys.LIGHT_WALLPAPER_ID, id)
 
+    // ── Personalization ──────────────────────────────────────────
+
+    val userStyles: Flow<String> = get(Keys.USER_STYLES, "")
+    suspend fun setUserStyles(styles: String) = set(Keys.USER_STYLES, styles)
+
     // ── Generic helpers ───────────────────────────────────────────
 
     private fun <T> get(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -140,6 +157,11 @@ class PreferencesManager @Inject constructor(
         val PREF_RESOLUTION = stringPreferencesKey("pref_resolution")
         val REDDIT_SUBS = stringPreferencesKey("reddit_subreddits")
         val REDDIT_VIDEO_SUBS = stringPreferencesKey("reddit_video_subreddits")
+        // YouTube sound search
+        val YT_SOUND_RINGTONES = stringPreferencesKey("yt_sound_ringtones")
+        val YT_SOUND_NOTIFICATIONS = stringPreferencesKey("yt_sound_notifications")
+        val YT_SOUND_ALARMS = stringPreferencesKey("yt_sound_alarms")
+        val YT_SOUND_BLOCKED = stringPreferencesKey("yt_sound_blocked")
         // Scheduler
         val SCHEDULER_ENABLED = booleanPreferencesKey("scheduler_enabled")
         val SCHEDULER_INTERVAL = longPreferencesKey("scheduler_interval_min")
@@ -160,5 +182,6 @@ class PreferencesManager @Inject constructor(
         val DARK_MODE_SWITCH = booleanPreferencesKey("dark_mode_auto_switch")
         val DARK_WALLPAPER_ID = stringPreferencesKey("dark_mode_wallpaper_id")
         val LIGHT_WALLPAPER_ID = stringPreferencesKey("light_mode_wallpaper_id")
+        val USER_STYLES = stringPreferencesKey("user_styles")
     }
 }

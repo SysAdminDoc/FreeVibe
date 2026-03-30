@@ -1,7 +1,6 @@
 package com.freevibe.ui.screens.sounds
 
 import android.content.Intent
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,12 +25,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
-import com.freevibe.ui.components.SourceBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,564 +47,244 @@ fun SoundDetailScreen(
     val s = sound ?: return
     val isFavorite by viewModel.isFavorite(s.id).collectAsState(initial = false)
     val context = LocalContext.current
-
     val autoPreview by viewModel.autoPreview.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
+    val isPlaying = state.playingId == s.id
 
-    // Similar sounds
     val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
     val similarLoading = remember { mutableStateOf(false) }
 
-    // Stop playback when leaving detail screen
     DisposableEffect(s.id) {
-        onDispose {
-            if (viewModel.state.value.playingId == s.id) {
-                viewModel.togglePlayback(s) // stops playback
-            }
-        }
+        onDispose { if (viewModel.state.value.playingId == s.id) viewModel.togglePlayback(s) }
     }
-
-    // Auto-preview: play sound when entering detail screen
     LaunchedEffect(s.id) {
-        if (autoPreview && state.playingId != s.id) {
-            viewModel.togglePlayback(s)
-        }
+        if (autoPreview && state.playingId != s.id) viewModel.togglePlayback(s)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(state.applySuccess) {
-        state.applySuccess?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.clearSuccess()
-        }
-    }
-    LaunchedEffect(state.error) {
-        state.error?.let {
-            snackbarHostState.showSnackbar("Error: $it")
-            viewModel.clearError()
-        }
-    }
+    LaunchedEffect(state.applySuccess) { state.applySuccess?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() } }
+    LaunchedEffect(state.error) { state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearError() } }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Sound Details") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
+                title = {},
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
                     IconButton(onClick = { viewModel.toggleFavorite(s) }) {
                         Icon(
                             if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.tertiary
-                            else MaterialTheme.colorScheme.onSurface,
+                            "Favorite",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Spacer(Modifier.height(8.dp))
-
-            // Playback circle
+            // Waveform with integrated play button
             Box(
-                modifier = Modifier
-                    .size(160.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                IconButton(
-                    onClick = { viewModel.togglePlayback(s) },
-                    modifier = Modifier.size(80.dp),
-                ) {
-                    Icon(
-                        imageVector = if (state.playingId == s.id) Icons.Default.Pause
-                        else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(56.dp),
+                if (s.duration > 0) {
+                    DetailWaveform(
+                        duration = s.duration, isPlaying = isPlaying,
+                        progress = if (isPlaying) playbackProgress else 0f,
+                        onSeek = { frac -> if (!isPlaying) viewModel.togglePlayback(s); viewModel.seekTo(frac) },
+                        modifier = Modifier.fillMaxSize(),
                     )
+                } else {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer))
                 }
-            }
-
-            // Waveform visualization
-            if (s.duration > 0) {
-                DetailWaveform(
-                    duration = s.duration,
-                    isPlaying = state.playingId == s.id,
-                    progress = if (state.playingId == s.id) playbackProgress else 0f,
-                    onSeek = { fraction ->
-                        if (state.playingId != s.id) viewModel.togglePlayback(s)
-                        viewModel.seekTo(fraction)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-            }
-
-            // Sound name
-            Text(
-                text = s.name,
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            // Info chips
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                SourceBadge(s.source.name)
-                InfoChip(Icons.Default.Timer, formatDuration(s.duration))
-                if (s.uploaderName.isNotEmpty()) {
-                    InfoChip(Icons.Default.Person, s.uploaderName)
-                }
-                if (s.license.isNotEmpty()) {
-                    InfoChip(Icons.Default.Info, s.license)
-                }
-            }
-
-            // Tags (clickable to search)
-            if (s.tags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // Play overlay
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                    modifier = Modifier.size(48.dp),
+                    onClick = { viewModel.togglePlayback(s) },
                 ) {
-                    s.tags.take(5).forEach { tag ->
-                        Surface(
-                            onClick = {
-                                viewModel.search(tag)
-                                onBack()
-                            },
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = RoundedCornerShape(12.dp),
-                        ) {
-                            Text(
-                                "#$tag",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            null, tint = Color.White, modifier = Modifier.size(28.dp),
+                        )
                     }
                 }
             }
 
-            if (s.description.isNotEmpty()) {
-                Text(
-                    text = s.description.take(200),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            // Sound name
+            Text(s.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+            // Metadata row
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val (label, color) = when (s.source) {
+                    ContentSource.YOUTUBE -> "YouTube" to Color(0xFFFF0000)
+                    ContentSource.FREESOUND -> "Freesound" to Color(0xFF4CAF50)
+                    else -> s.source.name to MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                    Text(label, Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = color)
+                }
+                Text(formatDuration(s.duration), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (s.uploaderName.isNotEmpty() && s.uploaderName != "Unknown") {
+                    Text("by ${s.uploaderName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (s.license.isNotEmpty()) {
+                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
+                        Text(s.license, Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+            }
+
+            // Tags
+            if (s.tags.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    s.tags.take(5).forEach { tag ->
+                        Surface(
+                            onClick = { viewModel.search(tag); onBack() },
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Text("#$tag", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
             }
 
             // Permission warning
             if (!viewModel.canWriteSettings()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)), shape = RoundedCornerShape(12.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f)) {
                             Text("Permission needed", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                "Allow modifying system settings",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Text("Allow modifying system settings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        TextButton(onClick = {
-                            context.startActivity(viewModel.requestWriteSettings())
-                        }) {
-                            Text("Grant")
-                        }
+                        TextButton(onClick = { context.startActivity(viewModel.requestWriteSettings()) }) { Text("Grant") }
                     }
                 }
             }
 
-            // Apply buttons
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ApplyButton(
-                    text = "Set as Ringtone",
-                    icon = Icons.Default.Call,
-                    enabled = !state.isApplying && viewModel.canWriteSettings(),
-                    isLoading = state.isApplying,
-                    onClick = { viewModel.applySound(s, ContentType.RINGTONE) },
-                )
-                ApplyButton(
-                    text = "Set as Notification",
-                    icon = Icons.Default.Notifications,
-                    enabled = !state.isApplying && viewModel.canWriteSettings(),
-                    isLoading = state.isApplying,
-                    onClick = { viewModel.applySound(s, ContentType.NOTIFICATION) },
-                )
-                ApplyButton(
-                    text = "Set as Alarm",
-                    icon = Icons.Default.Alarm,
-                    enabled = !state.isApplying && viewModel.canWriteSettings(),
-                    isLoading = state.isApplying,
-                    onClick = { viewModel.applySound(s, ContentType.ALARM) },
-                )
-
-                // Extra actions row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = onEdit,
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
-                        Icon(Icons.Default.ContentCut, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Trim")
-                    }
-                    OutlinedButton(
-                        onClick = { onContactPicker(s.id) },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
-                        Icon(Icons.Default.Contacts, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Contact")
-                    }
-                }
-
-                // Download + Share row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { viewModel.downloadSound(s) },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
-                        Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Download")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            val shareUrl = s.sourcePageUrl.ifEmpty { s.downloadUrl }
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, shareUrl)
-                                putExtra(Intent.EXTRA_SUBJECT, s.name)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "Share sound"))
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
-                        Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Share")
-                    }
-                }
+            // 3 Apply buttons side-by-side
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ApplyButton("Ringtone", Icons.Default.Call, !state.isApplying && viewModel.canWriteSettings(), state.isApplying, Modifier.weight(1f)) { viewModel.applySound(s, ContentType.RINGTONE) }
+                ApplyButton("Notification", Icons.Default.Notifications, !state.isApplying && viewModel.canWriteSettings(), state.isApplying, Modifier.weight(1f)) { viewModel.applySound(s, ContentType.NOTIFICATION) }
+                ApplyButton("Alarm", Icons.Default.Alarm, !state.isApplying && viewModel.canWriteSettings(), state.isApplying, Modifier.weight(1f)) { viewModel.applySound(s, ContentType.ALARM) }
             }
 
-            // "More Like This" section (all sources)
-            Spacer(Modifier.height(8.dp))
-            SimilarSoundsSection(
-                soundId = s.id,
-                similarSounds = similarSounds,
-                isLoading = similarLoading,
-                viewModel = viewModel,
-                onSoundClick = { similar ->
-                    viewModel.selectSound(similar)
-                },
-            )
+            // Secondary actions as icon row
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                IconButton(onClick = onEdit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, null, Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { onContactPicker(s.id) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, null, Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, null, Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = {
+                    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, s.sourcePageUrl.ifEmpty { s.downloadUrl }); putExtra(Intent.EXTRA_SUBJECT, s.name) }
+                    context.startActivity(Intent.createChooser(intent, "Share sound"))
+                }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Share, null, Modifier.size(22.dp)); Text("Share", style = MaterialTheme.typography.labelSmall) } }
+            }
+
+            // More Like This
+            Spacer(Modifier.height(4.dp))
+            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { viewModel.selectSound(it) }
+
+            Spacer(Modifier.height(80.dp)) // bottom padding for nav bar
         }
+    }
+}
+
+@Composable
+private fun ApplyButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, isLoading: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick, modifier = modifier.height(48.dp), enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface),
+    ) {
+        if (isLoading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        else { Icon(icon, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(text, style = MaterialTheme.typography.labelMedium) }
     }
 }
 
 @Composable
 private fun SimilarSoundsSection(
-    soundId: String,
-    similarSounds: MutableState<List<Sound>>,
-    isLoading: MutableState<Boolean>,
-    viewModel: SoundsViewModel,
-    onSoundClick: (Sound) -> Unit,
+    soundId: String, similarSounds: MutableState<List<Sound>>, isLoading: MutableState<Boolean>,
+    viewModel: SoundsViewModel, onSoundClick: (Sound) -> Unit,
 ) {
     var loaded by remember(soundId) { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    // Auto-load similar sounds when soundId changes
     LaunchedEffect(soundId) {
         if (!loaded && !isLoading.value) {
-            isLoading.value = true
-            similarSounds.value = emptyList()
-            try {
-                val result = viewModel.loadSimilar(soundId)
-                similarSounds.value = result
-            } catch (_: Exception) {}
-            isLoading.value = false
-            loaded = true
+            isLoading.value = true; similarSounds.value = emptyList()
+            try { similarSounds.value = viewModel.loadSimilar(soundId) } catch (_: Exception) {}
+            isLoading.value = false; loaded = true
         }
     }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "More Like This",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (!loaded && !isLoading.value) {
-                TextButton(onClick = {
-                    isLoading.value = true
-                    scope.launch {
-                        try {
-                            val result = viewModel.loadSimilar(soundId)
-                            similarSounds.value = result
-                        } catch (_: Exception) {}
-                        isLoading.value = false
-                        loaded = true
-                    }
-                }) {
-                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Load")
-                }
-            }
-        }
-
+    Column(Modifier.fillMaxWidth()) {
+        Text("More Like This", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
         if (isLoading.value) {
-            Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-            }
+            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
         } else if (similarSounds.value.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            val currentPlayingId = viewModel.state.collectAsState().value.playingId
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(similarSounds.value, key = { it.id }) { similar ->
-                    SimilarSoundCard(
-                        sound = similar,
-                        isPlaying = viewModel.state.collectAsState().value.playingId == similar.id,
-                        onPlay = { viewModel.togglePlayback(similar) },
-                        onClick = { onSoundClick(similar) },
-                    )
+                    Surface(
+                        onClick = { onSoundClick(similar) }, color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(12.dp), modifier = Modifier.width(160.dp),
+                    ) {
+                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            IconButton(
+                                onClick = { viewModel.togglePlayback(similar) },
+                                modifier = Modifier.size(34.dp).clip(CircleShape).background(if (currentPlayingId == similar.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
+                            ) { Icon(if (currentPlayingId == similar.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = if (currentPlayingId == similar.id) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp)) }
+                            Column(Modifier.weight(1f)) {
+                                Text(similar.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(formatDuration(similar.duration), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
             }
         } else if (loaded) {
-            Text(
-                "No similar sounds found",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("No similar sounds found", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun SimilarSoundCard(
-    sound: Sound,
-    isPlaying: Boolean,
-    onPlay: () -> Unit,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.width(180.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                IconButton(
-                    onClick = onPlay,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isPlaying) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.surfaceContainer,
-                        ),
-                ) {
-                    Icon(
-                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        null,
-                        tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        sound.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        formatDuration(sound.duration),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text, style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
-private fun ApplyButton(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    enabled: Boolean,
-    isLoading: Boolean,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp),
-        enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        } else {
-            Icon(icon, null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(text, style = MaterialTheme.typography.labelLarge)
-        }
-    }
-}
-
-@Composable
-private fun DetailWaveform(
-    duration: Double,
-    isPlaying: Boolean,
-    progress: Float = 0f,
-    onSeek: ((Float) -> Unit)? = null,
-    modifier: Modifier = Modifier,
-) {
-    val barColor = if (isPlaying) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+private fun DetailWaveform(duration: Double, isPlaying: Boolean, progress: Float = 0f, onSeek: ((Float) -> Unit)? = null, modifier: Modifier = Modifier) {
+    val barColor = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
     val activeColor = MaterialTheme.colorScheme.primary
-
     val barCount = 60
     val heights = remember(duration) {
         val seed = (duration * 1000).toInt()
-        List(barCount) { i ->
-            val angle = (seed + i * 37) % 360
-            (0.15f + 0.85f * ((kotlin.math.sin(angle * 0.0174533) + 1f) / 2f).toFloat())
-        }
+        List(barCount) { i -> (0.15f + 0.85f * ((kotlin.math.sin((seed + i * 37) % 360 * 0.0174533) + 1f) / 2f).toFloat()) }
     }
-
     Canvas(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .then(
-                if (onSeek != null) {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            onSeek(fraction)
-                        }
-                    }
-                } else Modifier,
-            ),
+        modifier.background(MaterialTheme.colorScheme.surfaceContainer).then(
+            if (onSeek != null) Modifier.pointerInput(Unit) { detectTapGestures { offset -> onSeek((offset.x / size.width).coerceIn(0f, 1f)) } } else Modifier,
+        ),
     ) {
         val barWidth = size.width / barCount
-        val gap = 1.5f
         heights.forEachIndexed { i, height ->
-            val x = i * barWidth + barWidth / 2
-            val barH = size.height * height * 0.85f
-            val isActive = isPlaying && (i.toFloat() / barCount) < progress
+            val x = i * barWidth + barWidth / 2; val barH = size.height * height * 0.85f
             drawLine(
-                color = if (isActive) activeColor else barColor,
-                start = Offset(x, size.height / 2 - barH / 2),
-                end = Offset(x, size.height / 2 + barH / 2),
-                strokeWidth = (barWidth - gap).coerceAtLeast(1f),
-                cap = StrokeCap.Round,
+                color = if (isPlaying && (i.toFloat() / barCount) < progress) activeColor else barColor,
+                start = Offset(x, size.height / 2 - barH / 2), end = Offset(x, size.height / 2 + barH / 2),
+                strokeWidth = (barWidth - 1.5f).coerceAtLeast(1f), cap = StrokeCap.Round,
             )
         }
-        // Playhead indicator
         if (isPlaying && progress > 0f) {
-            val px = size.width * progress
-            drawLine(
-                color = activeColor,
-                start = Offset(px, 0f),
-                end = Offset(px, size.height),
-                strokeWidth = 2f,
-            )
+            drawLine(activeColor, Offset(size.width * progress, 0f), Offset(size.width * progress, size.height), strokeWidth = 2f)
         }
     }
 }
 
 private fun formatDuration(seconds: Double): String {
-    val total = seconds.toInt()
-    val m = total / 60
-    val s = total % 60
+    val total = seconds.toInt(); val m = total / 60; val s = total % 60
     return if (m > 0) "${m}m ${s}s" else "${s}s"
 }

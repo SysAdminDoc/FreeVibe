@@ -3,8 +3,6 @@ package com.freevibe.data.remote
 import com.freevibe.data.model.*
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.bing.BingImage
-import com.freevibe.data.remote.internetarchive.IASearchDoc
-import com.freevibe.data.remote.internetarchive.InternetArchiveApi
 import com.freevibe.data.remote.pixabay.PixabayPhoto
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.picsum.PicsumPhoto
@@ -76,27 +74,6 @@ fun PixabayPhoto.toWallpaper() = Wallpaper(
     uploaderName = user,
     views = views,
     favorites = likes,
-)
-
-// -- Internet Archive -> Sound --
-
-fun IASearchDoc.toSound(
-    audioUrl: String = "",
-    duration: Double = 0.0,
-    fileSize: Long = 0,
-) = Sound(
-    id = "ia_$identifier",
-    source = ContentSource.INTERNET_ARCHIVE,
-    name = title,
-    description = description ?: "",
-    previewUrl = audioUrl,
-    downloadUrl = audioUrl,
-    duration = duration,
-    fileSize = fileSize,
-    tags = emptyList(),
-    license = licenseUrl ?: "Public Domain",
-    uploaderName = creator ?: "Unknown",
-    sourcePageUrl = InternetArchiveApi.detailsUrl(identifier),
 )
 
 // -- Domain -> FavoriteEntity --
