@@ -29,7 +29,12 @@ class DualWallpaperService @Inject constructor(
             val lockBitmap = async { downloadBitmap(pair.lock.fullUrl) }
 
             val home = homeBitmap.await()
-            val lock = lockBitmap.await()
+            val lock = try {
+                lockBitmap.await()
+            } catch (e: Exception) {
+                home.recycle()
+                throw e
+            }
             try {
                 wallpaperApplier.applyFromBitmap(home, WallpaperTarget.HOME).getOrThrow()
                 wallpaperApplier.applyFromBitmap(lock, WallpaperTarget.LOCK).getOrThrow()

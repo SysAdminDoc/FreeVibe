@@ -101,7 +101,7 @@ class DownloadManager @Inject constructor(
             }
             val body = resp.body
                 ?: throw IllegalStateException("Empty response body")
-            val totalBytes = body.contentLength()
+            val totalBytes = body.contentLength().let { if (it <= 0) 0L else it }
 
             // Create MediaStore entry
             val values = ContentValues().apply {

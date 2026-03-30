@@ -8,7 +8,7 @@ Open-source Android app for device personalization. 21+ content sources across w
 - Hilt 2.53.1 DI, Room 2.6.1 DB, Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
 - NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop + audio fade/convert/normalize)
-- Freesound.org API v2 (500K+ CC-licensed sounds, token auth)
+- Openverse API (aggregates Freesound + Jamendo + Wikimedia audio, zero auth, 20 req/min)
 - Firebase Realtime Database (community voting + moderation)
 - Palette API (Material You color extraction), Open-Meteo (weather)
 - Min SDK 26, Target SDK 35, JDK 17
@@ -29,7 +29,7 @@ Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorite
   ViewModels (Hilt) + SelectedContentHolder singleton (bridges state between screens)
     Wallpaper sources: Wallhaven, Picsum, Pexels, Pixabay, Bing Daily, Reddit (7 subs)
     Video sources: Pexels, YouTube, Reddit (r/livewallpapers, r/LiveWallpaper, r/Cinemagraphs, r/perfectloops), Pixabay
-    Sound sources: Freesound.org (primary, 500K+ sounds), YouTube (NewPipe + yt-dlp), Internet Archive (duration-filtered)
+    Sound sources: Openverse (primary, zero auth), YouTube (NewPipe + yt-dlp), Internet Archive (duration-filtered)
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
@@ -38,6 +38,12 @@ Room DB (v6): favorites, downloads, search_history, wallpaper_cache,
               wallpaper_history, ia_audio_cache, wallpaper_collections, wallpaper_collection_items
 DataStore: Settings, Onboarding
 ```
+
+## Startup Performance
+- **Cached discover feed**: `WallpaperRepository.getCachedDiscover()` returns stale-cached wallpapers instantly on launch. `loadWallpapers()` shows cached results immediately, then fetches fresh results in background.
+- **Per-source timeout (6s)**: Each discover source (Wallhaven, Picsum, Pixabay, Bing, Reddit, Pexels) has a 6-second timeout. Slow sources don't block fast ones.
+- **Daily pick + Top voted timeout (5s)**: `fetchDailyPick()` and `fetchTopVoted()` wrapped in `withTimeoutOrNull(5000L)` so Firebase/Reddit delays don't stall startup.
+- **Combined discover result cached**: `getDiscover()` caches the interleaved result under `discover_$page` key in WallpaperCacheManager.
 
 ## Discovery Features (v4.5.0)
 - **Wallpaper of the Day**: Hero card on Discover tab, full-width image + gradient overlay. Source: Reddit top/day from r/wallpapers + r/MobileWallpaper.
@@ -59,20 +65,29 @@ DataStore: Settings, Onboarding
 - **Playback**: VideoWallpaperService uses `setFixedSize(screenW, screenH)` + `SCALE_TO_FIT_WITH_CROPPING`. Screen size via WindowMetrics API with legacy fallback.
 - **Portrait/Landscape badges** on video cards. Landscape videos promote Crop as primary action in confirm dialog.
 
-## Sounds System
-- **Sources**: Freesound.org (primary, instant metadata), YouTube (NewPipe + yt-dlp), Internet Archive (per-item metadata fetch)
-- **Tabs**: Ringtones, Notifications, Alarms, Search — each with duration-specific queries per source
-- **Discovery**: Sound of the Day hero card, Popular Sounds trending carousel (both from Freesound downloads_desc)
-- **Playback**: Single reusable ExoPlayer instance, real-time position tracking (50ms polling), seekable waveform
+## Sounds System (v5.0.0 — Phase 1 Roadmap)
+- **Sources**: Freesound v2 API (primary, requires client_id token, quality signals: avg_rating/num_downloads), Openverse (fallback, zero auth), YouTube (NewPipe + yt-dlp). Internet Archive removed in v5.0.0.
+- **Tabs**: Ringtones (8-30s), Notifications (0-5s), Alarms (5-40s), Search — each with duration-specific queries per source
+- **Discovery (Zedge-style)**:
+  - Sound of the Day hero card with gradient background
+  - Staff Picks horizontal carousel (rotates daily from curated collection queries)
+  - 12 Curated Collections carousel (Morning Vibes, Retro Gaming, Clean & Minimal, Sci-Fi Future, Movie Classics, iPhone Style, Quick Alerts, Nature Sounds, Dark Aesthetic, Meme Sounds, Piano Melodies, Chill Tones)
+  - Trending sounds section
+- **Browsing**: 14 genres (Pop, Electronic, Classical, Retro, Hip-Hop, Rock, Cinematic, Jazz, Nature, Meme/Funny, Lo-Fi, Sci-Fi, Minimal, Marimba) + 6 moods (Calm, Energetic, Mysterious, Happy, Urgent, Elegant). Genre + mood combinable.
+- **Sort**: Popular (quality-scored), Newest, Shortest, Longest
+- **Quality scoring**: Ranks sounds by source confidence (OV > YT > IA), name quality, duration fit for tab, metadata richness, license type
+- **Playback**: Single reusable ExoPlayer instance, real-time position tracking (50ms polling), seekable waveform with real playback progress
+- **Source badges**: Color-coded on each sound card — YT (red), OV (green), IA (blue)
 - **Detail screen**: Seekable waveform (tap to seek, playhead indicator), format badges, license badges, tag chips, similar sounds
 - **Audio tools**: Lossless trim (MediaMuxer), fade in/out (FFmpeg afade), volume normalization (FFmpeg loudnorm), format conversion (FFmpeg: MP3/OGG/WAV/FLAC/M4A)
 - **Apply**: SoundApplier downloads to MediaStore, sets via RingtoneManager. Contact-specific assignment via ContactRingtoneService.
-- **Freesound integration**: FreesoundApi (Retrofit) + FreesoundRepository. Token auth via `FREESOUND_API_KEY` in BuildConfig. Tab-specific queries (ringtones=melody+tone, notifications=beep+chime, alarms=buzzer+bell). Preview via `preview-hq-mp3` URL.
+- **YouTube search config**: Per-tab queries (Ringtones/Notifications/Alarms) + blocked words list, all user-configurable in Settings. Stored in DataStore prefs. Blocked words merged with hardcoded junk patterns.
+- **Openverse integration**: FreesoundApi (Retrofit) + FreesoundRepository. Zero auth required (20 req/min anonymous). Genre/mood/collection-specific queries.
+- **Key files**: SoundCollections.kt (genres, moods, sort, curated collections), SoundsViewModel.kt (quality scoring, multi-source orchestration), SoundsScreen.kt (discovery UI)
 
 ## API Keys
 - Pexels/Pixabay keys provided via BuildConfig (defaults baked in, overridable via local.properties)
 - `WALLHAVEN_API_KEY` - Optional, higher rate limits + NSFW
-- `FREESOUND_API_KEY` - Required for Freesound.org source (get from freesound.org/apiv2/apply/). Without it, YouTube + IA still work.
 
 ## Database Migrations
 - v1->2: Added wallpaper_cache + wallpaper_history tables
@@ -88,11 +103,9 @@ DataStore: Settings, Onboarding
 - Category navigation uses `saveState=false, restoreState=false` to force ViewModel recreation
 - FreeVibeRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder from Composable
 - WallpaperDetailScreen gets its OWN WallpapersViewModel (different nav destination) — must use SelectedContentHolder for state
-- Sound tabs use duration-specific queries: Ringtones 5-30s, Notifications 0-3s, Alarms 5-40s
 - DurationFilter and SoundCategory enums are in SoundsViewModel.kt, not Models.kt
 - AudioTrimmer fade now uses FFmpeg afade filter (was broken byte-level MP3 manipulation that corrupted 30-50% of files)
 - NASA/Wikimedia enum values kept in ContentSource for legacy favorites compatibility. FREESOUND now actively used again.
-- **Freesound API key** must be set by user (freesound.org/apiv2/apply/) — without it, Freesound source returns empty gracefully
 - **YouTube stream cache TTL** is 6 hours (was 3h, matching actual YouTube token lifetime)
 - **IA metadata timeout** is 8 seconds (was 4s, reduced failure rate on slow connections)
 - **ExoPlayer for sounds** is a single reusable instance — do NOT create new per sound (was a memory leak)
@@ -104,26 +117,29 @@ DataStore: Settings, Onboarding
 - **libffmpeg.so** cannot be executed directly from APK native lib dir — needs LD_LIBRARY_PATH pointing to extracted shared libs in yt-dlp packages dir
 - **Video crop viewport** must be constrained to real screen pixel aspect ratio (WindowMetrics), not layout-available space
 - **r/Amoledbackgrounds** removed from all sources (wallpaper, video, daily pick)
+- **Icons.Default.YouTube** does NOT exist in Material Icons — use `Icons.Default.SmartDisplay` instead
+- **MiniWaveform** must use real `playbackProgress` from ExoPlayer, not a fake infinite animation
 
 ## Key Files
 - `FreeVibeApp.kt` - Application class, crash logging, cache eviction, yt-dlp + FFmpeg init
 - `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint
 - `AppModule.kt` - Hilt DI module, OkHttp, Retrofit services, Room DB with migrations
 - `SelectedContentHolder.kt` - Singleton: selectedWallpaper + wallpaperList + selectedSound + pendingCategoryQuery
-- `WallpapersViewModel.kt` - Wallpaper state, tabs, findSimilar, loadRandom, matchMyTheme, fetchTopVoted, searchByTag
+- `WallpapersViewModel.kt` - Wallpaper state, tabs, findSimilar, loadRandom, matchMyTheme, fetchTopVoted, searchByTag, cached discover startup
 - `WallpapersScreen.kt` - Staggered grid, WOTD hero card, curated collections, trending, Community Favorites section, time filter chips
 - `WallpaperDetailScreen.kt` - VerticalPager with parallax, tag chips, color palette dots, find similar button
+- `WallpaperRepository.kt` - Aggregates all wallpaper sources, findSimilar, getRandomWallhaven, searchByColor, getCachedDiscover, per-source timeouts
 - `VideoWallpapersScreen.kt` - Video browsing (Pexels + YouTube + Reddit + Pixabay), orientation filter, category chips, single ExoPlayer
 - `VideoCropScreen.kt` - Screen-ratio-constrained crop via FFmpeg direct call with LD_LIBRARY_PATH reflection
 - `VideoWallpaperService.kt` - WallpaperService, center-crop via SCALE_TO_FIT_WITH_CROPPING + screen-sized surface
-- `SoundsViewModel.kt` - Sound state, 3 sources (Freesound+YouTube+IA), single ExoPlayer, playback position, trending, SOTD
-- `SoundsScreen.kt` - Sound list with SOTD hero card, trending carousel, format/license badges, seekable waveform
+- `SoundsViewModel.kt` - Sound state, 3 sources (Openverse+YouTube+IA), single ExoPlayer, playback position, trending, SOTD, configurable YT queries
+- `SoundsScreen.kt` - Sound list with SOTD hero card, trending carousel, source/format/license badges, real-progress waveform
 - `SoundDetailScreen.kt` - Seekable waveform (tap to seek), format badges, apply as ringtone/notification/alarm
-- `FreesoundApi.kt` - Retrofit interface for Freesound.org API v2 (search, getSound)
-- `FreesoundRepository.kt` - Freesound source: search, getRingtones, getNotifications, getAlarms, getTrending
+- `FreesoundApi.kt` - Retrofit interface for Openverse API (search)
+- `FreesoundRepository.kt` - Openverse source: search, getRingtones, getNotifications, getAlarms, getTrending
+- `YouTubeRepository.kt` - YouTube sound search with configurable blocked words, stream cache (6h TTL), preview/download URL extraction
 - `AudioTrimmer.kt` - Lossless trim (MediaMuxer) + FFmpeg fade/normalize/convert
 - `VoteRepository.kt` - Firebase community votes, getTopVotedIds (client-side sort), admin moderation
-- `WallpaperRepository.kt` - Aggregates all wallpaper sources, findSimilar (Wallhaven like:), getRandomWallhaven, searchByColor
 - `RedditRepository.kt` - 7 wallpaper subs, after-token pagination, getDailyTopWallpaper
 - `WallpaperCacheManager.kt` - Room cache with getByIds for resolving top voted wallpapers
 
@@ -138,7 +154,7 @@ DataStore: Settings, Onboarding
 - Community Favorites only shows wallpapers that exist in local Room cache (browsed before)
 
 ## Version History
-- v4.5.0: Major discovery + sounds overhaul + video wallpaper fixes. Sounds: Freesound.org API (500K+ sounds), Sound of the Day, trending carousel, seekable waveform, format badges, FFmpeg fade/normalize/convert, ExoPlayer leak fix, YouTube TTL 3h→6h, IA timeout 4s→8s. Wallpapers: 7 discovery features, WOTD hero card, Community Favorites, Wallhaven time filters, 7 Reddit subs, endless scroll. Videos: orientation detection, FFmpeg crop fix, screen-ratio viewport.
+- v4.5.0: Major discovery + sounds overhaul + video wallpaper fixes + startup performance. Sounds: Openverse API (zero auth), configurable YouTube search queries + blocked words, source badges (YT/OV/IA), real playback progress waveform, min duration adjustments (ringtones 8s, alarms 5s). Startup: cached discover feed for instant launch, per-source 6s timeout, Firebase/Reddit 5s timeout. Wallpapers: 7 discovery features, WOTD hero card, Community Favorites, Wallhaven time filters, 7 Reddit subs, endless scroll. Videos: orientation detection, FFmpeg crop fix, screen-ratio viewport.
 - v4.4.0: WallpaperCropScreen: response leak fixed, cropped bitmap recycled on apply failure. VideoCropScreen: video dimension polling (was fixed 1s delay, now polls 3s), cache input file cleaned up after crop. SoundDetailScreen: DisposableEffect stops playback on screen exit, SimilarSoundsSection resets on soundId change. WallpaperEditorScreen response leak fixed.
 - v4.3.0: Bitmap memory leaks fixed in WallpaperEditorScreen. VfxParticleRenderer: complete particle state reset. WeatherUpdateWorker: proper location permission check. FreeVibeApp: crash log trim. WallpaperEditorScreen: HTTP response leak fixed.
 - v4.2.0: API keys moved to BuildConfig. Signing to local.properties. DB v6 FK CASCADE. Single ExoPlayer for video cards.

@@ -63,6 +63,15 @@ class SettingsViewModel @Inject constructor(
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
     val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,Amoledbackgrounds,MobileWallpaper")
     val preferredRes = prefs.preferredResolution.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val ytRingtonesQuery = prefs.ytSoundQueryRingtones.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "best ringtone 2025 2026 download")
+    val ytNotificationsQuery = prefs.ytSoundQueryNotifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "notification sound effect chime beep")
+    val ytAlarmsQuery = prefs.ytSoundQueryAlarms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "alarm tone clock buzzer wake up")
+    val ytBlockedWords = prefs.ytSoundBlockedWords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "compilation,mix,playlist,ranked,tier list,reaction,review,tutorial,how to,podcast,interview,live stream,part,episode")
+
+    fun setYtRingtonesQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryRingtones(q) }
+    fun setYtNotificationsQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryNotifications(q) }
+    fun setYtAlarmsQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryAlarms(q) }
+    fun setYtBlockedWords(w: String) = viewModelScope.launch { prefs.setYtSoundBlockedWords(w) }
 
     // #11: Wallpaper history
     val wallpaperHistory = historyManager.getRecent(20).stateIn(
@@ -205,6 +214,10 @@ fun SettingsScreen(
     val autoPreview by viewModel.autoPreview.collectAsState()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
     val gridColumns by viewModel.gridColumns.collectAsState()
+    val ytRingtonesQuery by viewModel.ytRingtonesQuery.collectAsState()
+    val ytNotificationsQuery by viewModel.ytNotificationsQuery.collectAsState()
+    val ytAlarmsQuery by viewModel.ytAlarmsQuery.collectAsState()
+    val ytBlockedWords by viewModel.ytBlockedWords.collectAsState()
     val previewVolume by viewModel.previewVolume.collectAsState()
     val redditSubs by viewModel.redditSubs.collectAsState()
     val preferredRes by viewModel.preferredRes.collectAsState()
@@ -242,6 +255,8 @@ fun SettingsScreen(
     var showColumnsPicker by remember { mutableStateOf(false) }
     var showRedditEditor by remember { mutableStateOf(false) }
     var showResPicker by remember { mutableStateOf(false) }
+    var showYtSoundEditor by remember { mutableStateOf(false) }
+    var showYtBlockedEditor by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -541,6 +556,18 @@ fun SettingsScreen(
                     Text("${(previewVolume * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            SettingsItem(
+                icon = Icons.Default.SmartDisplay,
+                title = "YouTube search queries",
+                subtitle = "Customize what YouTube searches for per tab",
+                onClick = { showYtSoundEditor = true },
+            )
+            SettingsItem(
+                icon = Icons.Default.Block,
+                title = "Blocked words",
+                subtitle = "${ytBlockedWords.split(",").size} words filtered from results",
+                onClick = { showYtBlockedEditor = true },
+            )
         }
 
         // Video Wallpapers
@@ -692,7 +719,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Aura",
-                subtitle = "v4.5.0 - Open source device personalization",
+                subtitle = "v5.0.0 - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -847,6 +874,57 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showRedditEditor = false }) { Text("Cancel") }
             },
+        )
+    }
+
+    // YouTube sound search queries editor
+    if (showYtSoundEditor) {
+        var ringQ by remember { mutableStateOf(ytRingtonesQuery) }
+        var notifQ by remember { mutableStateOf(ytNotificationsQuery) }
+        var alarmQ by remember { mutableStateOf(ytAlarmsQuery) }
+        AlertDialog(
+            onDismissRequest = { showYtSoundEditor = false },
+            title = { Text("YouTube Search Queries") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Customize what YouTube searches for in each sound tab.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(value = ringQ, onValueChange = { ringQ = it }, label = { Text("Ringtones") }, modifier = Modifier.fillMaxWidth(), singleLine = false, maxLines = 2)
+                    OutlinedTextField(value = notifQ, onValueChange = { notifQ = it }, label = { Text("Notifications") }, modifier = Modifier.fillMaxWidth(), singleLine = false, maxLines = 2)
+                    OutlinedTextField(value = alarmQ, onValueChange = { alarmQ = it }, label = { Text("Alarms") }, modifier = Modifier.fillMaxWidth(), singleLine = false, maxLines = 2)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setYtRingtonesQuery(ringQ.trim())
+                    viewModel.setYtNotificationsQuery(notifQ.trim())
+                    viewModel.setYtAlarmsQuery(alarmQ.trim())
+                    showYtSoundEditor = false
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showYtSoundEditor = false }) { Text("Cancel") } },
+        )
+    }
+
+    // YouTube blocked words editor
+    if (showYtBlockedEditor) {
+        var blockedText by remember { mutableStateOf(ytBlockedWords) }
+        AlertDialog(
+            onDismissRequest = { showYtBlockedEditor = false },
+            title = { Text("Blocked Words") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Comma-separated words. YouTube results containing any of these are hidden.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(value = blockedText, onValueChange = { blockedText = it }, modifier = Modifier.fillMaxWidth(), singleLine = false, maxLines = 5, placeholder = { Text("compilation,mix,playlist...") })
+                    Text("${blockedText.split(",").filter { it.isNotBlank() }.size} words", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setYtBlockedWords(blockedText.trim())
+                    showYtBlockedEditor = false
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showYtBlockedEditor = false }) { Text("Cancel") } },
         )
     }
 

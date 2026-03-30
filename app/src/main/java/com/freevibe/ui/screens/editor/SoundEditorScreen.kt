@@ -286,10 +286,12 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     private fun stopPlayback() {
-        player?.apply {
-            try { if (isPlaying) stop() } catch (_: Exception) {}
-            release()
-        }
+        try {
+            player?.apply {
+                try { stop() } catch (_: Exception) {}
+                try { release() } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
         player = null
         _state.update { it.copy(isPlaying = false) }
     }
@@ -311,10 +313,11 @@ class SoundEditorViewModel @Inject constructor(
         val file = File(cacheDir, name.replace(Regex("[^a-zA-Z0-9]"), "_") + ext)
         if (!file.exists()) {
             val request = Request.Builder().url(url).build()
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
-            response.body?.byteStream()?.use { input ->
-                FileOutputStream(file).use { output -> input.copyTo(output) }
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
+                response.body?.byteStream()?.use { input ->
+                    FileOutputStream(file).use { output -> input.copyTo(output) }
+                }
             }
         }
         file

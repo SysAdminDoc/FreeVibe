@@ -135,17 +135,6 @@ data class WallpaperHistoryEntity(
     val appliedAt: Long = System.currentTimeMillis(),
 )
 
-// -- Internet Archive audio URL cache (#7) --
-
-@Entity(tableName = "ia_audio_cache")
-data class IAAudioCacheEntity(
-    @PrimaryKey val identifier: String,
-    val audioUrl: String,
-    val duration: Double = 0.0,
-    val fileSize: Long = 0,
-    val cachedAt: Long = System.currentTimeMillis(),
-)
-
 // -- Wallpaper collections --
 
 @Entity(tableName = "wallpaper_collections")

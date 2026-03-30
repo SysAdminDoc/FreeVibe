@@ -4,7 +4,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-4.5.0-blue)
+![Version](https://img.shields.io/badge/version-5.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -17,6 +17,7 @@
 - **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction. No API keys needed.
 - **Video wallpapers from YouTube** — browse, preview with ExoPlayer auto-play, crop landscape to portrait, apply as live wallpaper.
 - **Progressive loading** — sounds appear as they resolve instead of waiting for all results. YouTube results load instantly, Internet Archive streams in alongside.
+- **Instant startup** — Discover feed is cached locally. On subsequent launches wallpapers appear immediately while fresh results load in the background.
 - **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings — everything in one app.
 
 ## Quick Start
@@ -32,13 +33,17 @@ Open in Android Studio and run. Everything works out of the box.
 
 | Feature | Description |
 |---------|-------------|
-| **HD/4K Wallpapers** | Discover feed from Wallhaven, Unsplash, Bing & Reddit |
+| **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Unsplash, Bing & Reddit |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview |
 | **Video Crop Editor** | Convert landscape videos to portrait with draggable 9:16 crop overlay |
 | **YouTube Sounds** | Search YouTube for ringtones, notifications, alarms — powered by yt-dlp |
+| **Openverse Sounds** | CC-licensed audio from Freesound, Jamendo & Wikimedia — zero auth required |
 | **Internet Archive** | Thousands of CC/Public Domain sound effects with progressive loading |
-| **Ringtones & Sounds** | Tab-based browsing: Ringtones (5-30s), Notifications (0-3s), Alarms (5-40s) |
-| **Sound Editor** | Waveform trim, fade in/out, undo, presets (Warm/Cool/Vivid/Cinematic/Dreamy/B&W) |
+| **Sound Source Badges** | Color-coded source indicators (YT, OV, IA) on every sound card |
+| **Real-Time Waveform** | Mini waveform on each sound card tracks actual playback position |
+| **Configurable Search** | Customize YouTube search queries and blocked words per sound tab |
+| **Ringtones & Sounds** | Tab-based browsing: Ringtones (8-30s), Notifications (0-5s), Alarms (5-40s) |
+| **Sound Editor** | Waveform trim, fade in/out, normalize, format convert (MP3/OGG/WAV/FLAC/M4A) |
 | **Wallpaper Editor** | Brightness, contrast, saturation, blur with 6 filter presets |
 | **Crop & Position** | Pinch-zoom with aspect ratio presets (9:16, 16:9, 1:1) |
 | **Collections** | Organize wallpapers into named folders with 2x2 cover previews |
@@ -49,35 +54,39 @@ Open in Android Studio and run. Everything works out of the box.
 | **Per-Contact Ringtones** | Assign custom ringtones to individual contacts |
 | **Dual Wallpapers** | Coordinated home + lock screen wallpaper pairs |
 | **Favorites Export** | JSON export/import via Android SAF |
-| **Haptic Feedback** | Vibration on favorite toggle |
+| **Community Voting** | Upvote/downvote wallpapers and sounds via Firebase |
 | **OLED Dark Theme** | Deep blacks, zero burn-in, Material 3 |
 
 ## Content Sources
 
 | Source | Content | Auth |
 |--------|---------|------|
-| [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None |
+| [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None (optional key for NSFW) |
+| [Pexels](https://pexels.com) | Curated HD photos | Built-in key |
+| [Pixabay](https://pixabay.com) | Editor's choice photos | Built-in key |
 | [Lorem Picsum](https://picsum.photos) | Curated Unsplash photos | None |
 | [Bing Daily](https://www.bing.com) | Curated daily photos, UHD | None |
-| [Reddit](https://reddit.com) | Wallpaper subreddits | None |
-| [YouTube](https://youtube.com) | Video wallpapers + sounds via NewPipe Extractor + yt-dlp | None |
+| [Reddit](https://reddit.com) | 7 wallpaper + 4 video subreddits | None |
+| [YouTube](https://youtube.com) | Video wallpapers + sounds via NewPipe + yt-dlp | None |
+| [Openverse](https://openverse.org) | CC-licensed audio (Freesound, Jamendo, Wikimedia) | None |
 | [Internet Archive](https://archive.org) | CC/Public Domain audio clips | None |
 
 ## Architecture
 
 ```
-Jetpack Compose UI (16 screens, 5 bottom nav tabs)
+Jetpack Compose UI (16+ screens, 5 bottom nav tabs)
   Wallpapers | Videos | Sounds | Favorites | Settings
   Editors | Collections | Downloads | Onboarding | Widget
 ViewModels (Hilt) + Cache Layer
-  Repos: Wallhaven, Picsum, Bing, Reddit, YouTube, IA, Collections
+  Repos: Wallhaven, Picsum, Pexels, Pixabay, Bing, Reddit, YouTube, IA, Openverse, Collections
   Services: WallpaperApplier, SoundApplier, VideoWallpaperService,
             DownloadManager, AudioTrimmer, DualWallpaper, BatchDownload,
             ContactRingtone, FavoritesExporter, OfflineFavorites
   YouTube: NewPipe Extractor (search) + yt-dlp (stream extraction + FFmpeg crop)
-Room DB v4 (Favorites, Downloads, Search History, Wallpaper Cache,
+Room DB v6 (Favorites, Downloads, Search History, Wallpaper Cache,
             Wallpaper History, IA Audio Cache, Collections)
 DataStore (Settings, Onboarding)
+Firebase RTDB (Community Voting + Admin Moderation)
 ```
 
 ## Tech Stack
