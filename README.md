@@ -4,7 +4,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-5.2.0-blue)
+![Version](https://img.shields.io/badge/version-5.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -18,7 +18,7 @@
 
 - **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction.
 - **Video wallpapers from YouTube** — browse, preview with ExoPlayer auto-play, crop landscape to portrait, apply as live wallpaper.
-- **Progressive loading** — sounds appear as they resolve instead of waiting for all results. YouTube results load instantly, Internet Archive streams in alongside.
+- **20+ content sources** — Wallhaven, Pexels, Pixabay, Reddit, YouTube, Freesound, Openverse, SoundCloud, and community uploads.
 - **Instant startup** — Discover feed is cached locally. On subsequent launches wallpapers appear immediately while fresh results load in the background.
 - **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings.
 
@@ -38,10 +38,13 @@ Open in Android Studio and run. Everything works out of the box.
 | **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Unsplash & Reddit |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview |
 | **Video Crop Editor** | Convert landscape videos to portrait with draggable 9:16 crop overlay |
+| **Parallax Wallpapers** | ML Kit depth segmentation for layered tilt-responsive live wallpapers |
+| **Weather Wallpapers** | Live weather effects overlay on wallpapers |
 | **YouTube Sounds** | Search YouTube for ringtones, notifications, alarms — powered by yt-dlp |
-| **Openverse Sounds** | CC-licensed audio from Freesound, Jamendo & Wikimedia — zero auth required |
-| **Internet Archive** | Thousands of CC/Public Domain sound effects with progressive loading |
-| **Sound Source Badges** | Color-coded source indicators (YT, OV, IA) on every sound card |
+| **Freesound + Openverse** | CC-licensed audio from Freesound v2 (primary) and Openverse (fallback, zero auth) |
+| **SoundCloud** | CC-licensed tracks with optional client_id |
+| **Community Uploads** | Upload and share sounds via Firebase Storage |
+| **Sound Source Badges** | Color-coded source indicators on every sound card |
 | **Real-Time Waveform** | Mini waveform on each sound card tracks actual playback position |
 | **Configurable Search** | Customize YouTube search queries and blocked words per sound tab |
 | **Ringtones & Sounds** | Tab-based browsing: Ringtones (8-30s), Notifications (0-5s), Alarms (5-40s) |
@@ -52,10 +55,9 @@ Open in Android Studio and run. Everything works out of the box.
 | **Home Widget** | Glance-based widget for quick shuffle with error feedback |
 | **Auto Wallpaper** | Rotation schedule + source selection including favorites |
 | **Shuffle FAB** | One-tap random wallpaper from current tab |
-| **Parallax Detail** | Scale/translate/alpha effect when swiping between wallpapers |
 | **Per-Contact Ringtones** | Assign custom ringtones to individual contacts |
 | **Dual Wallpapers** | Coordinated home + lock screen wallpaper pairs |
-| **Favorites Export** | JSON export/import via Android SAF |
+| **Favorites Export** | JSON export/import with full metadata via Android SAF |
 | **Community Voting** | Upvote/downvote wallpapers and sounds via Firebase |
 | **OLED Dark Theme** | Deep blacks, zero burn-in, Material 3 |
 
@@ -64,11 +66,14 @@ Open in Android Studio and run. Everything works out of the box.
 | Source | Content | Auth |
 |--------|---------|------|
 | [Wallhaven](https://wallhaven.cc) | 1M+ HD/4K wallpapers | None (optional key for NSFW) |
-| [Pexels](https://pexels.com) | Curated HD photos | Built-in key |
-| [Pixabay](https://pixabay.com) | Editor's choice photos | Built-in key |
+| [Pexels](https://pexels.com) | Curated HD photos + videos | Built-in key |
+| [Pixabay](https://pixabay.com) | Editor's choice photos + videos | Built-in key |
 | [Reddit](https://reddit.com) | 7 wallpaper + 4 video subreddits | None |
 | [YouTube](https://youtube.com) | Video wallpapers + sounds via NewPipe + yt-dlp | None |
-| [Openverse](https://openverse.org) | CC-licensed audio (Freesound, Jamendo, Wikimedia) | None |
+| [Freesound](https://freesound.org) | CC-licensed sound effects (v2 API) | Built-in key |
+| [Openverse](https://openverse.org) | CC-licensed audio fallback | None |
+| [SoundCloud](https://soundcloud.com) | CC-licensed tracks | Optional key |
+| Firebase | Community uploads + voting | Built-in |
 
 ## Architecture
 
@@ -77,15 +82,16 @@ Jetpack Compose UI (16+ screens, 5 bottom nav tabs)
   Wallpapers | Videos | Sounds | Favorites | Settings
   Editors | Collections | Downloads | Onboarding | Widget
 ViewModels (Hilt) + Cache Layer
-  Repos: Wallhaven, Picsum, Pexels, Pixabay, Bing, Reddit, YouTube, IA, Openverse, Collections
+  Repos: Wallhaven, Picsum, Pexels, Pixabay, Bing, Reddit, YouTube, Openverse, Freesound, Collections
   Services: WallpaperApplier, SoundApplier, VideoWallpaperService,
-            DownloadManager, AudioTrimmer, DualWallpaper, BatchDownload,
+            ParallaxWallpaperService, WeatherWallpaperService, DualWallpaperService,
+            DownloadManager, AudioTrimmer, BatchDownload,
             ContactRingtone, FavoritesExporter, OfflineFavorites
   YouTube: NewPipe Extractor (search) + yt-dlp (stream extraction + FFmpeg crop)
-Room DB v6 (Favorites, Downloads, Search History, Wallpaper Cache,
-            Wallpaper History, IA Audio Cache, Collections)
+Room DB v9 (Favorites, Downloads, Search History, Wallpaper Cache,
+            Wallpaper History, Collections)
 DataStore (Settings, Onboarding)
-Firebase RTDB (Community Voting + Admin Moderation)
+Firebase RTDB (Community Voting + Uploads + Admin Moderation)
 ```
 
 ## Tech Stack
@@ -99,6 +105,7 @@ Firebase RTDB (Community Voting + Admin Moderation)
 | JSON | Moshi + KSP codegen |
 | Images | Coil 2.7.0 |
 | Audio/Video | Media3 ExoPlayer |
+| ML | ML Kit Selfie Segmentation |
 | YouTube Search | NewPipe Extractor |
 | YouTube Streams | yt-dlp (youtubedl-android 0.18.1) |
 | Scheduling | WorkManager 2.10.0 |
@@ -109,7 +116,7 @@ Firebase RTDB (Community Voting + Admin Moderation)
 
 ## Building
 
-Requires Android Studio Ladybug (2024.2.1) or later with JDK 17+ and Android SDK 35.
+Requires JDK 17+ and Android SDK 35. Android Studio Ladybug (2024.2.1) or later recommended.
 
 ```bash
 ./gradlew assembleDebug      # use gradlew.bat on Windows

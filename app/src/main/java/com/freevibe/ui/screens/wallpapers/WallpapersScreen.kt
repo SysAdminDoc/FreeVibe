@@ -35,12 +35,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.ui.components.DownloadProgressBar
+import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.SearchHistoryDropdown
 import com.freevibe.ui.components.ShimmerBox
 import com.freevibe.ui.components.ShimmerWallpaperGrid
@@ -67,6 +69,8 @@ private val WALLHAVEN_COLORS = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpapersScreen(
+    initialQuery: String? = null,
+    initialColor: String? = null,
     onWallpaperClick: (Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
@@ -80,161 +84,191 @@ fun WallpapersScreen(
     val hiddenIds by viewModel.hiddenIds.collectAsState()
 
     // Vote counts for visible wallpapers
-    val voteCounts by remember(state.wallpapers) {
-        if (state.wallpapers.isNotEmpty()) {
-            viewModel.voteRepo.getVoteCounts(state.wallpapers.map { it.id })
+    val wallpaperIds = remember(state.wallpapers) { state.wallpapers.map { it.id } }
+    val voteCounts by remember(wallpaperIds) {
+        if (wallpaperIds.isNotEmpty()) {
+            viewModel.voteRepo.getVoteCounts(wallpaperIds)
         } else {
             kotlinx.coroutines.flow.flowOf(emptyMap())
         }
     }.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf(state.query) }
+    LaunchedEffect(state.query) { searchQuery = state.query }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
     var showColorPicker by remember { mutableStateOf(false) }
     var showSearchHistory by remember { mutableStateOf(false) }
 
-    // Pick up pending queries from detail/category screens when screen becomes visible
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.consumePendingQueries()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    LaunchedEffect(initialQuery, initialColor) {
+        viewModel.handleRouteFilters(initialQuery, initialColor)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Search bar with color filter button
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search wallpapers...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    searchQuery = ""
-                                    showSearchHistory = false
-                                    focusManager.clearFocus()
-                                }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                viewModel.search(searchQuery)
-                                showSearchHistory = false
-                                focusManager.clearFocus()
-                            },
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = Color.Transparent,
-                        ),
-                    )
-                    SearchHistoryDropdown(
-                        recentQueries = recentSearches,
-                        isVisible = showSearchHistory && searchQuery.isEmpty(),
-                        onQueryClick = { query ->
-                            searchQuery = query
-                            viewModel.search(query)
-                            showSearchHistory = false
-                            focusManager.clearFocus()
-                        },
-                        onDeleteQuery = { viewModel.removeSearch(it) },
-                        onClearAll = { viewModel.clearSearchHistory() },
-                        modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
-                    )
-                }
-
-                // #9: Color filter button
-                IconButton(
-                    onClick = { showColorPicker = !showColorPicker },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer),
-                ) {
-                    Icon(
-                        Icons.Default.Palette,
-                        contentDescription = "Color filter",
-                        tint = if (state.selectedColor != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            // #9: Color picker row
-            AnimatedVisibility(visible = showColorPicker) {
-                ColorPickerRow(
-                    selectedColor = state.selectedColor,
-                    onColorSelected = { color ->
-                        viewModel.searchByColor(color)
-                        showColorPicker = false
-                    },
-                    onClear = if (state.selectedColor != null) {
-                        {
-                            viewModel.selectTab(WallpaperTab.DISCOVER)
-                            showColorPicker = false
-                        }
-                    } else null,
-                )
-            }
-
-            // Tab row
             val visibleTabs = WallpaperTab.entries.filter {
                 it != WallpaperTab.SEARCH || state.selectedTab == WallpaperTab.SEARCH
             }.filter {
                 it != WallpaperTab.COLOR || state.selectedTab == WallpaperTab.COLOR
             }
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = if (state.selectedTab == WallpaperTab.DISCOVER) "Discover" else wallpaperTabLabel(state.selectedTab),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(12.dp))
 
-            key(visibleTabs.size) {
-                ScrollableTabRow(
-                    selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
-                    containerColor = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    edgePadding = 16.dp,
-                    divider = {},
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Search wallpapers, moods, colors") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        searchQuery = ""
+                                        showSearchHistory = false
+                                        focusManager.clearFocus()
+                                        viewModel.selectTab(WallpaperTab.DISCOVER)
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(20.dp),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(
+                                onSearch = {
+                                    viewModel.search(searchQuery)
+                                    showSearchHistory = false
+                                    focusManager.clearFocus()
+                                },
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+                                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                            ),
+                        )
+                        SearchHistoryDropdown(
+                            recentQueries = recentSearches,
+                            isVisible = showSearchHistory && searchQuery.isEmpty(),
+                            onQueryClick = { query ->
+                                searchQuery = query
+                                viewModel.search(query)
+                                showSearchHistory = false
+                                focusManager.clearFocus()
+                            },
+                            onDeleteQuery = { viewModel.removeSearch(it) },
+                            onClearAll = { viewModel.clearSearchHistory() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 60.dp),
+                        )
+                    }
+
+                    Surface(
+                        onClick = { showColorPicker = !showColorPicker },
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (state.selectedColor != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        ),
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .widthIn(min = 72.dp)
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Palette,
+                                contentDescription = "Color filter",
+                                tint = if (state.selectedColor != null) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = if (state.selectedColor != null) "Tone" else "Filter",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (state.selectedColor != null) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = showColorPicker) {
+                    ColorPickerRow(
+                        selectedColor = state.selectedColor,
+                        onColorSelected = { color ->
+                            viewModel.searchByColor(color)
+                            showColorPicker = false
+                        },
+                        onClear = if (state.selectedColor != null) {
+                            {
+                                viewModel.selectTab(WallpaperTab.DISCOVER)
+                                showColorPicker = false
+                            }
+                        } else null,
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     visibleTabs.forEach { tab ->
-                        Tab(
+                        FilterChip(
                             selected = state.selectedTab == tab,
                             onClick = { viewModel.selectTab(tab) },
-                            text = {
+                            label = {
                                 Text(
-                                    text = when (tab) {
-                                        WallpaperTab.DISCOVER -> "Discover"
-                                        WallpaperTab.PEXELS -> "Pexels"
-                                        WallpaperTab.PIXABAY -> "Pixabay"
-                                        WallpaperTab.COLOR -> "Color"
-                                        else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
-                                    },
+                                    wallpaperTabLabel(tab),
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                             },
+                            leadingIcon = if (state.selectedTab == tab) {
+                                { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                            } else null,
+                            shape = RoundedCornerShape(18.dp),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = state.selectedTab == tab,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                                disabledBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f),
+                                disabledSelectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            ),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            ),
                         )
+                    }
                 }
-            }
             }
 
             // Download progress
@@ -367,31 +401,27 @@ fun WallpapersScreen(
             }
         }
 
-        // FABs: AI Generate + Shuffle + Match My Theme
+        // Compact FABs
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(end = 16.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            // Match My Theme
             if (state.selectedTab == WallpaperTab.DISCOVER) {
                 SmallFloatingActionButton(
                     onClick = { viewModel.matchMyTheme(context) },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.tertiary,
                 ) {
-                    Icon(Icons.Default.Palette, contentDescription = "Match my theme")
+                    Icon(Icons.Default.Palette, contentDescription = "Match my theme", modifier = Modifier.size(20.dp))
                 }
             }
-            // Surprise Me — random wallpapers from Wallhaven
             SmallFloatingActionButton(
                 onClick = { viewModel.loadRandom() },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.primary,
             ) {
-                Icon(Icons.Default.Shuffle, contentDescription = "Surprise me")
+                Icon(Icons.Default.Shuffle, contentDescription = "Surprise me", modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -481,7 +511,7 @@ private fun WallpaperGrid(
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(columns.coerceIn(1, 4)),
         state = gridState,
-        contentPadding = PaddingValues(8.dp),
+        contentPadding = PaddingValues(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 104.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalItemSpacing = 8.dp,
     ) {
@@ -493,12 +523,13 @@ private fun WallpaperGrid(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onWallpaperClick(pick) },
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp),
+                            .height(220.dp),
                     ) {
                         SubcomposeAsyncImage(
                             model = pick.fullUrl.ifEmpty { pick.thumbnailUrl },
@@ -560,6 +591,7 @@ private fun WallpaperGrid(
                         "Explore Collections",
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     androidx.compose.foundation.lazy.LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -583,6 +615,7 @@ private fun WallpaperGrid(
                                     onClick = { onSearch?.invoke(query) },
                                     label = { Text(name) },
                                     leadingIcon = { Icon(Icons.Default.Collections, null, Modifier.size(16.dp)) },
+                                    shape = RoundedCornerShape(18.dp),
                                 )
                             }
                         }
@@ -597,6 +630,7 @@ private fun WallpaperGrid(
                         "Trending",
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     androidx.compose.foundation.lazy.LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -612,6 +646,7 @@ private fun WallpaperGrid(
                                     onClick = { onSearch?.invoke(term) },
                                     label = { Text(term) },
                                     leadingIcon = { Icon(Icons.Default.Whatshot, null, Modifier.size(16.dp)) },
+                                    shape = RoundedCornerShape(18.dp),
                                 )
                             }
                         }
@@ -701,13 +736,15 @@ private fun WallpaperCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(22.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress,
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
     ) {
         Box {
             SubcomposeAsyncImage(
@@ -737,6 +774,20 @@ private fun WallpaperCard(
                 }
             }
 
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.06f),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.52f),
+                            ),
+                        ),
+                    ),
+            )
+
             // Bottom gradient with info
             Box(
                 modifier = Modifier
@@ -759,31 +810,22 @@ private fun WallpaperCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SourceBadge(wallpaper.source.name)
-                        if (onUpvote != null) {
+                        if (onUpvote != null && voteCount > 0) {
                             Surface(
                                 onClick = onUpvote,
                                 color = Color.White.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(10.dp),
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
-                                    Icon(Icons.Default.ThumbUp, null, Modifier.size(12.dp), tint = Color.White.copy(alpha = 0.9f))
-                                    if (voteCount > 0) {
-                                        Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
-                                    }
+                                    Icon(Icons.Default.ThumbUp, null, Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.9f))
+                                    Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
                                 }
                             }
                         }
-                    }
-                    if (wallpaper.width > 0 && wallpaper.height > 0) {
-                        Text(
-                            "${wallpaper.width}x${wallpaper.height}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.8f),
-                        )
                     }
                 }
             }
@@ -799,8 +841,10 @@ private fun WallpaperCard(
                     onClick = onFavoriteClick,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(36.dp)
-                        .padding(4.dp),
+                        .padding(8.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.2f)),
                 ) {
                     Icon(
                         if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -815,3 +859,15 @@ private fun WallpaperCard(
         }
     }
 }
+
+private fun wallpaperTabLabel(tab: WallpaperTab): String =
+    when (tab) {
+        WallpaperTab.DISCOVER -> "Discover"
+        WallpaperTab.PEXELS -> "Pexels"
+        WallpaperTab.PIXABAY -> "Pixabay"
+        WallpaperTab.REDDIT -> "Reddit"
+        WallpaperTab.WALLHAVEN -> "Wallhaven"
+        WallpaperTab.UNSPLASH -> "Picsum"
+        WallpaperTab.COLOR -> "Color"
+        WallpaperTab.SEARCH -> "Search"
+    }

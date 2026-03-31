@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,7 @@ import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.data.repository.VoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +62,7 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import kotlin.math.abs
 
 data class VideoWallpaperItem(
     val id: String,
@@ -97,6 +100,98 @@ data class VideoWallpapersState(
     val emptyLoadCount: Int = 0,
     val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
 )
+
+private enum class LiveWallpaperLaunchMode {
+    DIRECT,
+    CHOOSER,
+}
+
+private fun persistSelectedVideoWallpaper(context: Context, file: File) {
+    context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
+        .edit()
+        .putString("video_path", file.absolutePath)
+        .putString("scale_mode", "zoom")
+        .apply()
+}
+
+private fun tryLaunchIntent(context: Context, intent: Intent, tag: String): Boolean {
+    val resolved = intent.resolveActivity(context.packageManager) ?: return false
+    return try {
+        if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Launching $tag via ${resolved.flattenToShortString()}")
+        context.startActivity(intent)
+        true
+    } catch (e: Exception) {
+        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Failed to launch $tag", e)
+        false
+    }
+}
+
+private fun launchLiveWallpaperPicker(context: Context): LiveWallpaperLaunchMode? {
+    val serviceComponent = ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java)
+    val directIntent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+        putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, serviceComponent)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    if (tryLaunchIntent(context, directIntent, "ACTION_CHANGE_LIVE_WALLPAPER")) {
+        return LiveWallpaperLaunchMode.DIRECT
+    }
+
+    val chooserIntent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    if (tryLaunchIntent(context, chooserIntent, "ACTION_LIVE_WALLPAPER_CHOOSER")) {
+        return LiveWallpaperLaunchMode.CHOOSER
+    }
+    return null
+}
+
+private suspend fun exportVideoToGallery(context: Context, file: File): Uri? = withContext(Dispatchers.IO) {
+    try {
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, "Aura_Wallpaper_${System.currentTimeMillis()}.mp4")
+            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/Aura")
+        }
+        val uri = context.contentResolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+        uri?.let { destUri ->
+            context.contentResolver.openOutputStream(destUri)?.use { out ->
+                file.inputStream().use { input -> input.copyTo(out) }
+            }
+        }
+        uri
+    } catch (e: Exception) {
+        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Failed to export video fallback", e)
+        null
+    }
+}
+
+private suspend fun launchOrExportVideoWallpaper(context: Context, file: File, isCropped: Boolean = false) {
+    persistSelectedVideoWallpaper(context, file)
+    when (withContext(Dispatchers.Main) { launchLiveWallpaperPicker(context) }) {
+        LiveWallpaperLaunchMode.DIRECT -> {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+            }
+        }
+        LiveWallpaperLaunchMode.CHOOSER -> {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+            }
+        }
+        null -> {
+            val savedUri = exportVideoToGallery(context, file)
+            withContext(Dispatchers.Main) {
+                val prefix = if (isCropped) "Cropped video" else "Video"
+                val message = if (savedUri != null) {
+                    "$prefix saved to Movies/Aura for manual setup."
+                } else {
+                    "$prefix ready. Open Settings > Wallpaper > Live Wallpapers to finish setup."
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+}
 
 @HiltViewModel
 class VideoWallpapersViewModel @Inject constructor(
@@ -171,7 +266,7 @@ class VideoWallpapersViewModel @Inject constructor(
     }
 
     fun loadMore() {
-        if (_state.value.isLoadingMore || !_state.value.hasMore) return
+        if (_state.value.isLoading || _state.value.isLoadingMore || !_state.value.hasMore) return
         _state.update { it.copy(isLoadingMore = true) }
         load(loadMore = true)
     }
@@ -252,59 +347,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     cacheFile
                 }
 
-                context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-                    .edit()
-                    .putString("video_path", file.absolutePath)
-                    .putString("scale_mode", "zoom")
-                    .apply()
-
-                // Save video to Downloads so Gallery can access it and set as wallpaper
-                val savedUri = withContext(Dispatchers.IO) {
-                    try {
-                        val values = android.content.ContentValues().apply {
-                            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, "Aura_Wallpaper_${System.currentTimeMillis()}.mp4")
-                            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                            put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_MOVIES + "/Aura")
-                        }
-                        val uri = context.contentResolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                        uri?.let { destUri ->
-                            context.contentResolver.openOutputStream(destUri)?.use { out ->
-                                file.inputStream().use { input -> input.copyTo(out) }
-                            }
-                        }
-                        uri
-                    } catch (e: Exception) {
-                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Failed to save to MediaStore: ${e.message}")
-                        null
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
-                    // Launch live wallpaper picker directly by component (bypasses intent interceptors)
-                    try {
-                        val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                            setComponent(android.content.ComponentName(
-                                "com.android.wallpaper.livepicker",
-                                "com.android.wallpaper.livepicker.LiveWallpaperActivity",
-                            ))
-                            putExtra(
-                                android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                                android.content.ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
-                            )
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                        Toast.makeText(context, "Tap 'Aura Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
-                    } catch (e: Exception) {
-                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Live wallpaper picker failed: ${e.message}")
-                        // Fallback: save to gallery
-                        if (savedUri != null) {
-                            Toast.makeText(context, "Video saved to Movies/Aura. Open in Gallery > Set as wallpaper", Toast.LENGTH_LONG).show()
-                        } else {
-                            Toast.makeText(context, "Video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
+                launchOrExportVideoWallpaper(context, file)
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
                 if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Apply failed", e)
@@ -316,8 +359,12 @@ class VideoWallpapersViewModel @Inject constructor(
         }
     }
 
+    private var loadJob: Job? = null
+
     private fun load(loadMore: Boolean = false) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            try {
             if (!loadMore) {
                 _state.update { it.copy(isLoading = !it.isRefreshing, error = null) }
             }
@@ -366,7 +413,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             val after = s.redditAfters[sub]
                             val query = if (searchQ != null) "search.json?q=${java.net.URLEncoder.encode(searchQ, "UTF-8")}&restrict_sr=on&sort=top&t=all&type=link&limit=25&raw_json=1" else "top.json?t=all&limit=25&raw_json=1"
                             val url = "https://www.reddit.com/r/$sub/$query" + (if (after != null) "&after=$after" else "")
-                            val req = Request.Builder().url(url).header("User-Agent", "Aura/5.2.0 (Android; Open Source)").build()
+                            val req = Request.Builder().url(url).header("User-Agent", "Aura/5.4.0 (Android; Open Source)").build()
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) { resp.close(); continue }
                             val body = resp.use { it.body?.string() } ?: continue
@@ -504,10 +551,10 @@ class VideoWallpapersViewModel @Inject constructor(
             val yt = deduped.filter { it.source == "YouTube" }.sortedByDescending { it.popularity }.toMutableList()
             val mixed = mutableListOf<VideoWallpaperItem>()
             while (px.isNotEmpty() || pb.isNotEmpty() || rd.isNotEmpty() || yt.isNotEmpty()) {
-                if (px.isNotEmpty()) mixed.add(px.removeFirst())
-                if (pb.isNotEmpty()) mixed.add(pb.removeFirst())
-                if (rd.isNotEmpty()) mixed.add(rd.removeFirst())
-                if (yt.isNotEmpty()) mixed.add(yt.removeFirst())
+                if (px.isNotEmpty()) mixed.add(px.removeAt(0))
+                if (pb.isNotEmpty()) mixed.add(pb.removeAt(0))
+                if (rd.isNotEmpty()) mixed.add(rd.removeAt(0))
+                if (yt.isNotEmpty()) mixed.add(yt.removeAt(0))
             }
 
             val newEmptyCount = if (mixed.isEmpty()) s.emptyLoadCount + 1 else 0
@@ -535,6 +582,9 @@ class VideoWallpapersViewModel @Inject constructor(
                     }
                 }
             }
+            } finally {
+                if (loadMore) _state.update { it.copy(isLoadingMore = false) }
+            }
         }
     }
 }
@@ -549,14 +599,16 @@ fun VideoWallpapersScreen(
     val state by viewModel.state.collectAsState()
     val resolvedIds by viewModel.resolvedIds.collectAsState()
     val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
-    val voteCounts by remember(state.items) {
-        if (state.items.isNotEmpty()) viewModel.voteRepo.getVoteCounts(state.items.map { it.id })
+    val itemIds = remember(state.items) { state.items.map { it.id } }
+    val voteCounts by remember(itemIds) {
+        if (itemIds.isNotEmpty()) viewModel.voteRepo.getVoteCounts(itemIds)
         else kotlinx.coroutines.flow.flowOf(emptyMap())
     }.collectAsState(initial = emptyMap())
     val context = LocalContext.current
     var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
     var cropItem by remember { mutableStateOf<Pair<VideoWallpaperItem, String>?>(null) }
     val appContext = context.applicationContext
+    val scope = rememberCoroutineScope()
 
     // Video crop editor
     cropItem?.let { (item, streamUrl) ->
@@ -566,34 +618,15 @@ fun VideoWallpapersScreen(
             onBack = { cropItem = null },
             onCropped = { croppedFile ->
                 cropItem = null
-                appContext.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-                    .edit()
-                    .putString("video_path", croppedFile.absolutePath)
-                    .putString("scale_mode", "zoom")
-                    .apply()
-                try {
-                    val intent = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                        setComponent(android.content.ComponentName(
-                            "com.android.wallpaper.livepicker",
-                            "com.android.wallpaper.livepicker.LiveWallpaperActivity",
-                        ))
-                        putExtra(
-                            android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                            android.content.ComponentName(appContext, com.freevibe.service.VideoWallpaperService::class.java),
-                        )
-                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    appContext.startActivity(intent)
-                    Toast.makeText(appContext, "Tap 'Aura Video Wallpaper' then 'Set wallpaper'", Toast.LENGTH_LONG).show()
-                } catch (_: Exception) {
-                    Toast.makeText(appContext, "Cropped video saved. Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
+                scope.launch {
+                    launchOrExportVideoWallpaper(appContext, croppedFile, isCropped = true)
                 }
             },
         )
         return
     }
 
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable(state.searchQuery) { mutableStateOf(state.searchQuery) }
     val focusManager = LocalFocusManager.current
 
     Column(Modifier.fillMaxSize()) {
@@ -603,7 +636,7 @@ fun VideoWallpapersScreen(
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = { Text("Search video wallpapers...") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
+            leadingIcon = { Icon(Icons.Default.Search, "Search") },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = ""; viewModel.search(""); focusManager.clearFocus() }) {
@@ -645,7 +678,7 @@ fun VideoWallpapersScreen(
                         })
                     },
                     leadingIcon = if (state.orientation == filter) {
-                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                        { Icon(Icons.Default.Check, "Selected orientation", Modifier.size(16.dp)) }
                     } else null,
                 )
             }
@@ -723,6 +756,17 @@ fun VideoWallpapersScreen(
                         }
                     }
                 }
+                state.error != null && state.items.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ErrorOutline, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                            Spacer(Modifier.height(12.dp))
+                            Text(state.error ?: "Unknown error", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(12.dp))
+                            FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Retry") }
+                        }
+                    }
+                }
                 state.items.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -755,6 +799,21 @@ fun VideoWallpapersScreen(
                         val visibleItems = state.items
                             .filter { it.id !in hiddenIds }
                             .sortedByDescending { voteCounts[it.id] ?: 0 }
+                        val activePreviewId by remember(visibleItems, listState) {
+                            androidx.compose.runtime.derivedStateOf {
+                                val layoutInfo = listState.layoutInfo
+                                val viewportCenter =
+                                    (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                                layoutInfo.visibleItemsInfo
+                                    .mapNotNull { info ->
+                                        visibleItems.getOrNull(info.index)?.id?.let { id ->
+                                            id to abs((info.offset + (info.size / 2)) - viewportCenter)
+                                        }
+                                    }
+                                    .minByOrNull { it.second }
+                                    ?.first
+                            }
+                        }
 
                         LazyColumn(
                             state = listState,
@@ -766,6 +825,7 @@ fun VideoWallpapersScreen(
                                 VideoCard(
                                     item = item,
                                     streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
+                                    shouldPreview = item.id == activePreviewId,
                                     isApplying = state.isApplying == item.id,
                                     voteCount = voteCounts[item.id] ?: 0,
                                     onApply = { confirmItem = item },
@@ -837,7 +897,7 @@ fun VideoWallpapersScreen(
                                 confirmItem = null
                                 cropItem = item to streamUrl
                             }) {
-                                Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
+                                Icon(Icons.Default.Crop, "Crop video", Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Crop")
                             }
@@ -847,7 +907,7 @@ fun VideoWallpapersScreen(
                                 confirmItem = null
                                 cropItem = item to streamUrl
                             }) {
-                                Icon(Icons.Default.Crop, null, Modifier.size(16.dp))
+                                Icon(Icons.Default.Crop, "Crop video", Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Crop")
                             }
@@ -863,10 +923,12 @@ fun VideoWallpapersScreen(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoCard(
     item: VideoWallpaperItem,
     streamUrl: String?,
+    shouldPreview: Boolean,
     isApplying: Boolean,
     voteCount: Int = 0,
     onApply: () -> Unit,
@@ -881,7 +943,7 @@ private fun VideoCard(
     ) {
         Box {
             // ExoPlayer video or loading placeholder
-            if (streamUrl != null) {
+            if (streamUrl != null && shouldPreview) {
                 val exoPlayer = remember(streamUrl) {
                     ExoPlayer.Builder(context).build().apply {
                         setMediaItem(MediaItem.fromUri(streamUrl))
@@ -910,7 +972,7 @@ private fun VideoCard(
                         .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                 )
             } else {
-                // Loading placeholder with thumbnail
+                // Static thumbnail for non-focused cards; show spinner only while unresolved
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -924,14 +986,30 @@ private fun VideoCard(
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    // Loading spinner overlay
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
+                    if (streamUrl == null) {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.5f),
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
+                            }
+                        }
+                    } else {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.45f),
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    "Preview video",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -993,12 +1071,12 @@ private fun VideoCard(
             // Vote buttons
             IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ThumbUp, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.ThumbUp, "Upvote video", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     if (voteCount > 0) Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 2.dp))
                 }
             }
             IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.VisibilityOff, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.VisibilityOff, "Hide video", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(4.dp))
             Button(

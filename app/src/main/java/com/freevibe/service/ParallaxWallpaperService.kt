@@ -36,6 +36,7 @@ class ParallaxWallpaperService : WallpaperService() {
         private var sensorManager: SensorManager? = null
         private var accelerometer: Sensor? = null
 
+        private val bitmapLock = Any()
         private var originalBitmap: Bitmap? = null
         private var backgroundLayer: Bitmap? = null
         private var foregroundLayer: Bitmap? = null
@@ -144,18 +145,24 @@ class ParallaxWallpaperService : WallpaperService() {
 
         private fun loadImage() {
             val path = getImagePath() ?: return
-            try {
-                val file = java.io.File(path)
-                if (!file.exists()) return
-                val bmp = BitmapFactory.decodeFile(path) ?: return
-                originalBitmap?.recycle()
-                originalBitmap = bmp
-                if (screenWidth > 0 && screenHeight > 0) {
-                    scaleAndSegment(bmp)
+            Thread {
+                try {
+                    val file = java.io.File(path)
+                    if (!file.exists()) return@Thread
+                    val bmp = BitmapFactory.decodeFile(path) ?: return@Thread
+                    handler.post {
+                        synchronized(bitmapLock) {
+                            originalBitmap?.recycle()
+                            originalBitmap = bmp
+                        }
+                        if (screenWidth > 0 && screenHeight > 0) {
+                            scaleAndSegment(bmp)
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (BuildConfig.DEBUG) android.util.Log.e("ParallaxWP", "Load failed: ${e.message}")
                 }
-            } catch (e: Exception) {
-                if (BuildConfig.DEBUG) android.util.Log.e("ParallaxWP", "Load failed: ${e.message}")
-            }
+            }.start()
         }
 
         private fun scaleAndSegment(source: Bitmap) {
@@ -167,8 +174,10 @@ class ParallaxWallpaperService : WallpaperService() {
                 screenWidth + (maxOffset * 2).toInt(),
                 screenHeight + (maxOffset * 2).toInt(),
             )
-            fallbackBitmap?.recycle()
-            fallbackBitmap = padded
+            synchronized(bitmapLock) {
+                fallbackBitmap?.recycle()
+                fallbackBitmap = padded
+            }
 
             // Attempt ML Kit segmentation
             segmentImage(padded)
@@ -184,28 +193,33 @@ class ParallaxWallpaperService : WallpaperService() {
 
                 segmenter.process(inputImage)
                     .addOnSuccessListener { mask ->
+                        segmenter.close()
                         try {
-                            if (bitmap.isRecycled) return@addOnSuccessListener
+                            // Extract pixels under lock to prevent race with recycleBitmaps()
+                            val pixels: IntArray
+                            val bmpW: Int
+                            val bmpH: Int
+                            val bgBitmap: Bitmap?
+                            synchronized(bitmapLock) {
+                                if (bitmap.isRecycled) return@addOnSuccessListener
+                                bmpW = bitmap.width
+                                bmpH = bitmap.height
+                                pixels = IntArray(bmpW * bmpH)
+                                bitmap.getPixels(pixels, 0, bmpW, 0, 0, bmpW, bmpH)
+                                bgBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                            }
+
                             val maskBuffer = mask.buffer
                             val maskWidth = mask.width
                             val maskHeight = mask.height
-
-                            // Convert ByteBuffer to FloatBuffer for confidence values
                             maskBuffer.rewind()
                             val floatBuffer = maskBuffer.asFloatBuffer()
-
-                            // Build foreground bitmap using confidence mask
-                            val bmpW = bitmap.width
-                            val bmpH = bitmap.height
-                            val pixels = IntArray(bmpW * bmpH)
-                            bitmap.getPixels(pixels, 0, bmpW, 0, 0, bmpW, bmpH)
 
                             val fgPixels = IntArray(bmpW * bmpH)
 
                             for (y in 0 until bmpH) {
                                 for (x in 0 until bmpW) {
                                     val idx = y * bmpW + x
-                                    // Map bitmap coords to mask coords
                                     val mx = (x * maskWidth / bmpW).coerceIn(0, maskWidth - 1)
                                     val my = (y * maskHeight / bmpH).coerceIn(0, maskHeight - 1)
                                     val maskIdx = my * maskWidth + mx
@@ -214,12 +228,11 @@ class ParallaxWallpaperService : WallpaperService() {
                                     } else 0f
 
                                     if (confidence > 0.5f) {
-                                        // Foreground pixel: apply alpha based on confidence
                                         val srcPixel = pixels[idx]
                                         val a = (confidence * 255f).toInt().coerceIn(0, 255)
                                         fgPixels[idx] = (a shl 24) or (srcPixel and 0x00FFFFFF)
                                     } else {
-                                        fgPixels[idx] = 0 // transparent
+                                        fgPixels[idx] = 0
                                     }
                                 }
                             }
@@ -227,12 +240,14 @@ class ParallaxWallpaperService : WallpaperService() {
                             val fgBitmap = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
                             fgBitmap.setPixels(fgPixels, 0, bmpW, 0, 0, bmpW, bmpH)
 
-                            foregroundLayer?.recycle()
-                            foregroundLayer = fgBitmap
-
-                            // Background is the full image (foreground overlays it)
-                            backgroundLayer?.recycle()
-                            backgroundLayer = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                            synchronized(bitmapLock) {
+                                val oldFg = foregroundLayer
+                                val oldBg = backgroundLayer
+                                foregroundLayer = fgBitmap
+                                backgroundLayer = bgBitmap
+                                oldFg?.recycle()
+                                oldBg?.recycle()
+                            }
 
                             if (BuildConfig.DEBUG) {
                                 android.util.Log.d("ParallaxWP", "Segmentation succeeded: ${bmpW}x${bmpH}, mask ${maskWidth}x${maskHeight}")
@@ -242,12 +257,16 @@ class ParallaxWallpaperService : WallpaperService() {
                         }
                     }
                     .addOnFailureListener { e ->
-                        // Segmentation failed - use fallback (single image, no parallax split)
+                        segmenter.close()
                         if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "Segmentation failed, using fallback: ${e.message}")
-                        backgroundLayer?.recycle()
-                        backgroundLayer = null
-                        foregroundLayer?.recycle()
-                        foregroundLayer = null
+                        synchronized(bitmapLock) {
+                            val oldBg = backgroundLayer
+                            val oldFg = foregroundLayer
+                            backgroundLayer = null
+                            foregroundLayer = null
+                            oldBg?.recycle()
+                            oldFg?.recycle()
+                        }
                     }
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) android.util.Log.e("ParallaxWP", "Segmenter init error: ${e.message}")
@@ -279,9 +298,14 @@ class ParallaxWallpaperService : WallpaperService() {
                     val baseX = -maxOffset
                     val baseY = -maxOffset
 
-                    val bg = backgroundLayer
-                    val fg = foregroundLayer
-                    val fb = fallbackBitmap
+                    val bg: Bitmap?
+                    val fg: Bitmap?
+                    val fb: Bitmap?
+                    synchronized(bitmapLock) {
+                        bg = backgroundLayer
+                        fg = foregroundLayer
+                        fb = fallbackBitmap
+                    }
 
                     if (bg != null && fg != null) {
                         // Draw background layer with base offset
@@ -321,16 +345,20 @@ class ParallaxWallpaperService : WallpaperService() {
             val cropH = targetH.coerceAtMost(scaledH - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
                 Bitmap.createBitmap(scaled, x, y, cropW, cropH).also {
-                    if (scaled != src) scaled.recycle()
+                    if (scaled !== src) scaled.recycle()
                 }
-            } else scaled
+            } else {
+                if (scaled === src) src.copy(src.config ?: Bitmap.Config.ARGB_8888, false) else scaled
+            }
         }
 
         private fun recycleBitmaps() {
             originalBitmap?.recycle(); originalBitmap = null
-            backgroundLayer?.recycle(); backgroundLayer = null
-            foregroundLayer?.recycle(); foregroundLayer = null
-            fallbackBitmap?.recycle(); fallbackBitmap = null
+            synchronized(bitmapLock) {
+                backgroundLayer?.recycle(); backgroundLayer = null
+                foregroundLayer?.recycle(); foregroundLayer = null
+                fallbackBitmap?.recycle(); fallbackBitmap = null
+            }
         }
     }
 }

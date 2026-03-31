@@ -319,7 +319,7 @@ private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
     withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
-            val wp = ep.wallpaperRepository().getWallhaven(page = 1).items.randomOrNull()
+            val wp = ep.wallpaperRepository().getWallhaven(page = (1..5).random()).items.randomOrNull()
             if (wp == null) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "No wallpapers available", Toast.LENGTH_SHORT).show()
