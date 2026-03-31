@@ -5,22 +5,23 @@ Open-source Android app for device personalization. Wallpapers, video wallpapers
 
 ## Tech Stack
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
-- Hilt 2.53.1 DI, Room 2.6.1 DB (v7), Retrofit 2.11.0 + OkHttp, Moshi + KSP
+- Hilt 2.53.1 DI, Room 2.6.1 DB (v10), Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
 - NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop + audio fade/convert/normalize)
 - Freesound v2 API (primary sound source, requires client_id), Openverse API (fallback, zero auth)
 - Firebase Realtime Database (community voting + moderation)
 - Palette API (Material You color extraction), Open-Meteo (weather)
+- ML Kit Selfie Segmentation (parallax wallpaper depth effect)
 - Min SDK 26, Target SDK 35, JDK 17
 
 ## Build
 ```bash
-JAVA_HOME="C:/Program Files/Android/Android Studio/jbr" ./gradlew assembleDebug
+JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot" ./gradlew assembleDebug
 ```
-Gradle 8.12 pinned via wrapper. AGP 8.7.3.
+Gradle 8.12 pinned via wrapper. AGP 8.7.3. SDK path in `local.properties` must point to `C:/Users/Xray/AppData/Local/Android/Sdk`.
 
 ## Version
-- **v5.2.0** (versionCode 52)
+- **v5.4.0** (versionCode 54)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -34,7 +35,7 @@ Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorite
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
     Firebase: VoteRepository (community votes, admin moderation, top voted leaderboard)
-Room DB (v7): favorites, downloads, search_history, wallpaper_cache,
+Room DB (v10): favorites, downloads, search_history, wallpaper_cache,
               wallpaper_history, wallpaper_collections, wallpaper_collection_items
 DataStore: Settings, Onboarding, User Styles
 ```
@@ -42,7 +43,7 @@ DataStore: Settings, Onboarding, User Styles
 ## Sounds System (v5.0.0)
 - **Sources**: Freesound v2 API (primary), Openverse (fallback, zero auth), YouTube (NewPipe + yt-dlp), SoundCloud (CC-licensed, optional client_id), Bundled (curated first-run), Community uploads (Firebase Storage + RTDB)
 - **SoundCloud**: SoundCloudApi.kt + SoundCloudRepository.kt. CC-licensed tracks only. Orange "SC" badge. client_id from BuildConfig/local.properties (`soundcloud.client.id`). ContentSource.SOUNDCLOUD.
-- **Community Uploads**: UploadRepository.kt. Firebase Storage (`sounds/{deviceId}/{timestamp}_{name}.mp3`) + RTDB (`community_sounds/{pushId}`). Upload FAB on SoundsScreen. Upload dialog with name + category picker. Progress indicator. ContentSource.COMMUNITY. Green "Community" badge. Community tab shows all uploads sorted by votes.
+- **Community Uploads**: UploadRepository.kt. Firebase Storage (`sounds/{deviceId}/{timestamp}_{name}.mp3`) + RTDB (`community_sounds/{pushId}`). Upload FAB on SoundsScreen. Upload dialog with name + category picker. Progress indicator. ContentSource.COMMUNITY. Green "Community" badge. Community tab shows all uploads sorted by votes. 20MB file size limit.
 - **Bundled Content**: BundledContentProvider (@Singleton) provides 10 ringtones + 10 notifications + 5 alarms with hardcoded Freesound preview URLs. Shown instantly before API results arrive. Gold "Aura Picks" badge. ContentSource.BUNDLED enum value.
 - **Tabs**: Ringtones, Notifications, Alarms, YouTube, Community, Search (dynamic)
 - **YouTube tab**: Dedicated search + paste URL import via NewPipe stream extractor
@@ -84,56 +85,77 @@ DataStore: Settings, Onboarding, User Styles
 - v4->5: Composite PKs for search_history + wallpaper_cache
 - v5->6: ForeignKey CASCADE on collection items + index
 - v6->7: Drop ia_audio_cache (Internet Archive removed)
+- v7->8: Add metadata columns (tags, colors, category, uploaderName, sourcePageUrl, fileSize, fileType, views, favoritesCount) to favorites table
+- v8->9: Add colors, sourcePageUrl, views, favorites columns to wallpaper_cache table
+- v9->10: Add missing indices on favorites.type and downloads.type
 
 ## Gotchas
-- `SelectedContentHolder` bridges wallpaper/sound selection between screens (detail pager needs the list)
+- `SelectedContentHolder` bridges wallpaper/sound selection between screens (detail pager needs the list) — does NOT survive process death (in-memory singleton)
 - `pendingCategoryQuery` consumed on WallpapersViewModel init (set to null after read)
 - Category nav uses `saveState=false, restoreState=false` to force ViewModel recreation
 - FreeVibeRoot uses Hilt EntryPoint (not ViewModel) to access SelectedContentHolder
 - WallpaperDetailScreen gets its OWN WallpapersViewModel — uses SelectedContentHolder for state
-- AudioTrimmer fade uses FFmpeg afade (was broken byte-level MP3 manipulation)
+- AudioTrimmer fade uses FFmpeg afade (MediaMuxer can't handle MP3 output)
 - NASA/Wikimedia/INTERNET_ARCHIVE enum values kept in ContentSource for legacy favorites
 - **YouTube stream cache TTL**: 6 hours
 - **ExoPlayer for sounds**: Single reusable instance — NOT per-sound
 - **FFmpeg.init()** MUST be called at startup or video crop + audio operations fail
 - **libffmpeg.so** needs LD_LIBRARY_PATH from yt-dlp reflection
 - **Firebase orderByChild** needs server-side indexOn — use client-side sort
+- **Firebase RTDB refs MUST be lazy** — `FirebaseDatabase.getInstance()` throws if databaseURL missing from google-services.json. VoteRepository and UploadRepository use `by lazy` with try/catch.
 - **Video crop viewport** constrained to real screen pixel aspect ratio (WindowMetrics)
 - **r/Amoledbackgrounds** removed from all sources
 - **Icons.Default.YouTube** doesn't exist — use `Icons.Default.SmartDisplay`
-- **Firebase RTDB refs MUST be lazy** — `FirebaseDatabase.getInstance()` throws if databaseURL missing from google-services.json. VoteRepository and UploadRepository use `by lazy` with try/catch.
 - **MutableStateFlow read-modify-write** — Always use `.update { it + newVal }` not `.value = .value + newVal` for thread safety in concurrent coroutines.
 - **Bitmap.createBitmap** can return the same object as source — always check `!==` before recycling to avoid double-recycle crash.
 - **MediaPlayer.stop() + release()** — Always separate into two try blocks; if stop() throws, release() must still be called.
+- **DarkModeReceiver** is dead code — BroadcastReceiver never registered in manifest, SharedPreferences keys never written. TODO documented.
+- **Nav route arguments** — All detail/picker routes use `Uri.encode(id)` to handle special characters in IDs.
+- **Atomic file writes** — OfflineFavoritesManager and SoundEditorScreen use temp-then-rename pattern to prevent corrupt files on interruption.
 - Package is `com.freevibe`, display name is "Aura"
 
 ## Key Files
 - `FreeVibeApp.kt` - Application class, crash logging, cache eviction, yt-dlp + FFmpeg init
-- `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint
-- `AppModule.kt` - Hilt DI, OkHttp, Retrofit services, Room DB v7 with migrations
+- `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint, widget deep linking via `initialNavigateTo`
+- `AppModule.kt` - Hilt DI, OkHttp, Retrofit services, Room DB v9 with migrations v1-v9
 - `SelectedContentHolder.kt` - Singleton: selectedWallpaper + wallpaperList + selectedSound + pendingCategoryQuery
-- `WallpapersViewModel.kt` - Wallpaper state, tabs, findSimilar, matchMyTheme, cached discover
+- `WallpapersViewModel.kt` - Wallpaper state, tabs, findSimilar, matchMyTheme, cached discover, loadJob cancellation
 - `WallpapersScreen.kt` - Staggered grid, WOTD hero, collections, Community Favorites, time filters
 - `WallpaperDetailScreen.kt` - VerticalPager, tag chips, color dots, find similar
 - `WallpaperRepository.kt` - Aggregates all sources, per-source timeouts, cached discover
-- `VideoWallpapersScreen.kt` - Video browsing (Pexels+YouTube+Reddit+Pixabay), orientation filter
-- `VideoCropScreen.kt` - FFmpeg crop with LD_LIBRARY_PATH reflection
-- `VideoWallpaperService.kt` - WallpaperService, center-crop playback
+- `VideoWallpapersScreen.kt` - Video browsing (Pexels+YouTube+Reddit+Pixabay), orientation filter, inline VM
+- `VideoCropScreen.kt` - FFmpeg crop with LD_LIBRARY_PATH reflection, timeout-guarded HTTP client
+- `VideoWallpaperService.kt` - WallpaperService, center-crop playback, async prepare
+- `ParallaxWallpaperService.kt` - ML Kit segmentation parallax, synchronized bitmap access
+- `WeatherWallpaperService.kt` - Weather effects overlay, background image loading
 - `SoundsViewModel.kt` - Sound state, YouTube/Freesound/Openverse, ExoPlayer, Top 5 This Week
 - `SoundsScreen.kt` - Sound list, YouTube tab, one-tap apply sheet, snackbar feedback
-- `SoundDetailScreen.kt` - Seekable waveform, apply as ringtone/notification/alarm
+- `SoundDetailScreen.kt` - Seekable waveform, apply as ringtone/notification/alarm, FlowRow tags
+- `SoundEditorScreen.kt` - Waveform trim/fade/normalize/convert, undo stack, atomic file writes
 - `FreesoundV2Api.kt` - Freesound v2 API (client_id auth, quality signals)
 - `FreesoundRepository.kt` - Openverse source (zero auth fallback)
 - `YouTubeRepository.kt` - YouTube search, stream cache (6h TTL), NewPipe + yt-dlp
-- `AudioTrimmer.kt` - Trim (MediaMuxer) + FFmpeg fade/normalize/convert
+- `AudioTrimmer.kt` - Trim (MediaMuxer for non-MP3, FFmpeg for MP3) + FFmpeg fade/normalize/convert
+- `DownloadManager.kt` - Thread-safe StateFlow updates, orphaned MediaStore cleanup
+- `VoteRepository.kt` - Firebase voting, ConcurrentHashMap for vote counts, transactional voter records
+- `UploadRepository.kt` - Firebase Storage uploads, 20MB limit, lazy RTDB refs
+- `FavoritesExporter.kt` - JSON export/import with full metadata, @Transaction bulk import
+- `OfflineFavoritesManager.kt` - Atomic temp-then-rename file writes
+- `DailyWallpaperWorker.kt` - Daily wallpaper rotation, intent extras for data passing
+- `AutoWallpaperWorker.kt` - Auto wallpaper schedule, IOException-only retry
+- `BatchDownloadService.kt` - Foreground service, CancellationException handling
 
 ## Known Issues
 - Fastlane metadata outdated
 - YouTube videos use thumbnail dimensions as orientation proxy
 - Community Favorites only shows wallpapers in local Room cache
 - SoundCloud requires API key registration (optional, graceful degradation)
+- DarkModeReceiver is dead code (never registered, SP keys never written)
+- SelectedContentHolder does not survive process death (in-memory singleton)
 
 ## Version History
+- v5.4.0: Bug audit — 13 fixes. **Critical**: Wallpapers not loading (handleRouteFilters null==null dedup returned early on first call, never triggered loadWallpapers); Room DB crash on startup (missing indices on favorites.type, downloads.type, wallpaper_cache.cacheKey — added migration v9→v10). **High**: ParallaxWallpaperService bitmap race + segmenter leak; WeatherWallpaperService double-recycle crash; AudioPlaybackManager @Volatile; CollectionsScreen !! NPE; LicensesScreen/SettingsScreen unguarded startActivity. **Medium**: OfflineFavoritesManager renameTo fallback; FreeVibeWidget shuffle variety. **UI**: Compact header (removed verbose subtitle), small FABs (replaced wide labeled buttons with SmallFloatingActionButton), removed resolution text from cards, explicit tab labels. Version sync 5.2.0→5.4.0. DB v9→v10.
+- v5.3.0: Comprehensive 4-round codebase audit — 121 bugs fixed. Crashes: bitmap double-recycle in ParallaxWallpaperService/WeatherWallpaperService/DualWallpaperService, Moshi Any? crash in WallhavenMeta, null-on-NOT-NULL in favorites metadata, AudioTrimmer MP3 muxer crash (now uses FFmpeg). Data-loss: favorite metadata not persisted through export/import, orphaned MediaStore entries in DownloadManager, non-atomic file writes in OfflineFavoritesManager/SoundEditorScreen, WallpaperHistory REPLACE clobbering timestamps. Race conditions: MutableStateFlow .update{} in 8+ files, loadJob cancellation in WallpapersViewModel/VideoWallpapersScreen, stale tab capture in SoundsViewModel. Navigation: missing NavType argument declarations, Uri.encode for special chars in route IDs. Services: VideoWallpaperService blocking prepare(), DailyWallpaperWorker clobbering SelectedContentHolder, AudioPlaybackManager stale controller callbacks. Security: scoped FileProvider paths, auto-backup exclusion rules. DB v7→v8→v9 (metadata columns on favorites + wallpaper_cache). Room indices on hot query columns.
 - v5.2.0: Full codebase audit (78 source files). Fixed Sounds tab crash (Firebase RTDB lazy init in VoteRepository + UploadRepository). Fixed 20+ bugs: AudioPlaybackManager connection crash, bitmap leaks in DualWallpaperService/ParallaxWallpaperService/WeatherWallpaperService, VideoWallpaperService player release leak, SoundEditorScreen blocking MediaPlayer.prepare, race conditions on MutableStateFlow updates (VideoWallpapersScreen + SoundsViewModel), community tab double-collect leak, ContactPicker empty URL crash, recycled bitmap access in ParallaxWallpaperService segmentation callback.
 - v5.1.0: Added parallax wallpapers, bundled content, SoundCloud, community uploads, MediaSession audio service.
 - v5.0.0: Sounds overhaul (YouTube tab, one-tap apply, Top 5 This Week, paste URL import). Removed AI wallpaper generation, Internet Archive, KlipyApi, SoundCollections dead code. Onboarding style picker. Full codebase audit: fixed AudioTrimmer stream leaks, DualWallpaperService bitmap leak, DownloadManager progress calc, removed r/Amoledbackgrounds from defaults. DB v7.

@@ -6,6 +6,7 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.WallpaperCollectionEntity
@@ -24,6 +25,7 @@ import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -72,6 +74,11 @@ class WallpapersViewModel @Inject constructor(
     private val _state = MutableStateFlow(WallpapersUiState())
     val state = _state.asStateFlow()
 
+    private var loadJob: Job? = null
+    private var lastRouteQuery: String? = null
+    private var lastRouteColor: String? = null
+    private var hasInitiallyLoaded = false
+
     val selectedWallpaper = selectedContent.selectedWallpaper
     val sharedWallpaperList = selectedContent.wallpaperList
 
@@ -96,7 +103,6 @@ class WallpapersViewModel @Inject constructor(
     val topVoted = _topVoted.asStateFlow()
 
     init {
-        consumePendingQueries()
         fetchDailyPick()
         fetchTopVoted()
     }
@@ -138,18 +144,29 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
-    /** Check for pending queries from detail/category screens. Called on init and on resume. */
-    fun consumePendingQueries() {
-        val categoryQuery = selectedContent.pendingCategoryQuery
-        val colorQuery = selectedContent.pendingColorQuery
-        if (categoryQuery != null) {
-            selectedContent.pendingCategoryQuery = null
-            search(categoryQuery)
-        } else if (colorQuery != null) {
-            selectedContent.pendingColorQuery = null
-            searchByColor(colorQuery)
-        } else if (_state.value.wallpapers.isEmpty() && !_state.value.isLoading) {
-            loadWallpapers()
+    fun handleRouteFilters(query: String?, color: String?) {
+        val normalizedQuery = query?.ifBlank { null }
+        val normalizedColor = color?.ifBlank { null }
+
+        // Skip dedup only for non-initial calls with identical filters
+        if (hasInitiallyLoaded && normalizedQuery == lastRouteQuery && normalizedColor == lastRouteColor) return
+
+        lastRouteQuery = normalizedQuery
+        lastRouteColor = normalizedColor
+        hasInitiallyLoaded = true
+
+        when {
+            normalizedQuery != null -> {
+                if (_state.value.selectedTab != WallpaperTab.SEARCH || _state.value.query != normalizedQuery) {
+                    search(normalizedQuery)
+                }
+            }
+            normalizedColor != null -> {
+                if (_state.value.selectedTab != WallpaperTab.COLOR || _state.value.selectedColor != normalizedColor) {
+                    searchByColor(normalizedColor)
+                }
+            }
+            _state.value.wallpapers.isEmpty() && !_state.value.isLoading -> loadWallpapers()
         }
     }
 
@@ -212,14 +229,15 @@ class WallpapersViewModel @Inject constructor(
 
     // #4: Pull-to-refresh
     fun refresh() {
+        val tab = _state.value.selectedTab
         _state.update { it.copy(isRefreshing = true, currentPage = 1, wallpapers = emptyList(), error = null, errorSource = null) }
-        if (_state.value.selectedTab == WallpaperTab.REDDIT) redditRepo.resetPagination()
+        if (tab == WallpaperTab.REDDIT) redditRepo.resetPagination()
         loadWallpapers(isRefresh = true)
     }
 
     fun loadMore() {
         val s = _state.value
-        if (s.isLoadingMore || !s.hasMore) return
+        if (s.isLoading || s.isLoadingMore || !s.hasMore) return
         _state.update { it.copy(currentPage = it.currentPage + 1) }
         loadWallpapers(loadMore = true)
     }
@@ -228,9 +246,13 @@ class WallpapersViewModel @Inject constructor(
         selectedContent.selectWallpaper(wallpaper, _state.value.wallpapers)
     }
 
-    /** Set pending color search for the wallpapers list screen to pick up on return */
-    fun setPendingColorSearch(hex: String) {
-        selectedContent.pendingColorQuery = hex
+    suspend fun resolveWallpaper(id: String): Wallpaper? =
+        resolveWallpaperSelection(id)?.first
+
+    suspend fun ensureSelectedWallpaper(id: String): Boolean {
+        val resolved = resolveWallpaperSelection(id) ?: return false
+        selectedContent.selectWallpaper(resolved.first, resolved.second.ifEmpty { listOf(resolved.first) })
+        return true
     }
 
     /** Update selected wallpaper without overwriting the shared list (used by detail pager) */
@@ -402,7 +424,8 @@ class WallpapersViewModel @Inject constructor(
     }
 
     private fun loadWallpapers(loadMore: Boolean = false, isRefresh: Boolean = false) {
-        viewModelScope.launch {
+        if (!loadMore) loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val s = _state.value
             if (!isRefresh && !loadMore) {
                 _state.update { it.copy(isLoading = true, error = null, errorSource = null) }
@@ -516,7 +539,7 @@ class WallpapersViewModel @Inject constructor(
             _state.update { it.copy(selectedTab = WallpaperTab.SEARCH, query = "Random", wallpapers = emptyList(), isLoading = true, currentPage = 1) }
             try {
                 val result = wallpaperRepo.getRandomWallhaven()
-                _state.update { it.copy(wallpapers = result.items, isLoading = false, hasMore = true) }
+                _state.update { it.copy(wallpapers = result.items, isLoading = false, hasMore = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
@@ -544,5 +567,44 @@ class WallpapersViewModel @Inject constructor(
                 searchByColor("424153")
             }
         }
+    }
+
+    private suspend fun resolveWallpaperSelection(id: String): Pair<Wallpaper, List<Wallpaper>>? {
+        selectedContent.selectedWallpaper.value?.takeIf { it.id == id }?.let {
+            val shared = selectedContent.wallpaperList.value
+            return it to shared.ifEmpty { listOf(it) }
+        }
+
+        val shared = selectedContent.wallpaperList.value
+        shared.firstOrNull { it.id == id }?.let {
+            return it to shared
+        }
+
+        val current = _state.value.wallpapers
+        current.firstOrNull { it.id == id }?.let {
+            return it to current
+        }
+
+        val topVotedWallpapers = _topVoted.value.map { pair -> pair.first }
+        topVotedWallpapers.firstOrNull { it.id == id }?.let {
+            return it to topVotedWallpapers
+        }
+
+        _dailyPick.value?.takeIf { it.id == id }?.let {
+            return it to listOf(it)
+        }
+
+        favoritesRepo.getById(id)
+            ?.takeIf { it.type == "WALLPAPER" }
+            ?.toWallpaper()
+            ?.let {
+                return it to listOf(it)
+            }
+
+        cacheManager.getByIds(listOf(id)).firstOrNull()?.let {
+            return it to listOf(it)
+        }
+
+        return null
     }
 }

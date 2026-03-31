@@ -22,8 +22,8 @@ import kotlinx.coroutines.flow.Flow
         WallpaperCollectionEntity::class,
         WallpaperCollectionItemEntity::class,
     ],
-    version = 7,
-    exportSchema = false,
+    version = 10,
+    exportSchema = true,
 )
 abstract class FreeVibeDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
@@ -48,8 +48,15 @@ interface FavoriteDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE id = :id)")
     fun isFavorite(id: String): Flow<Boolean>
 
+    @Query("SELECT * FROM favorites WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): FavoriteEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Transaction
+    suspend fun insertAll(favorites: List<FavoriteEntity>)
 
     @Delete
     suspend fun delete(favorite: FavoriteEntity)
@@ -58,7 +65,7 @@ interface FavoriteDao {
     suspend fun deleteById(id: String)
 
     @Query("UPDATE favorites SET offlinePath = :path WHERE id = :id")
-    suspend fun updateOfflinePath(id: String, path: String?)
+    suspend fun updateOfflinePath(id: String, path: String)
 
     @Query("SELECT id FROM favorites")
     fun allIds(): Flow<List<String>>
@@ -120,7 +127,7 @@ interface WallpaperCacheDao {
     @Query("SELECT * FROM wallpaper_cache WHERE cacheKey = :cacheKey ORDER BY rowid ASC")
     suspend fun getByCacheKey(cacheKey: String): List<WallpaperCacheEntity>
 
-    @Query("SELECT * FROM wallpaper_cache WHERE id IN (:ids) GROUP BY id")
+    @Query("SELECT * FROM wallpaper_cache w1 WHERE id IN (:ids) AND cachedAt = (SELECT MAX(w2.cachedAt) FROM wallpaper_cache w2 WHERE w2.id = w1.id)")
     suspend fun getByIds(ids: List<String>): List<WallpaperCacheEntity>
 
     @Query("SELECT cachedAt FROM wallpaper_cache WHERE cacheKey = :cacheKey LIMIT 1")
@@ -135,6 +142,12 @@ interface WallpaperCacheDao {
     @Query("DELETE FROM wallpaper_cache WHERE cachedAt < :threshold")
     suspend fun evictOlderThan(threshold: Long)
 
+    @Query("DELETE FROM wallpaper_cache WHERE rowid NOT IN (SELECT rowid FROM wallpaper_cache ORDER BY cachedAt DESC LIMIT :maxEntries)")
+    suspend fun pruneToMaxEntries(maxEntries: Int)
+
+    @Query("DELETE FROM wallpaper_cache WHERE cacheKey = :cacheKey AND rowid NOT IN (SELECT rowid FROM wallpaper_cache WHERE cacheKey = :cacheKey ORDER BY cachedAt DESC LIMIT :maxEntries)")
+    suspend fun pruneCacheKey(cacheKey: String, maxEntries: Int)
+
     @Query("DELETE FROM wallpaper_cache")
     suspend fun clearAll()
 }
@@ -147,7 +160,7 @@ interface WallpaperHistoryDao {
     @Query("SELECT * FROM wallpaper_history ORDER BY appliedAt DESC LIMIT :limit")
     fun getRecent(limit: Int = 50): Flow<List<WallpaperHistoryEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entry: WallpaperHistoryEntity)
 
     @Query("DELETE FROM wallpaper_history WHERE historyId NOT IN (SELECT historyId FROM wallpaper_history ORDER BY appliedAt DESC LIMIT 100)")
@@ -188,12 +201,6 @@ interface CollectionDao {
 
     @Query("DELETE FROM wallpaper_collection_items WHERE collectionId = :collectionId")
     suspend fun deleteCollectionItems(collectionId: Long)
-
-    @Transaction
-    suspend fun deleteCollectionWithItems(collectionId: Long) {
-        deleteCollectionItems(collectionId)
-        deleteCollection(collectionId)
-    }
 
     @Query("SELECT EXISTS(SELECT 1 FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId)")
     suspend fun isInCollection(collectionId: Long, wallpaperId: String): Boolean

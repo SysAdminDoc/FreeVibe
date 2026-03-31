@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,16 +57,11 @@ class CollectionsViewModel @Inject constructor(
     fun selectCollection(id: Long) { _selectedCollectionId.value = id }
     fun clearSelection() { _selectedCollectionId.value = null }
 
-    fun selectWallpaper(item: WallpaperCollectionItemEntity) {
+    fun selectWallpaper(item: WallpaperCollectionItemEntity, items: List<WallpaperCollectionItemEntity>) {
+        val wallpapers = items.map { it.toWallpaper() }
         selectedContent.selectWallpaper(
-            Wallpaper(
-                id = item.wallpaperId,
-                source = try { ContentSource.valueOf(item.source) } catch (_: Exception) { ContentSource.WALLHAVEN },
-                thumbnailUrl = item.thumbnailUrl,
-                fullUrl = item.fullUrl,
-                width = item.width,
-                height = item.height,
-            )
+            item.toWallpaper(),
+            wallpapers,
         )
     }
 
@@ -141,6 +137,7 @@ fun CollectionsScreen(
         },
     ) { padding ->
         if (selectedCollectionId != null) {
+            BackHandler { viewModel.clearSelection() }
             // Collection detail: grid of wallpapers
             if (selectedItems.isEmpty()) {
                 Box(
@@ -179,11 +176,12 @@ fun CollectionsScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
                                     onClick = {
-                                        viewModel.selectWallpaper(item)
+                                        viewModel.selectWallpaper(item, selectedItems)
                                         onWallpaperClick(item.wallpaperId)
                                     },
                                     onLongClick = {
-                                        viewModel.removeItem(selectedCollectionId!!, item.wallpaperId)
+                                        val cid = selectedCollectionId ?: return@combinedClickable
+                                        viewModel.removeItem(cid, item.wallpaperId)
                                         scope.launch {
                                             snackbarHostState.showSnackbar("Removed from collection")
                                         }
@@ -247,6 +245,15 @@ fun CollectionsScreen(
         }
     }
 }
+
+private fun WallpaperCollectionItemEntity.toWallpaper() = Wallpaper(
+    id = wallpaperId,
+    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.WALLHAVEN },
+    thumbnailUrl = thumbnailUrl,
+    fullUrl = fullUrl,
+    width = width,
+    height = height,
+)
 
 @Composable
 private fun CollectionCard(
