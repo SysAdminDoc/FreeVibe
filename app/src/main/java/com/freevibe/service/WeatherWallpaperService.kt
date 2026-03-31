@@ -76,12 +76,33 @@ class WeatherWallpaperService : WallpaperService() {
         private fun loadWallpaperBitmap() {
             val prefs = getSharedPreferences("freevibe_weather_wp", MODE_PRIVATE)
             val path = prefs.getString("wallpaper_path", null) ?: return
-            try {
-                val file = java.io.File(path)
-                if (file.exists()) {
-                    wallpaperBitmap = BitmapFactory.decodeFile(path)
-                }
-            } catch (_: Exception) {}
+            Thread {
+                try {
+                    val file = java.io.File(path)
+                    if (!file.exists()) return@Thread
+                    val bmp = BitmapFactory.decodeFile(path) ?: return@Thread
+                    handler.post {
+                        val oldWallpaper = wallpaperBitmap
+                        val oldScaled = scaledBitmap
+                        wallpaperBitmap = bmp
+                        // Re-scale if surface dimensions are known
+                        val holder = surfaceHolder
+                        val rect = holder.surfaceFrame
+                        if (rect.width() > 0 && rect.height() > 0) {
+                            scaledBitmap = scaleBitmap(bmp, rect.width(), rect.height())
+                        } else {
+                            scaledBitmap = null
+                        }
+                        // Recycle old bitmaps — check identity to avoid double-recycle
+                        if (oldScaled != null && oldScaled !== oldWallpaper && oldScaled !== scaledBitmap) {
+                            oldScaled.recycle()
+                        }
+                        if (oldWallpaper != null && oldWallpaper !== bmp) {
+                            oldWallpaper.recycle()
+                        }
+                    }
+                } catch (_: Exception) {}
+            }.start()
         }
 
         private fun loadVfxFromPrefs() {
@@ -159,7 +180,7 @@ class WeatherWallpaperService : WallpaperService() {
             val cropH = targetH.coerceAtMost(scaled.height - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
                 Bitmap.createBitmap(scaled, x, y, cropW, cropH).also {
-                    if (scaled != src) scaled.recycle()
+                    if (scaled !== src) scaled.recycle()
                 }
             } else scaled
         }

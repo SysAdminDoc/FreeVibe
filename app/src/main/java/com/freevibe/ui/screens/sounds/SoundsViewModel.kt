@@ -7,6 +7,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.remote.toSound
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.FreesoundV2Repository
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
+import java.time.Year
 import javax.inject.Inject
 
 data class SoundsUiState(
@@ -43,6 +45,7 @@ data class SoundsUiState(
     val hasMore: Boolean = true,
     val selectedTab: SoundTab = SoundTab.RINGTONES,
     val playingId: String? = null,
+    val resolvingId: String? = null,
     val isApplying: Boolean = false,
     val applySuccess: String? = null,
     val filterKey: Int = 0,
@@ -94,7 +97,7 @@ class SoundsViewModel @Inject constructor(
     private var progressJob: Job? = null
     private var communityJob: Job? = null
 
-    private val titleBlocklist = Regex("hindi|telugu|pack", RegexOption.IGNORE_CASE)
+    private val titleBlocklist = Regex("hindi|telugu|pack|trending|popular|\\bnew\\b|\\btop\\b|\\bbest\\b", RegexOption.IGNORE_CASE)
     private val hasFreesoundV2Key = com.freevibe.BuildConfig.FREESOUND_API_KEY.isNotBlank()
     private val hasSoundCloudKey = com.freevibe.BuildConfig.SOUNDCLOUD_CLIENT_ID.isNotBlank()
 
@@ -107,7 +110,6 @@ class SoundsViewModel @Inject constructor(
     init {
         loadSounds()
         fetchTopHits()
-        loadCommunityUploads()
         // Sync playingId from AudioPlaybackManager
         viewModelScope.launch {
             audioPlaybackManager.currentSoundId.collect { soundId ->
@@ -127,11 +129,7 @@ class SoundsViewModel @Inject constructor(
                         .split(",").map { it.trim() }.filter { it.isNotBlank() }
                 } catch (_: Exception) { emptyList() }
 
-                val queries = listOf(
-                    "top songs this week 2026 ringtone",
-                    "billboard hot 100 this week ringtone 2026",
-                    "most popular songs right now ringtone 2026",
-                )
+                val queries = PreferencesManager.defaultTopHitQueries(Year.now().value)
                 val allHits = mutableListOf<Sound>()
                 val seenIds = mutableSetOf<String>()
                 for (q in queries) {
@@ -226,7 +224,7 @@ class SoundsViewModel @Inject constructor(
                             sem.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
-                                _cachedYtIds.value = _cachedYtIds.value + yt.id
+                                _cachedYtIds.update { it + yt.id }
                             } catch (_: Exception) {} finally { sem.release() }
                         }
                     }
@@ -275,7 +273,7 @@ class SoundsViewModel @Inject constructor(
                 )
                 _state.update { it.copy(sounds = listOf(sound), isLoading = false) }
                 youtubeRepo.getAudioPreviewUrl(videoId)?.let {
-                    _cachedYtIds.value = _cachedYtIds.value + "yt_$videoId"
+                    _cachedYtIds.update { it + "yt_$videoId" }
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = "Could not load video: ${e.message}") }
@@ -321,18 +319,51 @@ class SoundsViewModel @Inject constructor(
 
     fun selectSound(sound: Sound) { selectedContent.selectSound(sound) }
 
+    suspend fun resolveSound(id: String): Sound? {
+        selectedContent.selectedSound.value?.takeIf { it.id == id }?.let { return it }
+
+        _state.value.sounds.firstOrNull { it.id == id }?.let { return it }
+
+        _communityUploads.value.firstOrNull { it.id == id }?.let { return it }
+
+        _topHits.value.firstOrNull { it.id == id }?.let { return it }
+
+        listOf(
+            bundledContent.getRingtones(),
+            bundledContent.getNotifications(),
+            bundledContent.getAlarms(),
+        ).flatten().firstOrNull { it.id == id }?.let { return it }
+
+        favoritesRepo.getById(id)
+            ?.takeIf { it.type == "SOUND" }
+            ?.toSound()
+            ?.let { return it }
+
+        return null
+    }
+
+    suspend fun ensureSelectedSound(id: String): Boolean {
+        val resolved = resolveSound(id) ?: return false
+        selectedContent.selectSound(resolved)
+        return true
+    }
+
     fun togglePlayback(sound: Sound) {
         if (_state.value.playingId == sound.id) {
             stopPlayback()
+        } else if (sound.id == _state.value.resolvingId) {
+            _state.update { it.copy(resolvingId = null) }
         } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
             viewModelScope.launch {
-                _state.update { it.copy(playingId = sound.id) }
+                _state.update { it.copy(resolvingId = sound.id) }
                 val videoId = sound.id.removePrefix("yt_")
                 val url = youtubeRepo.getAudioPreviewUrl(videoId)
+                if (_state.value.resolvingId != sound.id) return@launch // user cancelled
                 if (url != null) {
+                    _state.update { it.copy(resolvingId = null) }
                     startPlayback(sound.copy(previewUrl = url))
                 } else {
-                    _state.update { it.copy(playingId = null, applySuccess = "Could not load audio") }
+                    _state.update { it.copy(resolvingId = null, error = "Could not load audio") }
                 }
             }
         } else {
@@ -392,13 +423,16 @@ class SoundsViewModel @Inject constructor(
     fun downloadSound(sound: Sound) {
         viewModelScope.launch {
             val dlUrl = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
-                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_")) ?: return@launch
+                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_")) ?: run {
+                    _state.update { it.copy(error = "Could not resolve audio stream URL") }
+                    return@launch
+                }
             } else sound.downloadUrl
             val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3").lowercase()
             downloadManager.downloadSound(
                 id = sound.id, url = dlUrl,
                 fileName = "Aura_${sound.name.take(40)}.$ext",
-                type = ContentType.RINGTONE,
+                type = currentDownloadType(),
             )
             _state.update { it.copy(applySuccess = "Download started") }
         }
@@ -419,7 +453,7 @@ class SoundsViewModel @Inject constructor(
     fun isFavorite(id: String): Flow<Boolean> = favoritesRepo.isFavorite(id)
 
     suspend fun loadSimilar(soundId: String): List<Sound> {
-        val sound = selectedContent.selectedSound.value ?: return emptyList()
+        val sound = resolveSound(soundId) ?: return emptyList()
         val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
             .filter { it.length > 2 }.take(4).joinToString(" ")
         if (keywords.isBlank()) return emptyList()
@@ -445,8 +479,18 @@ class SoundsViewModel @Inject constructor(
     fun clearError() = _state.update { it.copy(error = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
 
-    fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
-    fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
+    fun upvote(id: String) {
+        viewModelScope.launch {
+            try { voteRepo.upvote(id) }
+            catch (e: Exception) { _state.update { it.copy(error = e.message ?: "Failed to upvote") } }
+        }
+    }
+    fun downvote(id: String) {
+        viewModelScope.launch {
+            try { voteRepo.downvote(id) }
+            catch (e: Exception) { _state.update { it.copy(error = e.message ?: "Failed to downvote") } }
+        }
+    }
 
     override fun onCleared() {
         loadJob?.cancel(); progressJob?.cancel(); communityJob?.cancel()
@@ -463,13 +507,17 @@ class SoundsViewModel @Inject constructor(
         if (!loadMore) loadJob?.cancel()
         loadJob = viewModelScope.launch {
             val s = _state.value
+            val loadTab = s.selectedTab
             if (!isRefresh && !loadMore) {
                 _state.update { it.copy(isLoading = true, error = null) }
             } else if (loadMore) {
                 _state.update { it.copy(isLoadingMore = true) }
             }
 
-            // Show bundled content immediately while APIs load
+            val allResults = java.util.concurrent.CopyOnWriteArrayList<Sound>()
+            val seenIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+            // Show bundled content immediately while APIs load, and seed allResults so they survive flushToUi()
             if (!loadMore && !isRefresh) {
                 val bundled = when (s.selectedTab) {
                     SoundTab.RINGTONES -> bundledContent.getRingtones()
@@ -478,12 +526,10 @@ class SoundsViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 if (bundled.isNotEmpty()) {
+                    bundled.forEach { seenIds.add(it.id); allResults.add(it) }
                     _state.update { it.copy(sounds = bundled, isLoading = true) }
                 }
             }
-
-            val allResults = java.util.concurrent.CopyOnWriteArrayList<Sound>()
-            val seenIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
             fun addUnique(sound: Sound): Boolean {
                 if (titleBlocklist.containsMatchIn(sound.name)) return false
@@ -492,10 +538,9 @@ class SoundsViewModel @Inject constructor(
 
             fun flushToUi() {
                 _state.update { st ->
-                    val snapshot = allResults.toList().sortedByDescending { qualityScore(it) }
+                    val snapshot = allResults.toList().sortedByDescending { qualityScore(it, loadTab) }
                     st.copy(
                         sounds = if (loadMore) st.sounds + snapshot.filter { snd -> st.sounds.none { it.id == snd.id } } else snapshot,
-                        isLoading = false,
                     )
                 }
             }
@@ -529,7 +574,7 @@ class SoundsViewModel @Inject constructor(
                                             sem.acquire()
                                             try {
                                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
-                                                _cachedYtIds.value = _cachedYtIds.value + yt.id
+                                                _cachedYtIds.update { it + yt.id }
                                             } catch (_: Exception) {} finally { sem.release() }
                                         }
                                     }
@@ -593,7 +638,7 @@ class SoundsViewModel @Inject constructor(
                     }
                 }
 
-                val combined = allResults.toList().sortedByDescending { qualityScore(it) }
+                val combined = allResults.toList().sortedByDescending { qualityScore(it, loadTab) }
                 _state.update {
                     it.copy(
                         sounds = if (loadMore) it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } } else combined,
@@ -615,19 +660,20 @@ class SoundsViewModel @Inject constructor(
         val ytRingQ = prefs.ytSoundQueryRingtones.first()
         val ytNotifQ = prefs.ytSoundQueryNotifications.first()
         val ytAlarmQ = prefs.ytSoundQueryAlarms.first()
+        val currentYear = Year.now().value
 
         return when (s.selectedTab) {
             SoundTab.RINGTONES -> QuerySet(
                 listOf("ringtone melody phone ring", "ringtone tone music tune"),
-                listOf(ytRingQ, "best ringtone 2025 2026 phone"),
+                listOf(ytRingQ, "best ringtone $currentYear phone"),
             )
             SoundTab.NOTIFICATIONS -> QuerySet(
                 listOf("notification chime ding alert", "notification beep ping pop"),
-                listOf(ytNotifQ, "notification sound effect 2025 short"),
+                listOf(ytNotifQ, "notification sound effect $currentYear short"),
             )
             SoundTab.ALARMS -> QuerySet(
                 listOf("alarm clock morning wake", "alarm buzzer bell siren"),
-                listOf(ytAlarmQ, "alarm clock tone morning 2025"),
+                listOf(ytAlarmQ, "alarm clock tone morning $currentYear"),
             )
             SoundTab.YOUTUBE -> QuerySet(emptyList(), emptyList())
             SoundTab.COMMUNITY -> QuerySet(emptyList(), emptyList())
@@ -647,7 +693,13 @@ class SoundsViewModel @Inject constructor(
         SoundTab.SEARCH -> 0 to 60
     }
 
-    private fun qualityScore(sound: Sound): Int {
+    private fun currentDownloadType(tab: SoundTab = _state.value.selectedTab): ContentType = when (tab) {
+        SoundTab.NOTIFICATIONS -> ContentType.NOTIFICATION
+        SoundTab.ALARMS -> ContentType.ALARM
+        else -> ContentType.RINGTONE
+    }
+
+    private fun qualityScore(sound: Sound, tab: SoundTab = _state.value.selectedTab): Int {
         var score = 50
         score += when (sound.source) {
             ContentSource.BUNDLED -> 25
@@ -661,7 +713,7 @@ class SoundsViewModel @Inject constructor(
         if (name.contains("_") && !name.contains(" ")) score -= 20
         if (name.length in 6..59) score += 5
         if (name.matches(Regex("^\\d+.*"))) score -= 10
-        val idealRange = when (_state.value.selectedTab) {
+        val idealRange = when (tab) {
             SoundTab.RINGTONES -> 10.0..25.0
             SoundTab.NOTIFICATIONS -> 1.0..3.0
             SoundTab.ALARMS -> 10.0..30.0
@@ -677,25 +729,23 @@ class SoundsViewModel @Inject constructor(
 
     // -- Community Uploads --
 
-    private fun loadCommunityUploads() {
-        viewModelScope.launch {
-            try {
-                uploadRepo.getCommunityUploads(limit = 30).collect { sounds ->
-                    _communityUploads.value = sounds
-                }
-            } catch (_: Exception) {}
-        }
-    }
-
     private fun loadCommunityTab() {
         communityJob?.cancel()
         _state.update { it.copy(isLoading = true, error = null) }
         communityJob = viewModelScope.launch {
+            val timeoutJob = launch {
+                kotlinx.coroutines.delay(10_000L)
+                if (_state.value.isLoading) {
+                    _state.update { it.copy(isLoading = false, error = "Community uploads timed out") }
+                }
+            }
             try {
                 uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
+                    timeoutJob.cancel()
                     _state.update { it.copy(sounds = sounds, isLoading = false, hasMore = false) }
                 }
             } catch (e: Exception) {
+                timeoutJob.cancel()
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }
@@ -707,6 +757,7 @@ class SoundsViewModel @Inject constructor(
         category: String,
         tags: List<String> = emptyList(),
     ) {
+        if (_state.value.isUploading) return
         viewModelScope.launch {
             _state.update { it.copy(isUploading = true, uploadProgress = 0f) }
             uploadRepo.uploadSound(

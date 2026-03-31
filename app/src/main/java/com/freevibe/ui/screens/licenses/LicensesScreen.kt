@@ -104,7 +104,9 @@ private fun LicenseCard(lic: OssLicense) {
     val context = LocalContext.current
     Surface(
         onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(lic.url)))
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(lic.url)))
+            } catch (_: Exception) {}
         },
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(12.dp),

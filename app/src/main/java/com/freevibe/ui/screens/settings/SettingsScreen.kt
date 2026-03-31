@@ -1,10 +1,14 @@
 package com.freevibe.ui.screens.settings
 
+import android.Manifest
 import android.app.WallpaperManager
 import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -23,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,12 +67,16 @@ class SettingsViewModel @Inject constructor(
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
-    val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,Amoledbackgrounds,MobileWallpaper")
+    val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,MobileWallpaper,MinimalWallpaper")
     val preferredRes = prefs.preferredResolution.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
-    val ytRingtonesQuery = prefs.ytSoundQueryRingtones.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "best ringtone 2025 2026 download")
-    val ytNotificationsQuery = prefs.ytSoundQueryNotifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "notification sound effect chime beep")
-    val ytAlarmsQuery = prefs.ytSoundQueryAlarms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "alarm tone clock buzzer wake up")
+    val ytRingtonesQuery = prefs.ytSoundQueryRingtones.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultRingtoneQuery())
+    val ytNotificationsQuery = prefs.ytSoundQueryNotifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultNotificationQuery())
+    val ytAlarmsQuery = prefs.ytSoundQueryAlarms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultAlarmQuery())
     val ytBlockedWords = prefs.ytSoundBlockedWords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "compilation,mix,playlist,ranked,tier list,reaction,review,tutorial,how to,podcast,interview,live stream,part,episode")
+    val videoFpsLimit = prefs.videoFpsLimit.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+    val wallhavenApiKey = prefs.wallhavenApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val pexelsApiKey = prefs.pexelsApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val pixabayApiKey = prefs.pixabayApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun setYtRingtonesQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryRingtones(q) }
     fun setYtNotificationsQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryNotifications(q) }
@@ -81,7 +91,7 @@ class SettingsViewModel @Inject constructor(
     fun setAutoWallpaper(enabled: Boolean) = viewModelScope.launch {
         prefs.setAutoWallpaperEnabled(enabled)
         if (enabled) {
-            AutoWallpaperWorker.schedule(context, autoWpInterval.value)
+            AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
         } else {
             AutoWallpaperWorker.cancel(context)
         }
@@ -90,7 +100,7 @@ class SettingsViewModel @Inject constructor(
     fun setAutoWpInterval(hours: Long) = viewModelScope.launch {
         prefs.setAutoWallpaperInterval(hours)
         if (autoWpEnabled.value) {
-            AutoWallpaperWorker.schedule(context, hours)
+            AutoWallpaperWorker.schedule(context, hours * 60)
         }
     }
 
@@ -230,6 +240,42 @@ fun SettingsScreen(
     val weatherEffects by viewModel.weatherEffects.collectAsState()
     val adaptiveTint by viewModel.adaptiveTint.collectAsState()
     val darkModeSwitch by viewModel.darkModeSwitch.collectAsState()
+    val videoFpsLimit by viewModel.videoFpsLimit.collectAsState()
+    val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsState()
+    val pexelsApiKey by viewModel.pexelsApiKey.collectAsState()
+    val pixabayApiKey by viewModel.pixabayApiKey.collectAsState()
+    var dailyWp by remember {
+        mutableStateOf(
+            context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+                .getBoolean("daily_wallpaper_enabled", false)
+        )
+    }
+
+    fun setDailyWallpaperEnabled(enabled: Boolean) {
+        dailyWp = enabled
+        context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+            .edit().putBoolean("daily_wallpaper_enabled", enabled).apply()
+        if (enabled) DailyWallpaperWorker.schedule(context)
+        else DailyWallpaperWorker.cancel(context)
+    }
+
+    fun enableWeatherEffects() {
+        viewModel.setWeatherEffects(true)
+        WeatherUpdateWorker.schedule(context)
+    }
+
+    fun openNotificationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            }
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+        }
+        context.startActivity(intent)
+    }
 
     // Video wallpaper picker
     val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -245,6 +291,25 @@ fun SettingsScreen(
                 )
             }
             try { context.startActivity(intent) } catch (_: Exception) {}
+        }
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            setDailyWallpaperEnabled(true)
+        } else {
+            setDailyWallpaperEnabled(false)
+            openNotificationSettings()
+        }
+    }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            enableWeatherEffects()
+        } else {
+            viewModel.setWeatherEffects(false)
         }
     }
 
@@ -445,16 +510,23 @@ fun SettingsScreen(
 
         // Smart Features
         SettingsSection("Smart Features") {
-            var dailyWp by remember { mutableStateOf(false) }
             SettingsToggle(
                 icon = Icons.Default.Today,
                 title = "Daily wallpaper",
                 subtitle = "Get a daily wallpaper recommendation notification",
                 checked = dailyWp,
                 onCheckedChange = {
-                    dailyWp = it
-                    if (it) DailyWallpaperWorker.schedule(context)
-                    else DailyWallpaperWorker.cancel(context)
+                    if (!it) {
+                        setDailyWallpaperEnabled(false)
+                    } else if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                        setDailyWallpaperEnabled(false)
+                        openNotificationSettings()
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        setDailyWallpaperEnabled(true)
+                    }
                 },
             )
             SettingsToggle(
@@ -470,9 +542,14 @@ fun SettingsScreen(
                 subtitle = "Rain, snow, fog overlay based on real weather",
                 checked = weatherEffects,
                 onCheckedChange = {
-                    viewModel.setWeatherEffects(it)
-                    if (it) WeatherUpdateWorker.schedule(context)
-                    else WeatherUpdateWorker.cancel(context)
+                    if (!it) {
+                        viewModel.setWeatherEffects(false)
+                        WeatherUpdateWorker.cancel(context)
+                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        enableWeatherEffects()
+                    } else {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    }
                 },
             )
             SettingsToggle(
@@ -497,6 +574,12 @@ fun SettingsScreen(
                     "BUBBLES" to "Bubbles", "LEAVES" to "Autumn leaves",
                     "SPARKLES" to "Sparkles",
                 )
+                var currentVfx by remember {
+                    mutableStateOf(
+                        context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+                            .getString("vfx_effect", "NONE") ?: "NONE"
+                    )
+                }
                 AlertDialog(
                     onDismissRequest = { showVfxPicker = false },
                     title = { Text("Decorative overlay") },
@@ -504,7 +587,8 @@ fun SettingsScreen(
                         Column {
                             effects.forEach { (key, label) ->
                                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = false, onClick = {
+                                    RadioButton(selected = currentVfx == key, onClick = {
+                                        currentVfx = key
                                         context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
                                             .edit().putString("vfx_effect", key).apply()
                                         showVfxPicker = false
@@ -587,7 +671,7 @@ fun SettingsScreen(
                         Column {
                             listOf(15 to "15 FPS (battery saver)", 30 to "30 FPS (balanced)", 60 to "60 FPS (smooth)").forEach { (fps, label) ->
                                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = false, onClick = {
+                                    RadioButton(selected = videoFpsLimit == fps, onClick = {
                                         viewModel.setVideoFpsLimit(fps)
                                         showFpsPicker = false
                                     })
@@ -612,7 +696,7 @@ fun SettingsScreen(
                 onClick = { showWallhavenKey = true },
             )
             if (showWallhavenKey) {
-                var keyText by remember { mutableStateOf("") }
+                var keyText by remember { mutableStateOf(wallhavenApiKey) }
                 AlertDialog(
                     onDismissRequest = { showWallhavenKey = false },
                     title = { Text("Wallhaven API Key") },
@@ -634,7 +718,7 @@ fun SettingsScreen(
                 onClick = { showPexelsKey = true },
             )
             if (showPexelsKey) {
-                var keyText by remember { mutableStateOf("") }
+                var keyText by remember { mutableStateOf(pexelsApiKey) }
                 AlertDialog(
                     onDismissRequest = { showPexelsKey = false },
                     title = { Text("Pexels API Key") },
@@ -669,7 +753,7 @@ fun SettingsScreen(
                 onClick = { showPixabayKey = true },
             )
             if (showPixabayKey) {
-                var keyText by remember { mutableStateOf("") }
+                var keyText by remember { mutableStateOf(pixabayApiKey) }
                 AlertDialog(
                     onDismissRequest = { showPixabayKey = false },
                     title = { Text("Pixabay API Key") },
@@ -708,8 +792,8 @@ fun SettingsScreen(
             )
             SettingsItem(
                 icon = Icons.Default.Folder,
-                title = "Clear cache",
-                subtitle = "Using ${viewModel.getCacheSize()}",
+                title = "Clear cache and offline saves",
+                subtitle = "Using ${viewModel.getCacheSize()} of temporary files and offline favorites",
                 onClick = { showClearCacheConfirm = true },
             )
         }
@@ -719,7 +803,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Aura",
-                subtitle = "v5.2.0 - Open source device personalization",
+                subtitle = "v${com.freevibe.BuildConfig.VERSION_NAME} - Open source device personalization",
                 onClick = {},
             )
             SettingsItem(
@@ -727,7 +811,9 @@ fun SettingsScreen(
                 title = "Source code",
                 subtitle = "github.com/SysAdminDoc/Aura",
                 onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/Aura")))
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/Aura")))
+                    } catch (_: Exception) {}
                 },
             )
             SettingsItem(
@@ -846,7 +932,7 @@ fun SettingsScreen(
                         value = subsText,
                         onValueChange = { subsText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("wallpapers,Amoledbackgrounds,...") },
+                        placeholder = { Text("wallpapers,MobileWallpaper,...") },
                         singleLine = false,
                         maxLines = 3,
                     )
@@ -932,8 +1018,8 @@ fun SettingsScreen(
     if (showClearCacheConfirm) {
         AlertDialog(
             onDismissRequest = { showClearCacheConfirm = false },
-            title = { Text("Clear cache?") },
-            text = { Text("This will free ${viewModel.getCacheSize()} by removing cached images and offline favorites. Downloaded files are not affected.") },
+            title = { Text("Clear cache and offline saves?") },
+            text = { Text("This will free ${viewModel.getCacheSize()} by removing cached images, temporary media, and offline favorites. Downloaded files are not affected.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCache()

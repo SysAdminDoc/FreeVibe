@@ -21,8 +21,9 @@ import javax.inject.Singleton
 class AudioPlaybackManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private var controllerFuture: ListenableFuture<MediaController>? = null
-    private var controller: MediaController? = null
+    @Volatile private var controllerFuture: ListenableFuture<MediaController>? = null
+    @Volatile private var controller: MediaController? = null
+    @Volatile private var stopped = false
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -53,6 +54,10 @@ class AudioPlaybackManager @Inject constructor(
     private fun ensureConnected(onReady: (MediaController) -> Unit) {
         controller?.let { if (it.isConnected) { onReady(it); return } }
 
+        // Release old controller/future before creating new ones
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controller?.removeListener(playerListener)
+
         try {
             val token = SessionToken(
                 context,
@@ -61,6 +66,7 @@ class AudioPlaybackManager @Inject constructor(
             controllerFuture = MediaController.Builder(context, token).buildAsync().also { future ->
                 future.addListener({
                     try {
+                        if (stopped) return@addListener
                         val mc = future.get()
                         controller = mc
                         mc.addListener(playerListener)
@@ -78,6 +84,7 @@ class AudioPlaybackManager @Inject constructor(
     }
 
     fun play(sound: Sound, url: String, volume: Float = 1f) {
+        stopped = false
         ensureConnected { mc ->
             val mediaItem = MediaItem.Builder()
                 .setUri(url)
@@ -110,6 +117,7 @@ class AudioPlaybackManager @Inject constructor(
     }
 
     fun stop() {
+        stopped = true
         controller?.apply {
             stop()
             clearMediaItems()

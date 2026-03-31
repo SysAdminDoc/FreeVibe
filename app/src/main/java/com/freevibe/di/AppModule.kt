@@ -2,9 +2,8 @@ package com.freevibe.di
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.freevibe.data.local.CollectionDao
+import com.freevibe.data.local.DatabaseMigrations
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.local.FavoriteDao
 import com.freevibe.data.local.FreeVibeDatabase
@@ -54,7 +53,7 @@ object AppModule {
         }
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .header("User-Agent", "Aura/5.2.0 (Android; Open Source)")
+                .header("User-Agent", "Aura/5.4.0 (Android; Open Source)")
                 .build()
             chain.proceed(request)
         }
@@ -169,70 +168,11 @@ object AppModule {
 
     // -- Database --
 
-    // Migrations preserve user data (favorites, downloads, history) across schema changes.
-    // v1→2: Added wallpaper_cache + wallpaper_history tables
-    // v2→3: Added ia_audio_cache table
-    private val MIGRATION_1_2 = object : Migration(1, 2) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_cache` (`id` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `category` TEXT NOT NULL DEFAULT '', `tags` TEXT NOT NULL DEFAULT '', `fileSize` INTEGER NOT NULL DEFAULT 0, `fileType` TEXT NOT NULL DEFAULT '', `uploaderName` TEXT NOT NULL DEFAULT '', `cacheKey` TEXT NOT NULL DEFAULT '', `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))")
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_history` (`historyId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `wallpaperId` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `target` TEXT NOT NULL DEFAULT 'BOTH', `appliedAt` INTEGER NOT NULL DEFAULT 0)")
-        }
-    }
-
-    private val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `ia_audio_cache` (`identifier` TEXT NOT NULL, `audioUrl` TEXT NOT NULL, `duration` REAL NOT NULL DEFAULT 0.0, `fileSize` INTEGER NOT NULL DEFAULT 0, `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`identifier`))")
-        }
-    }
-
-    private val MIGRATION_3_4 = object : Migration(3, 4) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collections` (`collectionId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL DEFAULT 0)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collection_items` (`collectionId` INTEGER NOT NULL, `wallpaperId` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `source` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `addedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `wallpaperId`))")
-        }
-    }
-
-    // v4→5: Composite PK for search_history (query+type) and wallpaper_cache (id+cacheKey)
-    private val MIGRATION_4_5 = object : Migration(4, 5) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            // Rebuild search_history with composite PK (query, type)
-            db.execSQL("CREATE TABLE IF NOT EXISTS `search_history_new` (`query` TEXT NOT NULL, `type` TEXT NOT NULL, `timestamp` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`query`, `type`))")
-            db.execSQL("INSERT OR IGNORE INTO `search_history_new` SELECT `query`, `type`, `timestamp` FROM `search_history`")
-            db.execSQL("DROP TABLE `search_history`")
-            db.execSQL("ALTER TABLE `search_history_new` RENAME TO `search_history`")
-
-            // Rebuild wallpaper_cache with composite PK (id, cacheKey)
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_cache_new` (`id` TEXT NOT NULL, `source` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `category` TEXT NOT NULL DEFAULT '', `tags` TEXT NOT NULL DEFAULT '', `fileSize` INTEGER NOT NULL DEFAULT 0, `fileType` TEXT NOT NULL DEFAULT '', `uploaderName` TEXT NOT NULL DEFAULT '', `cacheKey` TEXT NOT NULL DEFAULT '', `cachedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`, `cacheKey`))")
-            db.execSQL("INSERT OR IGNORE INTO `wallpaper_cache_new` SELECT `id`, `source`, `thumbnailUrl`, `fullUrl`, `width`, `height`, `category`, `tags`, `fileSize`, `fileType`, `uploaderName`, `cacheKey`, `cachedAt` FROM `wallpaper_cache`")
-            db.execSQL("DROP TABLE `wallpaper_cache`")
-            db.execSQL("ALTER TABLE `wallpaper_cache_new` RENAME TO `wallpaper_cache`")
-        }
-    }
-
-    // v5→6: Add ForeignKey + index on wallpaper_collection_items.collectionId
-    private val MIGRATION_5_6 = object : Migration(5, 6) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `wallpaper_collection_items_new` (`collectionId` INTEGER NOT NULL, `wallpaperId` TEXT NOT NULL, `thumbnailUrl` TEXT NOT NULL, `fullUrl` TEXT NOT NULL, `source` TEXT NOT NULL, `width` INTEGER NOT NULL DEFAULT 0, `height` INTEGER NOT NULL DEFAULT 0, `addedAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`collectionId`, `wallpaperId`), FOREIGN KEY(`collectionId`) REFERENCES `wallpaper_collections`(`collectionId`) ON DELETE CASCADE)")
-            db.execSQL("INSERT OR IGNORE INTO `wallpaper_collection_items_new` SELECT `collectionId`, `wallpaperId`, `thumbnailUrl`, `fullUrl`, `source`, `width`, `height`, `addedAt` FROM `wallpaper_collection_items`")
-            db.execSQL("DROP TABLE `wallpaper_collection_items`")
-            db.execSQL("ALTER TABLE `wallpaper_collection_items_new` RENAME TO `wallpaper_collection_items`")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallpaper_collection_items_collectionId` ON `wallpaper_collection_items` (`collectionId`)")
-        }
-    }
-
-    // v6→7: Drop ia_audio_cache table (Internet Archive removed)
-    private val MIGRATION_6_7 = object : Migration(6, 7) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("DROP TABLE IF EXISTS `ia_audio_cache`")
-        }
-    }
-
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FreeVibeDatabase =
         Room.databaseBuilder(context, FreeVibeDatabase::class.java, "freevibe.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-            .fallbackToDestructiveMigrationOnDowngrade()
+            .addMigrations(*DatabaseMigrations.ALL_MIGRATIONS)
             .build()
 
     @Provides

@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -36,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
+import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.SearchHistoryDropdown
 import kotlin.math.sin
 
@@ -52,6 +55,7 @@ fun SoundsScreen(
     val topHits by viewModel.topHits.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+    LaunchedEffect(state.query) { searchQuery = state.query }
     var showSearchHistory by remember { mutableStateOf(false) }
     var quickApplySound by remember { mutableStateOf<Sound?>(null) }
     val focusManager = LocalFocusManager.current
@@ -106,116 +110,140 @@ fun SoundsScreen(
         floatingActionButton = {
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SmallFloatingActionButton(
                     onClick = { audioPickerLauncher.launch("audio/*") },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 ) {
-                    Icon(Icons.Default.Upload, "Upload Sound")
+                    Icon(Icons.Default.Upload, "Upload Sound", modifier = Modifier.size(20.dp))
                 }
-                ExtendedFloatingActionButton(
+                SmallFloatingActionButton(
                     onClick = onCreateRingtone,
-                    icon = { Icon(Icons.Default.ContentCut, null) },
-                    text = { Text("Create") },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                ) {
+                    Icon(Icons.Default.ContentCut, "Create Sound", modifier = Modifier.size(20.dp))
+                }
             }
         },
     ) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
-            // Search bar
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
-                    modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            if (isYouTubeTab) "Search YouTube or paste URL..."
-                            else "Search sounds..."
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
-                            null,
-                            tint = if (isYouTubeTab) Color(0xFFFF0000) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = {
-                                searchQuery = ""; showSearchHistory = false; focusManager.clearFocus()
-                            }) { Icon(Icons.Default.Clear, "Clear") }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        if (searchQuery.isNotBlank()) {
-                            if (isYouTubeTab && isYouTubeUrl(searchQuery)) {
-                                viewModel.importYouTubeUrl(searchQuery)
-                            } else if (isYouTubeTab) {
-                                viewModel.searchYouTube(searchQuery)
-                            } else {
-                                viewModel.search(searchQuery)
-                            }
-                        }
-                        showSearchHistory = false; focusManager.clearFocus()
-                    }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = Color.Transparent,
-                    ),
-                )
-            }
-
-            // Search history dropdown
-            if (showSearchHistory && searchQuery.isEmpty() && recentSearches.isNotEmpty()) {
-                SearchHistoryDropdown(
-                    recentQueries = recentSearches, isVisible = true,
-                    onQueryClick = {
-                        searchQuery = it
-                        if (isYouTubeTab) viewModel.searchYouTube(it) else viewModel.search(it)
-                        showSearchHistory = false; focusManager.clearFocus()
-                    },
-                    onDeleteQuery = { viewModel.removeSearch(it) },
-                    onClearAll = { viewModel.clearSearchHistory() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                )
-            }
-
-            // Tab row
             val visibleTabs = SoundTab.entries.filter {
                 it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
             }
-            key(visibleTabs.size) {
-                ScrollableTabRow(
-                    selectedTabIndex = visibleTabs.indexOf(state.selectedTab).coerceAtLeast(0),
-                    containerColor = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    edgePadding = 16.dp, divider = {},
-                ) {
-                    visibleTabs.forEach { tab ->
-                        Tab(
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = if (isYouTubeTab) "YouTube Import" else "Sounds",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(12.dp))
+
+                Box {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(
+                                if (isYouTubeTab) "Search YouTube or paste URL..."
+                                else "Search sounds, artists, moods"
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
+                                null,
+                                tint = if (isYouTubeTab) Color(0xFFFF6A5B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    showSearchHistory = false
+                                    focusManager.clearFocus()
+                                    if (state.selectedTab == SoundTab.SEARCH || state.selectedTab == SoundTab.YOUTUBE) {
+                                        viewModel.selectTab(SoundTab.RINGTONES)
+                                    }
+                                }) { Icon(Icons.Default.Clear, "Clear") }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(20.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            if (searchQuery.isNotBlank()) {
+                                if (isYouTubeTab && isYouTubeUrl(searchQuery)) {
+                                    viewModel.importYouTubeUrl(searchQuery)
+                                } else if (isYouTubeTab) {
+                                    viewModel.searchYouTube(searchQuery)
+                                } else {
+                                    viewModel.search(searchQuery)
+                                }
+                            }
+                            showSearchHistory = false
+                            focusManager.clearFocus()
+                        }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        ),
+                    )
+                    SearchHistoryDropdown(
+                        recentQueries = recentSearches,
+                        isVisible = showSearchHistory && searchQuery.isEmpty(),
+                        onQueryClick = {
+                            searchQuery = it
+                            if (isYouTubeTab) viewModel.searchYouTube(it) else viewModel.search(it)
+                            showSearchHistory = false
+                            focusManager.clearFocus()
+                        },
+                        onDeleteQuery = { viewModel.removeSearch(it) },
+                        onClearAll = { viewModel.clearSearchHistory() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 60.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(visibleTabs, key = { it.name }) { tab ->
+                        FilterChip(
                             selected = state.selectedTab == tab,
                             onClick = { viewModel.selectTab(tab) },
-                            text = {
+                            label = {
                                 Text(
                                     tab.name.lowercase().replaceFirstChar { it.uppercase() },
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                             },
+                            leadingIcon = if (state.selectedTab == tab) {
+                                { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                            } else null,
+                            shape = RoundedCornerShape(18.dp),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = state.selectedTab == tab,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                selectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                                disabledBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f),
+                                disabledSelectedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            ),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            ),
                         )
                     }
                 }
@@ -296,6 +324,7 @@ private fun SoundsList(
 
     LazyColumn(
         state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -307,7 +336,7 @@ private fun SoundsList(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(vertical = 8.dp),
                 ) {
-                    Icon(Icons.Default.TrendingUp, null, Modifier.size(20.dp), tint = Color(0xFFFF4444))
+                    Icon(Icons.AutoMirrored.Filled.TrendingUp, null, Modifier.size(20.dp), tint = Color(0xFFFF4444))
                     Text("Top 5 This Week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
@@ -372,8 +401,6 @@ private fun SoundsList(
             }
         }
 
-        // Bottom spacer for FAB
-        item(key = "bottom_spacer") { Spacer(Modifier.height(80.dp)) }
     }
 }
 
@@ -391,11 +418,17 @@ private fun SoundCard(
     onPlayClick: () -> Unit,
 ) {
     Surface(
-        color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent,
-        shape = RoundedCornerShape(12.dp),
+        color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(
+            1.dp,
+            if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
+        ),
+        shadowElevation = if (isPlaying) 12.dp else 6.dp,
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress),
     ) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 14.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -428,29 +461,30 @@ private fun SoundCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         sound.name,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(Modifier.height(4.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Source badge
                         if (sound.source == ContentSource.BUNDLED) {
-                            Surface(color = Color(0xFFFFB300).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+                            Surface(color = Color(0xFFFFB300).copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
                                 Text("Aura Picks", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
                             }
                         } else if (sound.source == ContentSource.YOUTUBE) {
-                            Surface(color = Color(0xFFFF0000).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                            Surface(color = Color(0xFFFF0000).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
                                 Text("YT", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF0000))
                             }
                         } else if (sound.source == ContentSource.SOUNDCLOUD) {
-                            Surface(color = Color(0xFFFF5500).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                            Surface(color = Color(0xFFFF5500).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
                                 Text("SC", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF5500))
                             }
                         } else if (sound.source == ContentSource.COMMUNITY) {
-                            Surface(color = Color(0xFF4CAF50).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                            Surface(color = Color(0xFF4CAF50).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
                                 Text("Community", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
                             }
                         }
@@ -562,8 +596,9 @@ private fun QuickApplyRow(label: String, icon: androidx.compose.ui.graphics.vect
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        color = Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
