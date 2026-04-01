@@ -97,6 +97,7 @@ class WallpaperCropViewModel @Inject constructor(
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
                         val bytes = response.body?.bytes() ?: throw Exception("Empty body")
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            ?: throw Exception("Failed to decode image")
                     }
                 }
                 // Don't recycle old bitmap — Compose rendering pipeline may still reference it.
