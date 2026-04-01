@@ -63,11 +63,14 @@ class WallpaperEditorViewModelTest {
 
     @Test
     fun `resetAll restores default filter values`() = runTest {
-        // Modify some values first (without a bitmap, applyFilters is a no-op)
         viewModel.state.test {
             awaitItem() // initial
 
-            // resetAll should restore defaults
+            // Change a value first so resetAll produces a new emission
+            viewModel.updateBrightness(50f)
+            val modified = awaitItem()
+            assertEquals(50f, modified.brightness)
+
             viewModel.resetAll()
             val state = awaitItem()
             assertEquals(0f, state.brightness)

@@ -32,9 +32,9 @@ class DownloadsViewModelTest {
     private lateinit var viewModel: DownloadsViewModel
 
     private val sampleDownloads = listOf(
-        DownloadEntity(id = "1", name = "Sunset", type = "WALLPAPER", localPath = "/path/sunset.jpg", downloadedAt = 1000L),
-        DownloadEntity(id = "2", name = "Bell", type = "SOUND", localPath = "/path/bell.mp3", downloadedAt = 2000L),
-        DownloadEntity(id = "3", name = "Mountains", type = "WALLPAPER", localPath = "/path/mountains.jpg", downloadedAt = 3000L),
+        DownloadEntity(id = "1", source = "WALLHAVEN", name = "Sunset", type = "WALLPAPER", localPath = "/path/sunset.jpg", downloadedAt = 1000L),
+        DownloadEntity(id = "2", source = "FREESOUND", name = "Bell", type = "SOUND", localPath = "/path/bell.mp3", downloadedAt = 2000L),
+        DownloadEntity(id = "3", source = "PIXABAY", name = "Mountains", type = "WALLPAPER", localPath = "/path/mountains.jpg", downloadedAt = 3000L),
     )
 
     @Before
