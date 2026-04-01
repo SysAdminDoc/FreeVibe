@@ -86,9 +86,10 @@ class DualWallpaperService @Inject constructor(
         val response = okHttpClient.newCall(request).execute()
         return response.use { resp ->
             if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
-            resp.body?.byteStream()?.use { stream ->
+            val body = resp.body ?: throw IllegalStateException("Empty response body")
+            body.byteStream().use { stream ->
                 BitmapFactory.decodeStream(stream)
-            } ?: throw IllegalStateException("Empty body")
-        } ?: throw IllegalStateException("Failed to decode image")
+            } ?: throw IllegalStateException("Failed to decode image")
+        }
     }
 }

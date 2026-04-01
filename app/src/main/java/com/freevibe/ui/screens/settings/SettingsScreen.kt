@@ -174,8 +174,9 @@ class SettingsViewModel @Inject constructor(
     fun setVideoWallpaperPath(uri: Uri) {
         val path = try {
             val inputStream = context.contentResolver.openInputStream(uri)
+                ?: return
             val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
-            inputStream?.use { input ->
+            inputStream.use { input ->
                 cacheFile.outputStream().use { output -> input.copyTo(output) }
             }
             cacheFile.absolutePath
