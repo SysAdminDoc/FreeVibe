@@ -28,6 +28,7 @@ class WeatherParticleRenderer(
     private val rainPaint = Paint().apply { strokeWidth = 2f; isAntiAlias = true }
     private val snowPaint = Paint().apply { isAntiAlias = true }
     private val fogPaint = Paint().apply { isAntiAlias = true }
+    private val starPaint = Paint().apply { isAntiAlias = true }
     private val flashPaint = Paint()
 
     data class Particle(
@@ -170,7 +171,6 @@ class WeatherParticleRenderer(
 
     private fun drawStars(canvas: Canvas) {
         // Static twinkling stars for clear night with per-star phase offset
-        val starPaint = Paint().apply { isAntiAlias = true }
         val seed = 12345L
         val rng = Random(seed)
         repeat(30) {

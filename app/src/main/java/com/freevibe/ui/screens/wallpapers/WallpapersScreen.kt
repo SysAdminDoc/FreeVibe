@@ -317,7 +317,7 @@ fun WallpapersScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = state.errorSource?.let { "Failed to load from ${it.lowercase()}" }
+                                text = state.errorSource?.let { "Failed to load from ${it.lowercase(java.util.Locale.ROOT)}" }
                                     ?: "Something went wrong",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.error,
