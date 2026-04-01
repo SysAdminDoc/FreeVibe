@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <!-- Stylized "A" shape matching the Aura brand — a mountain/aurora silhouette -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,2L3,20h4l1.5,-3h7l1.5,3h4L12,2zM10.5,15L12,11l1.5,4h-3z"/>
+</vector>
