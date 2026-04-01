@@ -61,16 +61,27 @@ class UploadRepository @Inject constructor(
             throw IllegalArgumentException("File too large (max 20MB)")
         }
 
-        // Validate audio MIME type
+        // Validate audio MIME type — strict whitelist
         val fileMime = context.contentResolver.getType(localUri) ?: ""
-        if (fileMime.isNotBlank() && !fileMime.startsWith("audio/")) {
-            throw IllegalArgumentException("Only audio files are supported")
+        val allowedMimes = setOf(
+            "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
+            "audio/ogg", "audio/flac", "audio/aac", "audio/mp4",
+            "audio/x-m4a", "audio/m4a",
+        )
+        if (fileMime.isNotBlank() && fileMime !in allowedMimes) {
+            throw IllegalArgumentException("Unsupported audio format: $fileMime")
+        }
+
+        // Validate name length
+        val sanitizedName = name.trim().take(100)
+        if (sanitizedName.isBlank()) {
+            throw IllegalArgumentException("Sound name cannot be empty")
         }
 
         val timestamp = System.currentTimeMillis()
         val uploaderId = identityProvider.ensureSignedIn()
         val uploaderLabel = identityProvider.currentUploaderLabel()
-        val uploadInfo = resolveUploadFileInfo(localUri, name)
+        val uploadInfo = resolveUploadFileInfo(localUri, sanitizedName)
         val storagePath = "sounds/$uploaderId/${timestamp}_${uploadInfo.baseName}.${uploadInfo.extension}"
         val storageRef = storageInstance.reference.child(storagePath)
 
@@ -88,7 +99,7 @@ class UploadRepository @Inject constructor(
         // Write metadata to RTDB
         val pushRef = uploadsRefInstance.push()
         val metadata = mapOf(
-            "name" to name,
+            "name" to sanitizedName,
             "category" to category,
             "tags" to tags,
             "downloadUrl" to downloadUrl,

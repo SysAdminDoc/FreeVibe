@@ -51,7 +51,7 @@ data class Sound(
 
 // -- Favorites (Room entity) --
 
-@Entity(tableName = "favorites", indices = [Index("type")])
+@Entity(tableName = "favorites", indices = [Index("type"), Index("addedAt"), Index("type", "addedAt")])
 data class FavoriteEntity(
     @PrimaryKey val id: String,
     val source: String,
@@ -77,7 +77,7 @@ data class FavoriteEntity(
 
 // -- Download history (Room entity) --
 
-@Entity(tableName = "downloads", indices = [Index("type")])
+@Entity(tableName = "downloads", indices = [Index("type"), Index("downloadedAt")])
 data class DownloadEntity(
     @PrimaryKey val id: String,
     val source: String,
@@ -137,7 +137,7 @@ data class WallpaperCacheEntity(
 
 // -- Wallpaper history (#11) --
 
-@Entity(tableName = "wallpaper_history")
+@Entity(tableName = "wallpaper_history", indices = [Index("appliedAt")])
 data class WallpaperHistoryEntity(
     @PrimaryKey(autoGenerate = true) val historyId: Long = 0,
     val wallpaperId: String,
