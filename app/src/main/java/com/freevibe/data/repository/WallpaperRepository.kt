@@ -6,6 +6,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.remote.bing.BingDailyApi
+import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.toWallpaper
@@ -23,11 +24,13 @@ class WallpaperRepository @Inject constructor(
     private val picsumApi: PicsumApi,
     private val bingApi: BingDailyApi,
     private val pixabayApi: PixabayApi,
+    private val pexelsApi: PexelsApi,
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
 ) {
     private suspend fun wallhavenApiKey(): String = prefs.wallhavenApiKey.first()
     private suspend fun pixabayApiKey(): String = prefs.pixabayApiKey.first()
+    private suspend fun pexelsApiKey(): String = prefs.pexelsApiKey.first()
 
     private suspend fun wallhavenPurity(): String {
         val key = wallhavenApiKey()
@@ -220,6 +223,33 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchPixabay(query: String, page: Int = 1) =
         getPixabay(page = page, query = query)
 
+    // -- Pexels curated photos --
+
+    suspend fun getPexelsCurated(page: Int = 1): SearchResult<Wallpaper> {
+        val key = pexelsApiKey()
+        if (key.isBlank()) return SearchResult(emptyList(), 0, 1, false)
+        return withCacheFallback("pexels_curated_$page", ContentSource.PEXELS) {
+            val response = pexelsApi.curatedPhotos(apiKey = key, page = page)
+            SearchResult(
+                items = response.photos.map { photo ->
+                    Wallpaper(
+                        id = "px_${photo.id}",
+                        source = ContentSource.PEXELS,
+                        thumbnailUrl = photo.src.medium,
+                        fullUrl = photo.src.original,
+                        width = photo.width,
+                        height = photo.height,
+                        sourcePageUrl = photo.url,
+                        uploaderName = photo.photographer,
+                    )
+                },
+                totalCount = response.totalResults,
+                currentPage = response.page,
+                hasMore = response.nextPage != null,
+            )
+        }
+    }
+
     // -- Discover feed (mixed from ALL sources for diversity) --
 
     /** Return cached discover results if available (instant, no network) */
@@ -227,44 +257,18 @@ class WallpaperRepository @Inject constructor(
         return cacheManager.getStaleCached("discover_$page")
     }
 
-    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null, pexelsApi: com.freevibe.data.remote.pexels.PexelsApi? = null, pexelsKey: String = ""): SearchResult<Wallpaper> = supervisorScope {
+    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null): SearchResult<Wallpaper> = supervisorScope {
         val perSourceTimeout = 6000L // Don't let any single source hold up the feed
         val sources = mutableListOf(
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getWallhaven(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPicsum(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPixabay(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getBingDaily(page = page) }.getOrNull() } },
+            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPexelsCurated(page = page) }.getOrNull() } },
         )
         // Reddit
         if (redditRepo != null) {
             sources.add(async { withTimeoutOrNull(perSourceTimeout) { runCatching { redditRepo.getMultiSubreddit() }.getOrNull() } })
-        }
-        // Pexels
-        if (pexelsApi != null && pexelsKey.isNotBlank()) {
-            sources.add(async {
-                withTimeoutOrNull(perSourceTimeout) {
-                    runCatching {
-                        val resp = pexelsApi.curatedPhotos(apiKey = pexelsKey, page = page)
-                        SearchResult(
-                            items = resp.photos.map { photo ->
-                                Wallpaper(
-                                    id = "px_${photo.id}",
-                                    source = ContentSource.PEXELS,
-                                    thumbnailUrl = photo.src.medium,
-                                    fullUrl = photo.src.original,
-                                    width = photo.width,
-                                    height = photo.height,
-                                    sourcePageUrl = photo.url,
-                                    uploaderName = photo.photographer,
-                                )
-                            },
-                            totalCount = resp.totalResults,
-                            currentPage = resp.page,
-                            hasMore = resp.nextPage != null,
-                        )
-                    }.getOrNull()
-                }
-            })
         }
 
         val results = sources.map { it.await() }

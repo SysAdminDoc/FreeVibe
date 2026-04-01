@@ -1,6 +1,5 @@
 package com.freevibe.ui.screens.favorites
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,81 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.freevibe.data.model.FavoriteEntity
-import com.freevibe.data.remote.toWallpaper
-import com.freevibe.data.remote.toSound
-import com.freevibe.data.repository.FavoritesRepository
-import com.freevibe.service.BatchDownloadService
-import com.freevibe.service.FavoritesExporter
-import com.freevibe.service.SelectedContentHolder
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import javax.inject.Inject
-
-@HiltViewModel
-class FavoritesViewModel @Inject constructor(
-    private val favoritesRepo: FavoritesRepository,
-    private val exporter: FavoritesExporter,
-    private val selectedContent: SelectedContentHolder,
-    private val batchDownloadService: BatchDownloadService,
-) : ViewModel() {
-    val wallpapers = favoritesRepo.getWallpapers().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-    val sounds = favoritesRepo.getSounds().stateIn(
-        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
-    )
-
-    private val _message = MutableStateFlow<String?>(null)
-    val message = _message.asStateFlow()
-
-    fun removeFavorite(id: String) = viewModelScope.launch { favoritesRepo.remove(id) }
-    fun restoreFavorite(entity: FavoriteEntity) = viewModelScope.launch { favoritesRepo.add(entity) }
-
-    /** Convert FavoriteEntity to domain Wallpaper and populate shared holder with the visible list */
-    fun selectWallpaper(fav: FavoriteEntity, visibleWallpapers: List<FavoriteEntity>) {
-        selectedContent.selectWallpaper(
-            fav.toWallpaper(),
-            visibleWallpapers.map { it.toWallpaper() },
-        )
-    }
-
-    /** Convert FavoriteEntity to domain Sound and populate shared holder */
-    fun selectSound(fav: FavoriteEntity) {
-        selectedContent.selectSound(fav.toSound())
-    }
-
-    fun exportFavorites(uri: Uri) = viewModelScope.launch {
-        exporter.export(uri)
-            .onSuccess { count -> _message.update { _ -> "Exported $count favorites" } }
-            .onFailure { e -> _message.update { _ -> "Export failed: ${e.message}" } }
-    }
-
-    fun importFavorites(uri: Uri) = viewModelScope.launch {
-        exporter.import(uri)
-            .onSuccess { count -> _message.update { _ -> "Imported $count favorites" } }
-            .onFailure { e -> _message.update { _ -> "Import failed: ${e.message}" } }
-    }
-
-    val batchState = batchDownloadService.state
-
-    fun downloadAllWallpapers() {
-        val wps = wallpapers.value.map { it.toWallpaper() }
-        if (wps.isEmpty()) return
-        batchDownloadService.downloadBatch(wps)
-        _message.update { _ -> "Downloading ${wps.size} wallpapers..." }
-    }
-
-    fun clearMessage() { _message.update { _ -> null } }
-}
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -222,7 +152,7 @@ fun FavoritesScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(sortedWallpapers, key = { it.id }) { fav ->
+                            items(sortedWallpapers, key = { it.id }, contentType = { "favorite_card" }) { fav ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -267,7 +197,7 @@ fun FavoritesScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            items(sortedSounds, key = { it.id }) { fav ->
+                            items(sortedSounds, key = { it.id }, contentType = { "favorite_card" }) { fav ->
                                 val dismissState = rememberSwipeToDismissBoxState(
                                     confirmValueChange = { value ->
                                         if (value != SwipeToDismissBoxValue.Settled) {

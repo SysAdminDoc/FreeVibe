@@ -38,8 +38,8 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 63
-        versionName = "5.13.0"
+        versionCode = 64
+        versionName = "5.14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

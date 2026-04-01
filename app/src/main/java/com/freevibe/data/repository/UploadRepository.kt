@@ -170,7 +170,7 @@ class UploadRepository @Inject constructor(
             }
 
             override fun onCancelled(error: DatabaseError) {
-                trySend(emptyList())
+                close(error.toException())
             }
         }
 

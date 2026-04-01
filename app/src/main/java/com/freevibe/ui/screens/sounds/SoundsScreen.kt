@@ -47,6 +47,7 @@ import kotlin.math.sin
 fun SoundsScreen(
     onSoundClick: (Sound) -> Unit,
     onCreateRingtone: () -> Unit = {},
+    initialQuery: String? = null,
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -56,6 +57,11 @@ fun SoundsScreen(
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     LaunchedEffect(state.query) { searchQuery = state.query }
+    LaunchedEffect(initialQuery) {
+        if (!initialQuery.isNullOrBlank() && state.query != initialQuery) {
+            viewModel.search(initialQuery)
+        }
+    }
     var showSearchHistory by remember { mutableStateOf(false) }
     var quickApplySound by remember { mutableStateOf<Sound?>(null) }
     val focusManager = LocalFocusManager.current
@@ -341,7 +347,7 @@ private fun SoundsList(
     ) {
         // Top 5 This Week (Ringtones tab only)
         if (topHits.isNotEmpty()) {
-            item(key = "tophits_header") {
+            item(key = "tophits_header", contentType = "header") {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -351,7 +357,7 @@ private fun SoundsList(
                     Text("Top 5 This Week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
-            items(topHits, key = { "hit_${it.id}" }) { sound ->
+            items(topHits, key = { "hit_${it.id}" }, contentType = { "sound_card" }) { sound ->
                 SoundCard(
                     sound = sound,
                     isPlaying = playingId == sound.id,
@@ -362,7 +368,7 @@ private fun SoundsList(
                     onPlayClick = { onPlayClick(sound) },
                 )
             }
-            item(key = "tophits_divider") {
+            item(key = "tophits_divider", contentType = "divider") {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
         }
@@ -371,11 +377,11 @@ private fun SoundsList(
         val topHitIds = topHits.map { it.id }.toSet()
         val filteredSounds = sounds.filter { it.id !in topHitIds }
 
-        items(filteredSounds, key = { it.id }) { sound ->
+        items(filteredSounds, key = { it.id }, contentType = { "sound_card" }) { sound ->
             SoundCard(
                 sound = sound,
                 isPlaying = playingId == sound.id,
-                isResolving = sound.id.startsWith("yt_") && sound.id !in cachedYtIds && playingId == sound.id,
+                isResolving = sound.id == resolvingId,
                 playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
                 onClick = { onSoundClick(sound) },
                 onLongPress = { onLongPress(sound) },
@@ -385,7 +391,7 @@ private fun SoundsList(
 
         // Loading spinner
         if (isLoading && sounds.isEmpty()) {
-            item(key = "loading") {
+            item(key = "loading", contentType = "loading") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
                 }
@@ -405,7 +411,7 @@ private fun SoundsList(
 
         // Load more spinner
         if (isLoadingMore) {
-            item(key = "loading_more") {
+            item(key = "loading_more", contentType = "loading") {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
