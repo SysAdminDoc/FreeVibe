@@ -157,5 +157,9 @@ class AudioPlaybackManager @Inject constructor(
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null
         controllerFuture = null
+        _isPlaying.value = false
+        _currentSoundId.value = null
+        _currentPosition.value = 0L
+        _duration.value = 0L
     }
 }

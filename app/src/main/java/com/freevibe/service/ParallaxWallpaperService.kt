@@ -41,6 +41,7 @@ class ParallaxWallpaperService : WallpaperService() {
         private var backgroundLayer: Bitmap? = null
         private var foregroundLayer: Bitmap? = null
         private var fallbackBitmap: Bitmap? = null
+        private var activeSegmenter: com.google.mlkit.vision.segmentation.Segmenter? = null
 
         private var screenWidth = 0
         private var screenHeight = 0
@@ -111,6 +112,8 @@ class ParallaxWallpaperService : WallpaperService() {
             super.onDestroy()
             handler.removeCallbacks(drawRunner)
             unregisterSensor()
+            activeSegmenter?.close()
+            activeSegmenter = null
             recycleBitmaps()
         }
 
@@ -186,10 +189,12 @@ class ParallaxWallpaperService : WallpaperService() {
 
         private fun segmentImage(bitmap: Bitmap) {
             try {
+                activeSegmenter?.close()
                 val options = SelfieSegmenterOptions.Builder()
                     .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
                     .build()
                 val segmenter = Segmentation.getClient(options)
+                activeSegmenter = segmenter
                 val inputImage = InputImage.fromBitmap(bitmap, 0)
 
                 segmenter.process(inputImage)
@@ -248,6 +253,9 @@ class ParallaxWallpaperService : WallpaperService() {
                                 backgroundLayer = bgBitmap
                                 oldFg?.recycle()
                                 oldBg?.recycle()
+                                // Fallback no longer needed once we have fg+bg layers
+                                fallbackBitmap?.recycle()
+                                fallbackBitmap = null
                             }
 
                             if (BuildConfig.DEBUG) {
