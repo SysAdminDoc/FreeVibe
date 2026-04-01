@@ -90,7 +90,7 @@ fun DownloadsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(displayList, key = { it.id }) { download ->
+                    items(displayList, key = { it.id }, contentType = { "download_card" }) { download ->
                         DownloadHistoryCard(
                             download = download,
                             onOpen = {

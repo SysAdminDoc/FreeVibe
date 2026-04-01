@@ -222,13 +222,10 @@ private fun getEntryPoint(context: Context): WidgetEntryPoint =
     EntryPointAccessors.fromApplication(context, WidgetEntryPoint::class.java)
 
 private fun updateWidgetStats(context: Context) {
-    context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
-        .edit()
+    val prefs = context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
+    prefs.edit()
         .putLong(LAST_SHUFFLE_KEY, System.currentTimeMillis())
-        .putInt(SHUFFLE_COUNT_KEY,
-            context.getSharedPreferences(WIDGET_PREFS, Context.MODE_PRIVATE)
-                .getInt(SHUFFLE_COUNT_KEY, 0) + 1
-        )
+        .putInt(SHUFFLE_COUNT_KEY, prefs.getInt(SHUFFLE_COUNT_KEY, 0) + 1)
         .apply()
 }
 
@@ -238,7 +235,7 @@ class ShuffleWallpaperAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.BOTH)
         updateWidgetStats(context)
-        FreeVibeWidget().update(context, glanceId)
+        FreeVibeWidget().updateAll(context)
     }
 }
 
@@ -246,7 +243,7 @@ class ApplyHomeAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.HOME)
         updateWidgetStats(context)
-        FreeVibeWidget().update(context, glanceId)
+        FreeVibeWidget().updateAll(context)
     }
 }
 
@@ -254,7 +251,7 @@ class ApplyLockAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyRandom(context, WallpaperTarget.LOCK)
         updateWidgetStats(context)
-        FreeVibeWidget().update(context, glanceId)
+        FreeVibeWidget().updateAll(context)
     }
 }
 
@@ -272,7 +269,7 @@ class ShufflePixabayAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyFromSource(context, "pixabay", WallpaperTarget.BOTH)
         updateWidgetStats(context)
-        FreeVibeWidget().update(context, glanceId)
+        FreeVibeWidget().updateAll(context)
     }
 }
 
@@ -280,7 +277,7 @@ class ShuffleRedditAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         applyFromSource(context, "reddit", WallpaperTarget.BOTH)
         updateWidgetStats(context)
-        FreeVibeWidget().update(context, glanceId)
+        FreeVibeWidget().updateAll(context)
     }
 }
 

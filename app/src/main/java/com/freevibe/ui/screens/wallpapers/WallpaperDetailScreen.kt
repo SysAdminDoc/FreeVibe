@@ -133,28 +133,30 @@ fun WallpaperDetailScreen(
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.pendingLiveWallpaperLaunch) {
+        if (state.pendingLiveWallpaperLaunch) {
+            // Launch the system live wallpaper picker for ParallaxWallpaperService
+            try {
+                val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                    putExtra(
+                        WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                        ComponentName(context, ParallaxWallpaperService::class.java),
+                    )
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                // Fallback: open generic live wallpaper picker
+                try {
+                    context.startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
+                } catch (_: Exception) {}
+            }
+            snackbarHostState.showSnackbar("Parallax wallpaper prepared")
+            viewModel.clearPendingLaunch()
+        }
+    }
     LaunchedEffect(state.applySuccess) {
         state.applySuccess?.let { msg ->
-            if (msg == "parallax_ready") {
-                // Launch the system live wallpaper picker for ParallaxWallpaperService
-                try {
-                    val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                        putExtra(
-                            WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                            ComponentName(context, ParallaxWallpaperService::class.java),
-                        )
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {
-                    // Fallback: open generic live wallpaper picker
-                    try {
-                        context.startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
-                    } catch (_: Exception) {}
-                }
-                snackbarHostState.showSnackbar("Parallax wallpaper prepared")
-            } else {
-                snackbarHostState.showSnackbar(msg)
-            }
+            snackbarHostState.showSnackbar(msg)
             viewModel.clearSuccess()
         }
     }
