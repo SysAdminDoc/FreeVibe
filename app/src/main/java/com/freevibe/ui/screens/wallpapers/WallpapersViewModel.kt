@@ -501,7 +501,7 @@ class WallpapersViewModel @Inject constructor(
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
-                        error = e.message ?: "Failed to load wallpapers",
+                        error = categorizeError(e),
                         errorSource = currentTab.name,
                     )
                 }
@@ -607,5 +607,18 @@ class WallpapersViewModel @Inject constructor(
         }
 
         return null
+    }
+
+    private fun categorizeError(e: Exception): String = when (e) {
+        is java.net.UnknownHostException -> "No internet connection"
+        is java.net.SocketTimeoutException -> "Connection timed out — try again"
+        is java.net.ConnectException -> "Could not connect to server"
+        is retrofit2.HttpException -> when (e.code()) {
+            401, 403 -> "API key invalid or expired"
+            429 -> "Rate limited — wait a moment and retry"
+            in 500..599 -> "Server error (${e.code()}) — try again later"
+            else -> "HTTP error ${e.code()}"
+        }
+        else -> e.message ?: "Failed to load wallpapers"
     }
 }

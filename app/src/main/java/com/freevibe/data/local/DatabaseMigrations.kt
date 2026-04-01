@@ -94,6 +94,16 @@ object DatabaseMigrations {
         }
     }
 
+    // v10→11: Add performance indexes on addedAt, downloadedAt, appliedAt
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_favorites_addedAt` ON `favorites` (`addedAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_favorites_type_addedAt` ON `favorites` (`type`, `addedAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_downloads_downloadedAt` ON `downloads` (`downloadedAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallpaper_history_appliedAt` ON `wallpaper_history` (`appliedAt`)")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -104,5 +114,6 @@ object DatabaseMigrations {
         MIGRATION_7_8,
         MIGRATION_8_9,
         MIGRATION_9_10,
+        MIGRATION_10_11,
     )
 }

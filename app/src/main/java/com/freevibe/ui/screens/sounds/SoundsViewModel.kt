@@ -96,6 +96,7 @@ class SoundsViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var progressJob: Job? = null
     private var communityJob: Job? = null
+    private val ytResolveSemaphore = Semaphore(6)
 
     private val titleBlocklist = Regex("hindi|telugu|pack|trending|popular|\\bnew\\b|\\btop\\b|\\bbest\\b", RegexOption.IGNORE_CASE)
     private val hasFreesoundV2Key = com.freevibe.BuildConfig.FREESOUND_API_KEY.isNotBlank()
@@ -147,15 +148,14 @@ class SoundsViewModel @Inject constructor(
                 _topHits.value = allHits.take(5)
 
                 // Pre-resolve preview URLs
-                val sem = Semaphore(4)
                 supervisorScope {
                     allHits.forEach { hit ->
                         launch {
-                            sem.acquire()
+                            ytResolveSemaphore.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))
                                 _cachedYtIds.update { it + hit.id }
-                            } catch (_: Exception) {} finally { sem.release() }
+                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
                         }
                     }
                 }
@@ -217,20 +217,19 @@ class SoundsViewModel @Inject constructor(
                 )
                 _state.update { it.copy(sounds = result.items, isLoading = false, hasMore = result.hasMore) }
 
-                val sem = Semaphore(4)
                 supervisorScope {
                     result.items.forEach { yt ->
                         launch {
-                            sem.acquire()
+                            ytResolveSemaphore.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
                                 _cachedYtIds.update { it + yt.id }
-                            } catch (_: Exception) {} finally { sem.release() }
+                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
                         }
                     }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message) }
+                _state.update { it.copy(isLoading = false, error = categorizeError(e)) }
             }
         }
     }
@@ -514,7 +513,8 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isLoadingMore = true) }
             }
 
-            val allResults = java.util.concurrent.CopyOnWriteArrayList<Sound>()
+            val allResults = mutableListOf<Sound>()
+            val resultLock = Any()
             val seenIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
             // Show bundled content immediately while APIs load, and seed allResults so they survive flushToUi()
@@ -526,19 +526,20 @@ class SoundsViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 if (bundled.isNotEmpty()) {
-                    bundled.forEach { seenIds.add(it.id); allResults.add(it) }
+                    bundled.forEach { seenIds.add(it.id) }
+                    synchronized(resultLock) { allResults.addAll(bundled) }
                     _state.update { it.copy(sounds = bundled, isLoading = true) }
                 }
             }
 
             fun addUnique(sound: Sound): Boolean {
                 if (titleBlocklist.containsMatchIn(sound.name)) return false
-                return if (seenIds.add(sound.id)) { allResults.add(sound); true } else false
+                return if (seenIds.add(sound.id)) { synchronized(resultLock) { allResults.add(sound) }; true } else false
             }
 
             fun flushToUi() {
                 _state.update { st ->
-                    val snapshot = allResults.toList().sortedByDescending { qualityScore(it, loadTab) }
+                    val snapshot = synchronized(resultLock) { allResults.toList() }.sortedByDescending { qualityScore(it, loadTab) }
                     st.copy(
                         sounds = if (loadMore) st.sounds + snapshot.filter { snd -> st.sounds.none { it.id == snd.id } } else snapshot,
                     )
@@ -568,14 +569,13 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
 
-                                    val sem = Semaphore(4)
                                     result.items.forEach { yt ->
                                         launch {
-                                            sem.acquire()
+                                            ytResolveSemaphore.acquire()
                                             try {
                                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
                                                 _cachedYtIds.update { it + yt.id }
-                                            } catch (_: Exception) {} finally { sem.release() }
+                                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
                                         }
                                     }
                                 } catch (_: Exception) {}
@@ -638,7 +638,7 @@ class SoundsViewModel @Inject constructor(
                     }
                 }
 
-                val combined = allResults.toList().sortedByDescending { qualityScore(it, loadTab) }
+                val combined = synchronized(resultLock) { allResults.toList() }.sortedByDescending { qualityScore(it, loadTab) }
                 _state.update {
                     it.copy(
                         sounds = if (loadMore) it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } } else combined,
@@ -647,7 +647,7 @@ class SoundsViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false, error = e.message) }
+                _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false, error = categorizeError(e)) }
             }
         }
     }
@@ -749,6 +749,13 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }
+    }
+
+    private fun categorizeError(e: Exception): String = when (e) {
+        is java.net.UnknownHostException -> "No internet connection"
+        is java.net.SocketTimeoutException -> "Connection timed out — try again"
+        is java.net.ConnectException -> "Could not connect to server"
+        else -> e.message ?: "Something went wrong"
     }
 
     fun uploadSound(
