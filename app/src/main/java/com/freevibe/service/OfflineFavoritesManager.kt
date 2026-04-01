@@ -51,8 +51,9 @@ class OfflineFavoritesManager @Inject constructor(
                 val response = okHttpClient.newCall(request).execute()
                 response.use { resp ->
                     if (!resp.isSuccessful) return@withContext null
+                    val body = resp.body ?: return@withContext null
                     val tmpFile = java.io.File(file.parent, file.name + ".tmp")
-                    resp.body?.byteStream()?.use { input ->
+                    body.byteStream().use { input ->
                         tmpFile.outputStream().use { output ->
                             input.copyTo(output)
                         }

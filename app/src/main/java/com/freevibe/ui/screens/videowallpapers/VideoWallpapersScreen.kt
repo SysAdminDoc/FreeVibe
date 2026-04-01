@@ -326,7 +326,8 @@ class VideoWallpapersViewModel @Inject constructor(
                             if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
                             okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
                                 if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                                resp.body?.byteStream()?.use { input ->
+                                val body = resp.body ?: throw Exception("Empty response body")
+                                body.byteStream().use { input ->
                                     cacheFile.outputStream().use { output -> input.copyTo(output) }
                                 }
                             }
@@ -335,7 +336,8 @@ class VideoWallpapersViewModel @Inject constructor(
                         // Pexels / direct URL: simple download
                         okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
                             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                            resp.body?.byteStream()?.use { input ->
+                            val body = resp.body ?: throw Exception("Empty response body")
+                            body.byteStream().use { input ->
                                 cacheFile.outputStream().use { output -> input.copyTo(output) }
                             }
                         }
