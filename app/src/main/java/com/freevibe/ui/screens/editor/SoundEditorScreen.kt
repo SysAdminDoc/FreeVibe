@@ -116,6 +116,8 @@ class SoundEditorViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     private var player: android.media.MediaPlayer? = null
+    private var playbackJob: kotlinx.coroutines.Job? = null
+    private var loadJob: kotlinx.coroutines.Job? = null
     private var undoState: UndoSnapshot? = null
     private var loadedSoundId: String? = null
 
@@ -137,7 +139,8 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     fun loadFromUrl(url: String, name: String) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             stopPlayback()
             _state.update {
                 it.copy(
@@ -177,7 +180,8 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     fun loadFromLocalUri(uri: Uri) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             stopPlayback()
             _state.update {
                 it.copy(
@@ -311,13 +315,15 @@ class SoundEditorViewModel @Inject constructor(
                     mp.start()
                     _state.update { it.copy(isPlaying = true) }
 
-                    viewModelScope.launch {
+                    playbackJob?.cancel()
+                    playbackJob = viewModelScope.launch {
                         try {
                             while (_state.value.isPlaying) {
                                 val p = player ?: break
-                                val pos = p.currentPosition
+                                val pos = try { p.currentPosition } catch (_: IllegalStateException) { break }
                                 if (pos >= endMs) break
-                                _state.update { it.copy(playbackPosition = pos.toFloat() / p.duration) }
+                                val dur = try { p.duration } catch (_: IllegalStateException) { break }
+                                if (dur > 0) _state.update { it.copy(playbackPosition = pos.toFloat() / dur) }
                                 kotlinx.coroutines.delay(50)
                             }
                         } catch (_: Exception) {}
@@ -334,8 +340,13 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     private fun stopPlayback() {
+        playbackJob?.cancel()
+        playbackJob = null
         try {
             player?.apply {
+                try { setOnPreparedListener(null) } catch (_: Exception) {}
+                try { setOnCompletionListener(null) } catch (_: Exception) {}
+                try { setOnErrorListener(null) } catch (_: Exception) {}
                 try { stop() } catch (_: Exception) {}
                 try { release() } catch (_: Exception) {}
             }

@@ -54,14 +54,14 @@ class FavoritesExporter @Inject constructor(
         runCatching {
             val json = readJson(inputUri)
             val items = parseItems(json)
-            val entities = items
-                .take(MAX_IMPORT_ITEMS + 1)
-                .mapNotNull { it.toValidatedEntity() }
-                .distinctBy { it.id }
 
             if (items.size > MAX_IMPORT_ITEMS) {
-                throw IllegalStateException("Favorites file is too large to import")
+                throw IllegalStateException("Too many favorites (${items.size}). Maximum is $MAX_IMPORT_ITEMS")
             }
+
+            val entities = items
+                .mapNotNull { it.toValidatedEntity() }
+                .distinctBy { it.id }
             if (entities.isEmpty()) {
                 throw IllegalStateException("No valid favorites found in file")
             }

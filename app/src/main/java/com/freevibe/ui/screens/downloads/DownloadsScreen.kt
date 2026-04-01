@@ -117,7 +117,19 @@ fun DownloadsScreen(
                             download = download,
                             onOpen = {
                                 try {
-                                    val uri = Uri.parse(download.localPath)
+                                    val path = download.localPath
+                                    if (path.isBlank()) {
+                                        scope.launch { snackbarHostState.showSnackbar("File path is missing") }
+                                        return@DownloadHistoryCard
+                                    }
+                                    val uri = Uri.parse(path)
+                                    if (uri.scheme == "file") {
+                                        val file = java.io.File(uri.path ?: "")
+                                        if (!file.exists()) {
+                                            scope.launch { snackbarHostState.showSnackbar("File no longer exists") }
+                                            return@DownloadHistoryCard
+                                        }
+                                    }
                                     val intent = Intent(Intent.ACTION_VIEW).apply {
                                         setDataAndType(uri, if (download.type == "WALLPAPER") "image/*" else "audio/*")
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

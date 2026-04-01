@@ -75,10 +75,14 @@ class AudioTrimmer @Inject constructor(
                     val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(outputDir)
                     if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
                     val process = pb.start()
-                    process.inputStream.bufferedReader().use { it.readText() }
-                    val exitCode = process.waitFor()
-                    if (exitCode != 0 || !outputFile.exists() || outputFile.length() <= 0) {
-                        throw Exception("FFmpeg MP3 trim failed (exit $exitCode)")
+                    try {
+                        process.inputStream.bufferedReader().use { it.readText() }
+                        val exitCode = process.waitFor()
+                        if (exitCode != 0 || !outputFile.exists() || outputFile.length() <= 0) {
+                            throw Exception("FFmpeg MP3 trim failed (exit $exitCode)")
+                        }
+                    } finally {
+                        process.destroy()
                     }
                 } else {
                     val muxerFormat = when (ext.lowercase()) {
@@ -193,11 +197,14 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(file.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
-
-            if (exitCode == 0 && tempOut.exists() && tempOut.length() > 1024) {
-                tempOut.copyTo(file, overwrite = true)
+            try {
+                process.inputStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                if (exitCode == 0 && tempOut.exists() && tempOut.length() > 1024) {
+                    tempOut.copyTo(file, overwrite = true)
+                }
+            } finally {
+                process.destroy()
             }
         } catch (e: Exception) {
             if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("AudioTrimmer", "FFmpeg fade failed: ${e.message}")
@@ -238,8 +245,12 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(input.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
+            val exitCode = try {
+                process.inputStream.bufferedReader().use { it.readText() }
+                process.waitFor()
+            } finally {
+                process.destroy()
+            }
 
             if (exitCode == 0 && output.exists() && output.length() > 1024) {
                 output.copyTo(input, overwrite = true)
@@ -274,8 +285,12 @@ class AudioTrimmer @Inject constructor(
             val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(input.parentFile)
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
-            process.inputStream.bufferedReader().use { it.readText() }
-            val exitCode = process.waitFor()
+            val exitCode = try {
+                process.inputStream.bufferedReader().use { it.readText() }
+                process.waitFor()
+            } finally {
+                process.destroy()
+            }
 
             if (exitCode == 0 && output.exists() && output.length() > 100) {
                 output.absolutePath
