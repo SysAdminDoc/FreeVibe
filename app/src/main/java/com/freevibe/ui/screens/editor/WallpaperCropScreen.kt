@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,8 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
-import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -60,21 +61,35 @@ data class CropState(
 class WallpaperCropViewModel @Inject constructor(
     private val wallpaperApplier: WallpaperApplier,
     private val okHttpClient: OkHttpClient,
-    selectedContent: SelectedContentHolder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CropState())
     val state = _state.asStateFlow()
+    private var loadedWallpaperId: String? = null
 
-    init {
-        selectedContent.selectedWallpaper.value?.let { wp ->
-            loadFromUrl(wp.fullUrl)
+    fun loadWallpaper(wallpaper: Wallpaper): Boolean {
+        val currentState = _state.value
+        if (loadedWallpaperId == wallpaper.id && (currentState.bitmap != null || currentState.isLoading)) {
+            return true
         }
+        loadedWallpaperId = wallpaper.id
+        loadFromUrl(wallpaper.fullUrl)
+        return true
     }
 
     fun loadFromUrl(url: String) {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+            _state.update {
+                it.copy(
+                    bitmap = null,
+                    isLoading = true,
+                    scale = 1f,
+                    offsetX = 0f,
+                    offsetY = 0f,
+                    success = null,
+                    error = null,
+                )
+            }
             try {
                 val bitmap = withContext(Dispatchers.IO) {
                     val request = Request.Builder().url(url).build()
@@ -84,6 +99,7 @@ class WallpaperCropViewModel @Inject constructor(
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                     }
                 }
+                // Don't recycle old bitmap — Compose rendering pipeline may still reference it.
                 _state.update { it.copy(bitmap = bitmap, isLoading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message) }
@@ -180,23 +196,33 @@ class WallpaperCropViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpaperCropScreen(
+    wallpaperId: String,
     onBack: () -> Unit,
+    recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = hiltViewModel(),
     viewModel: WallpaperCropViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    var selectionResolved by remember(wallpaperId) { mutableStateOf<Boolean?>(null) }
 
-    // Gesture state
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
+    // Gesture state — survives configuration changes
+    var scale by rememberSaveable { mutableFloatStateOf(1f) }
+    var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
+    var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
 
     LaunchedEffect(state.success) {
         state.success?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessages() }
     }
     LaunchedEffect(state.error) {
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearMessages() }
+    }
+    LaunchedEffect(wallpaperId) {
+        scale = 1f
+        offsetX = 0f
+        offsetY = 0f
+        val wallpaper = recoveryViewModel.resolveWallpaper(wallpaperId)
+        selectionResolved = wallpaper?.let { viewModel.loadWallpaper(it) } ?: false
     }
 
     Scaffold(
@@ -221,6 +247,41 @@ fun WallpaperCropScreen(
             )
         },
     ) { padding ->
+        if (selectionResolved == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        if (selectionResolved == false) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.BrokenImage,
+                        null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                }
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()

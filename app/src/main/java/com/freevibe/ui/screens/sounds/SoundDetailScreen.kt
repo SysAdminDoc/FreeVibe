@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,26 +35,56 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SoundDetailScreen(
+    soundId: String,
     onBack: () -> Unit,
-    onEdit: () -> Unit = {},
-    onContactPicker: (String) -> Unit = {},
+    onEdit: (String) -> Unit = {},
+    onContactPicker: (Sound) -> Unit = {},
+    onOpenSound: (String) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val sound by viewModel.selectedSound.collectAsState()
-    val s = sound ?: return
+    var restoreResolved by remember(soundId) { mutableStateOf(false) }
+    var resolvedSound by remember(soundId) { mutableStateOf<Sound?>(null) }
+
+    LaunchedEffect(soundId) {
+        resolvedSound = viewModel.resolveSound(soundId)
+        restoreResolved = true
+    }
+
+    val s = resolvedSound
+    if (s == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (!restoreResolved) {
+                CircularProgressIndicator()
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.MusicOff,
+                        null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Sound unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                }
+            }
+        }
+        return
+    }
     val isFavorite by viewModel.isFavorite(s.id).collectAsState(initial = false)
     val context = LocalContext.current
     val autoPreview by viewModel.autoPreview.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     val isPlaying = state.playingId == s.id
 
-    val similarSounds = remember { mutableStateOf<List<Sound>>(emptyList()) }
-    val similarLoading = remember { mutableStateOf(false) }
+    val similarSounds = remember(s.id) { mutableStateOf<List<Sound>>(emptyList()) }
+    val similarLoading = remember(s.id) { mutableStateOf(false) }
 
     DisposableEffect(s.id) {
         onDispose { if (viewModel.state.value.playingId == s.id) viewModel.togglePlayback(s) }
@@ -113,7 +145,9 @@ fun SoundDetailScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Icon(
                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            null, tint = Color.White, modifier = Modifier.size(28.dp),
+                            if (isPlaying) "Pause preview" else "Play preview",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp),
                         )
                     }
                 }
@@ -134,7 +168,7 @@ fun SoundDetailScreen(
                 }
                 Text(formatDuration(s.duration), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (s.uploaderName.isNotEmpty() && s.uploaderName != "Unknown") {
-                    Text("by ${s.uploaderName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("by ${s.uploaderName}", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (s.license.isNotEmpty()) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
@@ -145,7 +179,7 @@ fun SoundDetailScreen(
 
             // Tags
             if (s.tags.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     s.tags.take(5).forEach { tag ->
                         Surface(
                             onClick = { viewModel.search(tag); onBack() },
@@ -180,18 +214,18 @@ fun SoundDetailScreen(
 
             // Secondary actions as icon row
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                IconButton(onClick = onEdit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, null, Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
-                IconButton(onClick = { onContactPicker(s.id) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, null, Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
-                IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, null, Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { onEdit(s.id) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, "Trim sound", Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { onContactPicker(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, "Assign to contact", Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, "Save sound", Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = {
                     val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, s.sourcePageUrl.ifEmpty { s.downloadUrl }); putExtra(Intent.EXTRA_SUBJECT, s.name) }
                     context.startActivity(Intent.createChooser(intent, "Share sound"))
-                }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Share, null, Modifier.size(22.dp)); Text("Share", style = MaterialTheme.typography.labelSmall) } }
+                }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Share, "Share sound", Modifier.size(22.dp)); Text("Share", style = MaterialTheme.typography.labelSmall) } }
             }
 
             // More Like This
             Spacer(Modifier.height(4.dp))
-            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { viewModel.selectSound(it) }
+            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { onOpenSound(it.id) }
 
             Spacer(Modifier.height(80.dp)) // bottom padding for nav bar
         }
@@ -240,7 +274,14 @@ private fun SimilarSoundsSection(
                             IconButton(
                                 onClick = { viewModel.togglePlayback(similar) },
                                 modifier = Modifier.size(34.dp).clip(CircleShape).background(if (currentPlayingId == similar.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
-                            ) { Icon(if (currentPlayingId == similar.id) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = if (currentPlayingId == similar.id) Color.White else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp)) }
+                            ) {
+                                Icon(
+                                    if (currentPlayingId == similar.id) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    if (currentPlayingId == similar.id) "Pause preview" else "Play preview",
+                                    tint = if (currentPlayingId == similar.id) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                             Column(Modifier.weight(1f)) {
                                 Text(similar.name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(formatDuration(similar.duration), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

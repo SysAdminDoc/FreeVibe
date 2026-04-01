@@ -19,8 +19,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
-import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import okhttp3.OkHttpClient
@@ -54,36 +54,21 @@ data class EditorState(
 class WallpaperEditorViewModel @Inject constructor(
     private val wallpaperApplier: WallpaperApplier,
     private val okHttpClient: OkHttpClient,
-    selectedContent: SelectedContentHolder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditorState())
     val state = _state.asStateFlow()
     private var filterJob: kotlinx.coroutines.Job? = null
+    private var loadedWallpaperId: String? = null
 
-    init {
-        selectedContent.selectedWallpaper.value?.let { wp ->
-            viewModelScope.launch {
-                _state.update { it.copy(isLoadingImage = true) }
-                try {
-                    val bitmap = withContext(Dispatchers.IO) {
-                        val request = okhttp3.Request.Builder().url(wp.fullUrl).build()
-                        okHttpClient.newCall(request).execute().use { response ->
-                            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                            val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                ?: throw Exception("Failed to decode image")
-                        }
-                    }
-                    setSourceBitmap(bitmap)
-                    _state.update { it.copy(isLoadingImage = false) }
-                } catch (e: Exception) {
-                    _state.update { it.copy(isLoadingImage = false, error = e.message ?: "Failed to load image") }
-                }
-            }
-        } ?: run {
-            _state.update { it.copy(error = "No wallpaper selected") }
+    fun loadWallpaper(wallpaper: Wallpaper): Boolean {
+        val currentState = _state.value
+        if (loadedWallpaperId == wallpaper.id && (currentState.originalBitmap != null || currentState.isLoadingImage)) {
+            return true
         }
+        loadedWallpaperId = wallpaper.id
+        loadFromUrl(wallpaper.fullUrl)
+        return true
     }
 
     fun clearError() = _state.update { it.copy(error = null) }
@@ -150,6 +135,43 @@ class WallpaperEditorViewModel @Inject constructor(
     }
 
     fun clearSuccess() = _state.update { it.copy(success = null) }
+
+    private fun loadFromUrl(url: String) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    originalBitmap = null,
+                    editedBitmap = null,
+                    brightness = 0f,
+                    contrast = 1f,
+                    saturation = 1f,
+                    blurRadius = 0f,
+                    vignette = 0f,
+                    grain = 0f,
+                    amoledCrush = 0f,
+                    warmth = 0f,
+                    isLoadingImage = true,
+                    success = null,
+                    error = null,
+                )
+            }
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    val request = okhttp3.Request.Builder().url(url).build()
+                    okHttpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+                        val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            ?: throw Exception("Failed to decode image")
+                    }
+                }
+                setSourceBitmap(bitmap)
+                _state.update { it.copy(isLoadingImage = false) }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoadingImage = false, error = e.message ?: "Failed to load image") }
+            }
+        }
+    }
 
     private fun applyFilters() {
         val original = _state.value.originalBitmap ?: return
@@ -252,7 +274,13 @@ class WallpaperEditorViewModel @Inject constructor(
         if (warmth != 0f) combined.postConcat(warmthMatrix)
 
         paint.colorFilter = ColorMatrixColorFilter(combined)
-        canvas.drawBitmap(src, 0f, 0f, paint)
+        if (result.width != src.width || result.height != src.height) {
+            val srcRect = android.graphics.Rect(0, 0, src.width, src.height)
+            val dstRect = android.graphics.RectF(0f, 0f, result.width.toFloat(), result.height.toFloat())
+            canvas.drawBitmap(src, srcRect, dstRect, paint)
+        } else {
+            canvas.drawBitmap(src, 0f, 0f, paint)
+        }
 
         return result
     }
@@ -331,12 +359,20 @@ class WallpaperEditorViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpaperEditorScreen(
+    wallpaperId: String,
     onBack: () -> Unit,
+    recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: WallpaperEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    var selectedFilter by remember { mutableStateOf("Brightness") }
+    var selectedFilter by remember(wallpaperId) { mutableStateOf("Brightness") }
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectionResolved by remember(wallpaperId) { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(wallpaperId) {
+        val wallpaper = recoveryViewModel.resolveWallpaper(wallpaperId)
+        selectionResolved = wallpaper?.let { viewModel.loadWallpaper(it) } ?: false
+    }
 
     LaunchedEffect(state.success) {
         state.success?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
@@ -388,6 +424,41 @@ fun WallpaperEditorScreen(
             )
         },
     ) { padding ->
+        if (selectionResolved == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        if (selectionResolved == false) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.BrokenImage,
+                        null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                }
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()

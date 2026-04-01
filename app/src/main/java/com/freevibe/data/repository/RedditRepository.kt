@@ -4,6 +4,9 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.toWallpaper
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -74,22 +77,20 @@ class RedditRepository @Inject constructor(
     /** Get combined wallpapers from multiple subreddits with pagination */
     suspend fun getMultiSubreddit(
         subreddits: List<String> = redditWallpaperSubs,
-    ): SearchResult<Wallpaper> {
-        val allWallpapers = mutableListOf<Wallpaper>()
-        var anyHasMore = false
-        subreddits.forEach { sub ->
-            try {
-                val result = getSubredditWallpapers(sub, sort = "top", timeRange = "week")
-                allWallpapers.addAll(result.items)
-                if (result.hasMore) anyHasMore = true
-            } catch (_: Exception) {}
-        }
+    ): SearchResult<Wallpaper> = coroutineScope {
+        val results = subreddits.map { sub ->
+            async {
+                try {
+                    getSubredditWallpapers(sub, sort = "top", timeRange = "week")
+                } catch (_: Exception) { null }
+            }
+        }.awaitAll().filterNotNull()
 
-        return SearchResult(
-            items = allWallpapers.distinctBy { it.id },
+        SearchResult(
+            items = results.flatMap { it.items }.distinctBy { it.id },
             totalCount = -1,
             currentPage = 0,
-            hasMore = true,
+            hasMore = results.any { it.hasMore },
         )
     }
 

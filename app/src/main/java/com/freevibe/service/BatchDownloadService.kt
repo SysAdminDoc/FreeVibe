@@ -43,7 +43,7 @@ class BatchDownloadService @Inject constructor(
                     async {
                         semaphore.acquire()
                         try {
-                            _state.update { it.copy(currentItem = wp.id) }
+                            _state.update { s -> s.copy(currentItem = wp.id) }
                             val ext = guessBatchExtension(wp.fileType)
                             try {
                                 downloadManager.downloadWallpaper(
@@ -51,20 +51,28 @@ class BatchDownloadService @Inject constructor(
                                     url = wp.fullUrl,
                                     fileName = "Aura_${wp.id}.$ext",
                                 ).onSuccess {
-                                    _state.update { it.copy(completedCount = it.completedCount + 1) }
+                                    _state.update { s -> s.copy(completedCount = s.completedCount + 1) }
                                 }.onFailure {
-                                    _state.update { it.copy(failedCount = it.failedCount + 1) }
+                                    _state.update { s -> s.copy(failedCount = s.failedCount + 1) }
                                 }
+                            } catch (_: CancellationException) {
+                                throw CancellationException()
                             } catch (_: Exception) {
-                                _state.update { it.copy(failedCount = it.failedCount + 1) }
+                                _state.update { s -> s.copy(failedCount = s.failedCount + 1) }
                             }
                         } finally {
                             semaphore.release()
                         }
                     }
                 }.awaitAll()
+            } catch (_: CancellationException) {
+                // Scope cancelled: count all unfinished items as failed
+                _state.update { s ->
+                    val remaining = s.totalCount - s.completedCount - s.failedCount
+                    s.copy(failedCount = s.failedCount + remaining)
+                }
             } finally {
-                _state.update { it.copy(isRunning = false) }
+                _state.update { s -> s.copy(isRunning = false, currentItem = "") }
             }
         }
     }
@@ -72,7 +80,9 @@ class BatchDownloadService @Inject constructor(
     fun cancel() {
         scope?.cancel()
         scope = null
-        _state.update { it.copy(isRunning = false) }
+        // The coroutine's finally block handles isRunning = false.
+        // Force it here too in case the scope had no active coroutine.
+        _state.update { it.copy(isRunning = false, currentItem = "") }
     }
 
     fun reset() {

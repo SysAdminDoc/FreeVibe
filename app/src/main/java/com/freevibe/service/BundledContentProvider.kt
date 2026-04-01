@@ -248,7 +248,7 @@ class BundledContentProvider @Inject constructor() {
             tags = tags,
             license = "CC0 1.0",
             uploaderName = "Aura Picks",
-            sourcePageUrl = "https://freesound.org/people/inspectorj/sounds/$previewId/",
+            sourcePageUrl = "https://freesound.org/s/$previewId/",
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.freevibe.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 // -- Unified content types --
@@ -50,7 +51,7 @@ data class Sound(
 
 // -- Favorites (Room entity) --
 
-@Entity(tableName = "favorites")
+@Entity(tableName = "favorites", indices = [Index("type")])
 data class FavoriteEntity(
     @PrimaryKey val id: String,
     val source: String,
@@ -63,11 +64,20 @@ data class FavoriteEntity(
     val duration: Double = 0.0,
     val addedAt: Long = System.currentTimeMillis(),
     val offlinePath: String = "",   // #3: local file path for offline access
+    val tags: String? = null,               // comma-separated
+    val colors: String? = null,             // comma-separated
+    val category: String? = null,
+    val uploaderName: String? = null,
+    val sourcePageUrl: String? = null,
+    val fileSize: Long? = null,
+    val fileType: String? = null,
+    val views: Long? = null,
+    val favoritesCount: Long? = null,
 )
 
 // -- Download history (Room entity) --
 
-@Entity(tableName = "downloads")
+@Entity(tableName = "downloads", indices = [Index("type")])
 data class DownloadEntity(
     @PrimaryKey val id: String,
     val source: String,
@@ -103,6 +113,7 @@ data class SearchHistoryEntity(
 @Entity(
     tableName = "wallpaper_cache",
     primaryKeys = ["id", "cacheKey"],
+    indices = [Index("cacheKey")],
 )
 data class WallpaperCacheEntity(
     val id: String,
@@ -116,6 +127,10 @@ data class WallpaperCacheEntity(
     val fileSize: Long = 0,
     val fileType: String = "",
     val uploaderName: String = "",
+    val colors: String = "",
+    val sourcePageUrl: String = "",
+    val views: Int = 0,
+    val favorites: Int = 0,
     val cacheKey: String = "",       // e.g. "wallhaven_1", "search_nature_1"
     val cachedAt: Long = System.currentTimeMillis(),
 )

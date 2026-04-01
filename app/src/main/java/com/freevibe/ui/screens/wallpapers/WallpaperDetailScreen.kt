@@ -37,35 +37,74 @@ import com.freevibe.service.ParallaxWallpaperService
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpaperDetailScreen(
+    wallpaperId: String,
+    fallbackWallpaper: com.freevibe.data.model.Wallpaper? = null,
     onBack: () -> Unit,
-    onEdit: () -> Unit = {},
-    onCrop: () -> Unit = {},
+    onEdit: (String) -> Unit = {},
+    onCrop: (String) -> Unit = {},
     onFindSimilar: ((String) -> Unit)? = null,
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val wallpaper by viewModel.selectedWallpaper.collectAsState()
     val sharedList by viewModel.sharedWallpaperList.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
-    val initialWp = wallpaper ?: return
-
-    // Build stable list once from the initial wallpaper + shared list, only re-filter when hidden changes
-    val initialWpId = remember { initialWp.id }
-    val wallpapers = remember(sharedList, hiddenIds) {
-        val visible = sharedList.filter { it.id !in hiddenIds }
-        // Put initial wallpaper first if still visible
-        val idx = visible.indexOfFirst { it.id == initialWpId }
-        if (idx > 0) {
-            listOf(visible[idx]) + visible.subList(0, idx) + visible.subList(idx + 1, visible.size)
-        } else {
-            visible
-        }
+    var restoreResolved by remember(wallpaperId) { mutableStateOf(false) }
+    var resolvedWallpaper by remember(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
+        mutableStateOf(fallbackWallpaper)
     }
 
-    if (wallpapers.isEmpty()) { onBack(); return }
+    LaunchedEffect(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
+        resolvedWallpaper = viewModel.resolveWallpaper(wallpaperId) ?: fallbackWallpaper
+        restoreResolved = true
+    }
+
+    val initialWp = resolvedWallpaper
+    if (initialWp == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (!restoreResolved) {
+                CircularProgressIndicator()
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.BrokenImage,
+                        null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                }
+            }
+        }
+        return
+    }
+
+    val wallpapers = remember(initialWp, sharedList, hiddenIds) {
+        buildList {
+            add(initialWp)
+            addAll(sharedList)
+        }
+            .distinctBy { it.id }
+            .filter { it.id !in hiddenIds }
+    }
+
+    if (wallpapers.isEmpty()) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
 
     // Track which wallpaper the pager is currently showing
     val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size }
+
+    // Clamp page when list shrinks (e.g. downvote hides item near end)
+    LaunchedEffect(wallpapers.size) {
+        if (pagerState.currentPage >= wallpapers.size && wallpapers.isNotEmpty()) {
+            pagerState.scrollToPage(wallpapers.size - 1)
+        }
+    }
+
     val currentWp = wallpapers.getOrNull(pagerState.currentPage) ?: wallpapers.first()
 
     LaunchedEffect(pagerState.settledPage) {
@@ -294,12 +333,24 @@ fun WallpaperDetailScreen(
                 ) {
                     ActionCircle(
                         icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
                         tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White,
                         onClick = { viewModel.toggleFavorite(wp) },
                     )
-                    ActionCircle(Icons.Default.Download, onClick = { viewModel.downloadWallpaper(wp) })
-                    ActionCircle(Icons.Default.ImageSearch, onClick = { viewModel.findSimilar(wp); onBack() })
-                    ActionCircle(Icons.Default.Share, onClick = {
+                    ActionCircle(
+                        icon = Icons.Default.Download,
+                        contentDescription = "Download wallpaper",
+                        onClick = { viewModel.downloadWallpaper(wp) },
+                    )
+                    ActionCircle(
+                        icon = Icons.Default.ImageSearch,
+                        contentDescription = "Find similar wallpapers",
+                        onClick = { viewModel.findSimilar(wp); onBack() },
+                    )
+                    ActionCircle(
+                        icon = Icons.Default.Share,
+                        contentDescription = "Share wallpaper",
+                        onClick = {
                         val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
@@ -307,7 +358,11 @@ fun WallpaperDetailScreen(
                         }
                         context.startActivity(Intent.createChooser(intent, "Share"))
                     })
-                    ActionCircle(Icons.Default.MoreHoriz, onClick = { showMoreMenu = true })
+                    ActionCircle(
+                        icon = Icons.Default.MoreHoriz,
+                        contentDescription = "More wallpaper actions",
+                        onClick = { showMoreMenu = true },
+                    )
                 }
             }
 
@@ -334,15 +389,18 @@ fun WallpaperDetailScreen(
             if (showMoreMenu) {
                 MoreActionsSheet(
                     onDismiss = { showMoreMenu = false },
-                    onEdit = { showMoreMenu = false; onEdit() },
-                    onCrop = { showMoreMenu = false; onCrop() },
+                    onEdit = { showMoreMenu = false; onEdit(wp.id) },
+                    onCrop = { showMoreMenu = false; onCrop(wp.id) },
                     onCollection = { showMoreMenu = false; showCollectionPicker = true },
                     onFindSimilar = colorPalette?.dominantColor?.takeIf { it != 0 }?.let { color ->
                         {
                             showMoreMenu = false
                             val hex = String.format("%06x", color and 0xFFFFFF)
                             if (onFindSimilar != null) onFindSimilar(hex)
-                            else { viewModel.setPendingColorSearch(hex); onBack() }
+                            else {
+                                viewModel.searchByColor(hex)
+                                onBack()
+                            }
                         }
                     },
                     uploaderName = wp.uploaderName,
@@ -398,6 +456,7 @@ private fun WallpaperImage(url: String, modifier: Modifier = Modifier) {
 @Composable
 private fun ActionCircle(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
     tint: Color = Color.White,
     onClick: () -> Unit,
 ) {
@@ -408,7 +467,7 @@ private fun ActionCircle(
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.15f)),
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 

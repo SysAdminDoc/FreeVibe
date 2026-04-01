@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -117,41 +118,54 @@ class DownloadManager @Inject constructor(
             val uri = resolver.insert(collection, values)
                 ?: throw IllegalStateException("Failed to create MediaStore entry")
 
-            // Stream data with progress tracking
-            var downloadedBytes = 0L
-            resolver.openOutputStream(uri)?.use { output ->
-                body.byteStream().use { input ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        downloadedBytes += bytesRead
-                        val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
-                        updateProgress(id, DownloadProgress(id, fileName, progress, totalBytes, downloadedBytes))
+            var success = false
+            try {
+                // Stream data with progress tracking
+                var downloadedBytes = 0L
+                val outputStream = resolver.openOutputStream(uri)
+                if (outputStream == null) {
+                    try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+                    throw IllegalStateException("Failed to open output stream")
+                }
+                outputStream.use { output ->
+                    body.byteStream().use { input ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
+                            updateProgress(id, DownloadProgress(id, fileName, progress, totalBytes, downloadedBytes))
+                        }
                     }
                 }
-            }
 
-            // Mark as complete in MediaStore
-            if (Build.VERSION.SDK_INT >= 29) {
-                values.clear()
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
-            }
+                // Mark as complete in MediaStore
+                if (Build.VERSION.SDK_INT >= 29) {
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                }
 
-            // Record in local database
-            downloadDao.insert(
-                DownloadEntity(
-                    id = id,
-                    source = contentType,
-                    type = contentType,
-                    localPath = uri.toString(),
-                    name = fileName,
+                // Record in local database
+                downloadDao.insert(
+                    DownloadEntity(
+                        id = id,
+                        source = contentType,
+                        type = contentType,
+                        localPath = uri.toString(),
+                        name = fileName,
+                    )
                 )
-            )
 
-            // Mark download complete
-            updateProgress(id, DownloadProgress(id, fileName, 1f, totalBytes, downloadedBytes, isComplete = true))
+                // Mark download complete
+                updateProgress(id, DownloadProgress(id, fileName, 1f, totalBytes, downloadedBytes, isComplete = true))
+                success = true
+            } finally {
+                if (!success) {
+                    try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+                }
+            }
 
             uri
         }
@@ -160,11 +174,11 @@ class DownloadManager @Inject constructor(
     }
 
     fun clearCompleted(id: String) {
-        _activeDownloads.value = _activeDownloads.value - id
+        _activeDownloads.update { it - id }
     }
 
     private fun updateProgress(id: String, progress: DownloadProgress) {
-        _activeDownloads.value = _activeDownloads.value + (id to progress)
+        _activeDownloads.update { it + (id to progress) }
     }
 
     private fun sanitize(name: String) = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")

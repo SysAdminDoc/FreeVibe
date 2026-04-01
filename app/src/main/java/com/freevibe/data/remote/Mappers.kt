@@ -55,8 +55,8 @@ fun BingImage.toWallpaper() = Wallpaper(
     category = "daily",
     tags = listOf("bing", "daily", "curated"),
     sourcePageUrl = copyrightLink,
-    uploaderName = copyright.substringAfter("(c) ", copyright)
-        .substringAfter("(", copyright).substringBefore(")"),
+    uploaderName = Regex("""\(([^)]+)\)""").find(copyright)?.groupValues?.get(1)
+        ?: copyright.take(80),
 )
 
 // -- Pixabay -> Wallpaper --
@@ -86,6 +86,15 @@ fun Wallpaper.toFavoriteEntity() = FavoriteEntity(
     fullUrl = fullUrl,
     width = width,
     height = height,
+    tags = tags.takeIf { it.isNotEmpty() }?.joinToString(" ||| "),
+    colors = colors.takeIf { it.isNotEmpty() }?.joinToString(" ||| "),
+    category = category.takeIf { it.isNotEmpty() },
+    uploaderName = uploaderName.takeIf { it.isNotEmpty() },
+    sourcePageUrl = sourcePageUrl.takeIf { it.isNotEmpty() },
+    fileSize = fileSize.takeIf { it > 0 },
+    fileType = fileType.takeIf { it.isNotEmpty() },
+    views = views.toLong().takeIf { it > 0 },
+    favoritesCount = favorites.toLong().takeIf { it > 0 },
 )
 
 fun Sound.toFavoriteEntity() = FavoriteEntity(
@@ -96,6 +105,12 @@ fun Sound.toFavoriteEntity() = FavoriteEntity(
     fullUrl = downloadUrl,
     name = name,
     duration = duration,
+    tags = tags.takeIf { it.isNotEmpty() }?.joinToString(" ||| "),
+    category = null,
+    uploaderName = uploaderName.takeIf { it.isNotEmpty() },
+    sourcePageUrl = sourcePageUrl.takeIf { it.isNotEmpty() },
+    fileSize = fileSize.takeIf { it > 0 },
+    fileType = fileType.takeIf { it.isNotEmpty() },
 )
 
 // -- FavoriteEntity -> Domain --
@@ -107,15 +122,29 @@ fun FavoriteEntity.toWallpaper() = Wallpaper(
     fullUrl = fullUrl,
     width = width,
     height = height,
+    tags = tags?.split(" ||| ")?.filter { it.isNotEmpty() } ?: emptyList(),
+    colors = colors?.split(" ||| ")?.filter { it.isNotEmpty() } ?: emptyList(),
+    category = category ?: "",
+    uploaderName = uploaderName ?: "",
+    sourcePageUrl = sourcePageUrl ?: "",
+    fileSize = fileSize ?: 0L,
+    fileType = fileType ?: "",
+    views = views?.toInt() ?: 0,
+    favorites = favoritesCount?.toInt() ?: 0,
 )
 
 fun FavoriteEntity.toSound() = Sound(
     id = id,
-    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.INTERNET_ARCHIVE },
+    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.FREESOUND },
     name = name,
     previewUrl = fullUrl,
     downloadUrl = fullUrl,
     duration = duration,
+    tags = tags?.split(" ||| ")?.filter { it.isNotEmpty() } ?: emptyList(),
+    uploaderName = uploaderName ?: "",
+    sourcePageUrl = sourcePageUrl ?: "",
+    fileSize = fileSize ?: 0L,
+    fileType = fileType ?: "",
 )
 
 // -- Reddit Post -> Wallpaper --

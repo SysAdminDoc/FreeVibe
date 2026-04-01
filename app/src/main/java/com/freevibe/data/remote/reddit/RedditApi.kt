@@ -37,7 +37,6 @@ interface RedditApi {
         val WALLPAPER_SUBREDDITS = listOf(
             "wallpapers" to "Wallpapers",
             "wallpaper" to "Wallpaper",
-            "Amoledbackgrounds" to "AMOLED",
             "MobileWallpaper" to "Mobile",
             "iWallpaper" to "iPhone/Mobile",
             "MinimalWallpaper" to "Minimal",
@@ -54,7 +53,7 @@ interface RedditApi {
 
 @JsonClass(generateAdapter = true)
 data class RedditListingResponse(
-    @Json(name = "data") val data: RedditListingData,
+    @Json(name = "data") val data: RedditListingData = RedditListingData(),
 )
 
 @JsonClass(generateAdapter = true)

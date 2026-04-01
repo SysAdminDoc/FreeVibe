@@ -76,11 +76,13 @@ class WallpaperApplier @Inject constructor(
             val request = Request.Builder().url(url).build()
             val response = okHttpClient.newCall(request).execute()
             response.use { resp ->
-                val bytes = resp.body?.bytes() ?: throw IllegalStateException("Empty response")
+                if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
                 val dir = java.io.File(context.filesDir, "parallax")
                 dir.mkdirs()
                 val file = java.io.File(dir, fileName)
-                file.writeBytes(bytes)
+                resp.body?.byteStream()?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw IllegalStateException("Empty response")
                 // Store path for ParallaxWallpaperService
                 context.getSharedPreferences("freevibe_parallax", Context.MODE_PRIVATE)
                     .edit()
@@ -107,6 +109,7 @@ class WallpaperApplier @Inject constructor(
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
         response.use { resp ->
+            if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
             resp.body?.byteStream()?.use { stream ->
                 BitmapFactory.decodeStream(stream)
             }

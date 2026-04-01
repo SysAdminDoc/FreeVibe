@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,9 +60,12 @@ class FavoritesViewModel @Inject constructor(
     fun removeFavorite(id: String) = viewModelScope.launch { favoritesRepo.remove(id) }
     fun restoreFavorite(entity: FavoriteEntity) = viewModelScope.launch { favoritesRepo.add(entity) }
 
-    /** Convert FavoriteEntity to domain Wallpaper and populate shared holder */
-    fun selectWallpaper(fav: FavoriteEntity) {
-        selectedContent.selectWallpaper(fav.toWallpaper())
+    /** Convert FavoriteEntity to domain Wallpaper and populate shared holder with the visible list */
+    fun selectWallpaper(fav: FavoriteEntity, visibleWallpapers: List<FavoriteEntity>) {
+        selectedContent.selectWallpaper(
+            fav.toWallpaper(),
+            visibleWallpapers.map { it.toWallpaper() },
+        )
     }
 
     /** Convert FavoriteEntity to domain Sound and populate shared holder */
@@ -71,14 +75,14 @@ class FavoritesViewModel @Inject constructor(
 
     fun exportFavorites(uri: Uri) = viewModelScope.launch {
         exporter.export(uri)
-            .onSuccess { count -> _message.value = "Exported $count favorites" }
-            .onFailure { _message.value = "Export failed: ${it.message}" }
+            .onSuccess { count -> _message.update { _ -> "Exported $count favorites" } }
+            .onFailure { e -> _message.update { _ -> "Export failed: ${e.message}" } }
     }
 
     fun importFavorites(uri: Uri) = viewModelScope.launch {
         exporter.import(uri)
-            .onSuccess { count -> _message.value = "Imported $count favorites" }
-            .onFailure { _message.value = "Import failed: ${it.message}" }
+            .onSuccess { count -> _message.update { _ -> "Imported $count favorites" } }
+            .onFailure { e -> _message.update { _ -> "Import failed: ${e.message}" } }
     }
 
     val batchState = batchDownloadService.state
@@ -87,10 +91,10 @@ class FavoritesViewModel @Inject constructor(
         val wps = wallpapers.value.map { it.toWallpaper() }
         if (wps.isEmpty()) return
         batchDownloadService.downloadBatch(wps)
-        _message.value = "Downloading ${wps.size} wallpapers..."
+        _message.update { _ -> "Downloading ${wps.size} wallpapers..." }
     }
 
-    fun clearMessage() { _message.value = null }
+    fun clearMessage() { _message.update { _ -> null } }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -103,9 +107,9 @@ fun FavoritesScreen(
     val wallpapers by viewModel.wallpapers.collectAsState()
     val sounds by viewModel.sounds.collectAsState()
     val message by viewModel.message.collectAsState()
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
-    var sortBy by remember { mutableStateOf("recent") } // recent, name, oldest
+    var sortBy by rememberSaveable { mutableStateOf("recent") } // recent, name, oldest
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val tabs = listOf("Wallpapers (${wallpapers.size})", "Sounds (${sounds.size})")
@@ -225,7 +229,7 @@ fun FavoritesScreen(
                                         .clip(RoundedCornerShape(12.dp))
                                         .combinedClickable(
                                             onClick = {
-                                                viewModel.selectWallpaper(fav)
+                                                viewModel.selectWallpaper(fav, sortedWallpapers)
                                                 onWallpaperClick(fav)
                                             },
                                             onLongClick = {

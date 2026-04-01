@@ -97,15 +97,22 @@ class WallpaperRepository @Inject constructor(
         val sources = listOf(
             async { runCatching { getWallhaven(query = query, page = page) }.getOrNull() },
             async { runCatching { getPixabay(query = query, page = page) }.getOrNull() },
-            async { runCatching { getPicsum(page = page) }.getOrNull() }, // Picsum doesn't support search, just adds variety
         )
         val results = sources.map { it.await() }
-        val combined = results.filterNotNull().flatMap { it.items }.shuffled()
+        val bySource = results.filterNotNull().map { it.items.toMutableList() }
+        val combined = mutableListOf<Wallpaper>()
+        while (bySource.any { it.isNotEmpty() }) {
+            bySource.forEach { source ->
+                if (source.isNotEmpty()) {
+                    combined.add(source.removeAt(0))
+                }
+            }
+        }
         SearchResult(
             items = combined,
-            totalCount = combined.size * 5,
+            totalCount = results.filterNotNull().sumOf { it.totalCount },
             currentPage = page,
-            hasMore = combined.size >= 5 && results.any { it?.hasMore == true },
+            hasMore = results.any { it?.hasMore == true },
         )
     }
 
@@ -267,7 +274,7 @@ class WallpaperRepository @Inject constructor(
         var idx = 0
         while (bySource.any { it.isNotEmpty() }) {
             for (source in bySource) {
-                if (source.isNotEmpty()) interleaved.add(source.removeFirst())
+                if (source.isNotEmpty()) interleaved.add(source.removeAt(0))
             }
             idx++
             if (idx > 200) break
