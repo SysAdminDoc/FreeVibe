@@ -75,11 +75,20 @@ fun SoundsScreen(
             uploadProgress = state.uploadProgress,
             onUpload = { name, category ->
                 viewModel.uploadSound(selectedAudioUri!!, name, category)
+            },
+            onDismiss = {
+                if (!state.isUploading) {
+                    showUploadDialog = false; selectedAudioUri = null
+                }
+            },
+        )
+        // Auto-dismiss when upload completes
+        LaunchedEffect(state.isUploading) {
+            if (!state.isUploading && showUploadDialog && state.uploadProgress > 0f) {
                 showUploadDialog = false
                 selectedAudioUri = null
-            },
-            onDismiss = { showUploadDialog = false; selectedAudioUri = null },
-        )
+            }
+        }
     }
 
     // Quick Apply bottom sheet
