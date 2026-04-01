@@ -436,8 +436,8 @@ class WallpapersViewModel @Inject constructor(
             if (s.selectedTab == WallpaperTab.DISCOVER && !loadMore && !isRefresh) {
                 val cached = wallpaperRepo.getCachedDiscover(s.currentPage)
                 if (!cached.isNullOrEmpty()) {
-                    _state.update { it.copy(wallpapers = cached, isLoading = false, hasMore = true) }
-                    // Continue loading fresh results in background (isRefresh-like)
+                    _state.update { it.copy(wallpapers = cached, hasMore = true) }
+                    // Keep isLoading = true — network request still in progress
                 }
             }
 

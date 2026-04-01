@@ -169,6 +169,7 @@ class SoundsViewModel @Inject constructor(
 
     fun selectTab(tab: SoundTab) {
         stopPlayback()
+        communityJob?.cancel()
         _state.update {
             it.copy(
                 selectedTab = tab, query = "", sounds = emptyList(),
