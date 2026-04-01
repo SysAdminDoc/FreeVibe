@@ -129,14 +129,12 @@ class DailyWallpaperWorker @AssistedInject constructor(
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Daily Wallpaper",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply { description = "Today's most upvoted wallpaper from Reddit" }
-            val manager = applicationContext.getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID, "Daily Wallpaper",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply { description = "Today's most upvoted wallpaper from Reddit" }
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     companion object {

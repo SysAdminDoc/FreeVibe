@@ -371,6 +371,24 @@ fun FreeVibeRoot(
                     onBack = { navController.popBackStack() },
                     onEdit = { id -> navController.navigate(Screen.WallpaperEditor.createRoute(id)) { launchSingleTop = true } },
                     onCrop = { id -> navController.navigate(Screen.WallpaperCrop.createRoute(id)) { launchSingleTop = true } },
+                    onSearchTag = { tag ->
+                        navController.navigate(Screen.Wallpapers.createRoute(query = tag)) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
+                    onSearchColor = { colorHex ->
+                        navController.navigate(Screen.Wallpapers.createRoute(color = colorHex)) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
                     onFindSimilar = { colorHex ->
                         navController.navigate(Screen.Wallpapers.createRoute(color = colorHex)) {
                             popUpTo(navController.graph.findStartDestination().id) {

@@ -1,9 +1,6 @@
 package com.freevibe.ui.screens.videowallpapers
 
-import android.app.WallpaperManager
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
@@ -36,6 +33,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.freevibe.service.VideoWallpaperService
+import com.freevibe.ui.LiveWallpaperLaunchMode
+import com.freevibe.ui.launchLiveWallpaperPicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,48 +79,12 @@ data class VideoWallpapersState(
     val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
 )
 
-internal enum class LiveWallpaperLaunchMode {
-    DIRECT,
-    CHOOSER,
-}
-
 internal fun persistSelectedVideoWallpaper(context: Context, file: File) {
     context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
         .edit()
         .putString("video_path", file.absolutePath)
         .putString("scale_mode", "zoom")
         .apply()
-}
-
-internal fun tryLaunchIntent(context: Context, intent: Intent, tag: String): Boolean {
-    val resolved = intent.resolveActivity(context.packageManager) ?: return false
-    return try {
-        if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Launching $tag via ${resolved.flattenToShortString()}")
-        context.startActivity(intent)
-        true
-    } catch (e: Exception) {
-        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Failed to launch $tag", e)
-        false
-    }
-}
-
-internal fun launchLiveWallpaperPicker(context: Context): LiveWallpaperLaunchMode? {
-    val serviceComponent = ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java)
-    val directIntent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-        putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, serviceComponent)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    if (tryLaunchIntent(context, directIntent, "ACTION_CHANGE_LIVE_WALLPAPER")) {
-        return LiveWallpaperLaunchMode.DIRECT
-    }
-
-    val chooserIntent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    if (tryLaunchIntent(context, chooserIntent, "ACTION_LIVE_WALLPAPER_CHOOSER")) {
-        return LiveWallpaperLaunchMode.CHOOSER
-    }
-    return null
 }
 
 internal suspend fun exportVideoToGallery(context: Context, file: File): Uri? = withContext(Dispatchers.IO) {
@@ -145,7 +109,15 @@ internal suspend fun exportVideoToGallery(context: Context, file: File): Uri? = 
 
 internal suspend fun launchOrExportVideoWallpaper(context: Context, file: File, isCropped: Boolean = false) {
     persistSelectedVideoWallpaper(context, file)
-    when (withContext(Dispatchers.Main) { launchLiveWallpaperPicker(context) }) {
+    when (
+        withContext(Dispatchers.Main) {
+            launchLiveWallpaperPicker(
+                context = context,
+                serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
+                tag = "VideoWallpaper",
+            )
+        }
+    ) {
         LiveWallpaperLaunchMode.DIRECT -> {
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
@@ -276,23 +248,30 @@ fun VideoWallpapersScreen(
             ) { uri: Uri? ->
                 uri?.let {
                     // Copy to app storage and set as live wallpaper
-                    val path = try {
+                    val cacheFile = try {
                         val input = context.contentResolver.openInputStream(it)
                         val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
                         input?.use { inp -> cacheFile.outputStream().use { out -> inp.copyTo(out) } }
-                        cacheFile.absolutePath
+                        cacheFile
                     } catch (_: Exception) { null }
-                    if (path != null) {
-                        context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
-                            .edit().putString("video_path", path).apply()
-                        try {
-                            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                                putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                                    ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java))
+                    if (cacheFile != null) {
+                        persistSelectedVideoWallpaper(context, cacheFile)
+                        when (
+                            launchLiveWallpaperPicker(
+                                context = context,
+                                serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
+                                tag = "VideoWallpaperGallery",
+                            )
+                        ) {
+                            LiveWallpaperLaunchMode.DIRECT -> {
+                                Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
                             }
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            Toast.makeText(context, "Go to Settings > Wallpaper > Live Wallpapers", Toast.LENGTH_LONG).show()
+                            LiveWallpaperLaunchMode.CHOOSER -> {
+                                Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                            }
+                            null -> {
+                                Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                            }
                         }
                     }
                 }
