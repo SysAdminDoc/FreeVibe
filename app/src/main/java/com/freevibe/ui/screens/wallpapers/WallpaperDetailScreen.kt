@@ -33,6 +33,8 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.service.ParallaxWallpaperService
+import com.freevibe.ui.LiveWallpaperLaunchMode
+import com.freevibe.ui.launchLiveWallpaperPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +44,8 @@ fun WallpaperDetailScreen(
     onBack: () -> Unit,
     onEdit: (String) -> Unit = {},
     onCrop: (String) -> Unit = {},
+    onSearchTag: (String) -> Unit = {},
+    onSearchColor: (String) -> Unit = {},
     onFindSimilar: ((String) -> Unit)? = null,
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
@@ -135,22 +139,18 @@ fun WallpaperDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(state.pendingLiveWallpaperLaunch) {
         if (state.pendingLiveWallpaperLaunch) {
-            // Launch the system live wallpaper picker for ParallaxWallpaperService
-            try {
-                val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                    putExtra(
-                        WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                        ComponentName(context, ParallaxWallpaperService::class.java),
-                    )
-                }
-                context.startActivity(intent)
-            } catch (_: Exception) {
-                // Fallback: open generic live wallpaper picker
-                try {
-                    context.startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
-                } catch (_: Exception) {}
+            val message = when (
+                launchLiveWallpaperPicker(
+                    context = context,
+                    serviceComponent = ComponentName(context, ParallaxWallpaperService::class.java),
+                    tag = "ParallaxWallpaper",
+                )
+            ) {
+                LiveWallpaperLaunchMode.DIRECT -> "Aura Parallax opened. Set wallpaper to finish."
+                LiveWallpaperLaunchMode.CHOOSER -> "Choose 'Aura Parallax' in the picker, then tap Set wallpaper."
+                null -> "Parallax wallpaper is ready. Open Settings > Wallpaper > Live Wallpapers to finish setup."
             }
-            snackbarHostState.showSnackbar("Parallax wallpaper prepared")
+            snackbarHostState.showSnackbar(message)
             viewModel.clearPendingLaunch()
         }
     }
@@ -298,7 +298,7 @@ fun WallpaperDetailScreen(
                         wp.tags.take(8).forEach { tag ->
                             item {
                                 SuggestionChip(
-                                    onClick = { viewModel.searchByTag(tag); onBack() },
+                                    onClick = { onSearchTag(tag) },
                                     label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
                                     colors = SuggestionChipDefaults.suggestionChipColors(
                                         containerColor = Color.White.copy(alpha = 0.15f),
@@ -318,7 +318,7 @@ fun WallpaperDetailScreen(
                         wp.colors.take(5).forEach { hex ->
                             val colorInt = runCatching { android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex") }.getOrDefault(0)
                             Surface(
-                                onClick = { viewModel.searchByColor(hex.removePrefix("#")); onBack() },
+                                onClick = { onSearchColor(hex.removePrefix("#")) },
                                 color = Color(colorInt),
                                 shape = CircleShape,
                                 modifier = Modifier.size(22.dp),
