@@ -32,10 +32,13 @@ class WallpaperPagingSource(
             // Check cache first
             val cached = cacheManager.getCached(cacheKey, source)
             if (cached != null && cached.isNotEmpty()) {
+                // Check if the next page is also cached; if not, go to network for proper hasMore
+                val nextCacheKey = "${cacheKeyPrefix}_${page + 1}"
+                val nextCached = cacheManager.getCached(nextCacheKey, source)
                 return LoadResult.Page(
                     data = cached,
                     prevKey = if (page == 1) null else page - 1,
-                    nextKey = page + 1,
+                    nextKey = if (nextCached != null && nextCached.isNotEmpty()) page + 1 else null,
                 )
             }
 
@@ -62,7 +65,7 @@ class WallpaperPagingSource(
                 LoadResult.Page(
                     data = staleCache,
                     prevKey = if (page == 1) null else page - 1,
-                    nextKey = page + 1,
+                    nextKey = null, // Can't verify pagination state when offline
                 )
             } else {
                 LoadResult.Error(e)

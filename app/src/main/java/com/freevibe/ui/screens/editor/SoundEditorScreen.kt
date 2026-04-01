@@ -252,12 +252,10 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     fun setFadeIn(ms: Long) {
-        saveUndo()
         _state.update { it.copy(fadeInMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
     }
 
     fun setFadeOut(ms: Long) {
-        saveUndo()
         _state.update { it.copy(fadeOutMs = ms.coerceIn(0, (it.trimDurationMs / 2).coerceAtLeast(1))) }
     }
 
@@ -695,9 +693,14 @@ fun SoundEditorScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        var fadeInUndoSaved by remember { mutableStateOf(false) }
                         Slider(
                             value = state.fadeInMs.toFloat(),
-                            onValueChange = { viewModel.setFadeIn(it.toLong()) },
+                            onValueChange = {
+                                if (!fadeInUndoSaved) { viewModel.saveUndo(); fadeInUndoSaved = true }
+                                viewModel.setFadeIn(it.toLong())
+                            },
+                            onValueChangeFinished = { fadeInUndoSaved = false },
                             valueRange = 0f..(state.trimDurationMs / 2f).coerceAtLeast(100f),
                             modifier = Modifier.height(32.dp),
                         )
@@ -709,9 +712,14 @@ fun SoundEditorScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        var fadeOutUndoSaved by remember { mutableStateOf(false) }
                         Slider(
                             value = state.fadeOutMs.toFloat(),
-                            onValueChange = { viewModel.setFadeOut(it.toLong()) },
+                            onValueChange = {
+                                if (!fadeOutUndoSaved) { viewModel.saveUndo(); fadeOutUndoSaved = true }
+                                viewModel.setFadeOut(it.toLong())
+                            },
+                            onValueChangeFinished = { fadeOutUndoSaved = false },
                             valueRange = 0f..(state.trimDurationMs / 2f).coerceAtLeast(100f),
                             modifier = Modifier.height(32.dp),
                         )
