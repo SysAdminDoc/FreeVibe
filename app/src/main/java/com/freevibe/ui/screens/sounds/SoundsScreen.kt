@@ -256,12 +256,12 @@ fun SoundsScreen(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Icon(Icons.Default.CloudOff, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+                        Icon(Icons.Default.CloudOff, contentDescription = "Error", Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
                         Spacer(Modifier.height(12.dp))
                         Text(state.error ?: "Error", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(16.dp))
                         FilledTonalButton(onClick = { viewModel.selectTab(state.selectedTab) }) {
-                            Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
+                            Icon(Icons.Default.Refresh, contentDescription = "Retry", Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Retry")
                         }
@@ -272,6 +272,7 @@ fun SoundsScreen(
                             sounds = state.sounds,
                             isLoading = state.isLoading,
                             playingId = state.playingId,
+                            resolvingId = state.resolvingId,
                             isLoadingMore = state.isLoadingMore,
                             cachedYtIds = cachedYtIds,
                             filterKey = state.filterKey,
@@ -301,6 +302,7 @@ private fun SoundsList(
     sounds: List<Sound>,
     isLoading: Boolean,
     playingId: String?,
+    resolvingId: String?,
     isLoadingMore: Boolean,
     cachedYtIds: Set<String>,
     filterKey: Int,
@@ -336,7 +338,7 @@ private fun SoundsList(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(vertical = 8.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.TrendingUp, null, Modifier.size(20.dp), tint = Color(0xFFFF4444))
+                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = "Trending", Modifier.size(20.dp), tint = Color(0xFFFF4444))
                     Text("Top 5 This Week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
@@ -344,7 +346,7 @@ private fun SoundsList(
                 SoundCard(
                     sound = sound,
                     isPlaying = playingId == sound.id,
-                    isResolving = sound.id.startsWith("yt_") && sound.id !in cachedYtIds && playingId == sound.id,
+                    isResolving = sound.id == resolvingId,
                     playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
                     onClick = { onSoundClick(sound) },
                     onLongPress = { onLongPress(sound) },
@@ -385,7 +387,7 @@ private fun SoundsList(
         if (!isLoading && sounds.isEmpty() && topHits.isEmpty()) {
             item(key = "empty") {
                 Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.MusicOff, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    Icon(Icons.Default.MusicOff, contentDescription = "No sounds", Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                     Spacer(Modifier.height(12.dp))
                     Text("No sounds found", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -450,7 +452,7 @@ private fun SoundCard(
                     } else {
                         Icon(
                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            null,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(22.dp),
                         )
@@ -507,7 +509,18 @@ private fun SoundCard(
                 }
 
                 // Chevron
-                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.ChevronRight, contentDescription = "Details", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+            }
+
+            // Resolving indicator
+            if (isResolving) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Resolving audio...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(start = 56.dp),
+                )
             }
 
             // Playback waveform

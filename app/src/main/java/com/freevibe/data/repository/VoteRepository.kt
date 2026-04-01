@@ -47,21 +47,26 @@ class VoteRepository @Inject constructor(
     private val moderationRef get() = db?.child("moderation")
 
     /**
-     * Legacy admin device IDs retained for compatibility until server-side claims land.
+     * Admin device IDs stored as SHA-256 hashes so plaintext IDs aren't in the APK.
      * TODO: Move admin authorization to Firebase Custom Claims / Security Rules.
      *       Client-side checks are spoofable on rooted devices.
      */
-    private val adminDeviceIds = setOf(
-        "9eb287ea039a5b73", // SysAdminDoc (adb)
-        "abed3c69ec4115f2", // SysAdminDoc (app runtime)
+    private val adminDeviceIdHashes = setOf(
+        "70221777b62eabc52f5d0625fe7fd27f6a96f1a314231f0a33e7db98cb7da49b",
+        "8d5c02d2bc8767d04eb1cdc9a662a16a735fb130374d6c98b189ff787b78f80c",
     )
 
     /** Admin Firebase UIDs can be added here until custom claims/rules are in place */
     private val adminUserIds = emptySet<String>()
 
+    private fun sha256(input: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
     val isAdmin: Boolean
         get() = identityProvider.currentUserId() in adminUserIds ||
-            identityProvider.legacyDeviceId in adminDeviceIds
+            sha256(identityProvider.legacyDeviceId) in adminDeviceIdHashes
 
     // ── Local hidden IDs (user's personal downvotes) ──
 
