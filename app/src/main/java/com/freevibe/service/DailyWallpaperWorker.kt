@@ -71,48 +71,51 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 } catch (_: Exception) { null }
             }
 
-            createNotificationChannel()
+            try {
+                createNotificationChannel()
 
-            if (Build.VERSION.SDK_INT >= 33 &&
-                ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                return Result.success()
-            }
-
-            val intent = Intent(applicationContext, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("daily_wallpaper_id", wallpaper.id)
-                putExtra("daily_wallpaper_url", wallpaper.fullUrl)
-                putExtra("daily_wallpaper_thumb", wallpaper.thumbnailUrl)
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                applicationContext, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-
-            val upvotes = formatUpvotes(topPost.ups)
-            val res = topPost.parsedResolution
-            val resText = if (res != null) "${res.first}x${res.second} " else ""
-            val subName = "r/${topPost.subreddit}"
-
-            val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("Wallpaper of the Day")
-                .setContentText("$upvotes upvotes on $subName ${resText}- tap to preview")
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .apply {
-                    bitmap?.let {
-                        setLargeIcon(it)
-                        setStyle(NotificationCompat.BigPictureStyle()
-                            .bigPicture(it)
-                            .setSummaryText("$upvotes upvotes on $subName"))
-                    }
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    return Result.success()
                 }
-                .build()
 
-            NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, notification)
-            bitmap?.recycle()
+                val intent = Intent(applicationContext, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra("daily_wallpaper_id", wallpaper.id)
+                    putExtra("daily_wallpaper_url", wallpaper.fullUrl)
+                    putExtra("daily_wallpaper_thumb", wallpaper.thumbnailUrl)
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    applicationContext, 0, intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+
+                val upvotes = formatUpvotes(topPost.ups)
+                val res = topPost.parsedResolution
+                val resText = if (res != null) "${res.first}x${res.second} " else ""
+                val subName = "r/${topPost.subreddit}"
+
+                val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Wallpaper of the Day")
+                    .setContentText("$upvotes upvotes on $subName ${resText}- tap to preview")
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .apply {
+                        bitmap?.let {
+                            setLargeIcon(it)
+                            setStyle(NotificationCompat.BigPictureStyle()
+                                .bigPicture(it)
+                                .setSummaryText("$upvotes upvotes on $subName"))
+                        }
+                    }
+                    .build()
+
+                NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, notification)
+            } finally {
+                bitmap?.recycle()
+            }
             Result.success()
         } catch (_: Exception) {
             Result.retry()

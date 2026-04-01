@@ -105,7 +105,7 @@ fun WallpaperDetailScreen(
         }
     }
 
-    val currentWp = wallpapers.getOrNull(pagerState.currentPage) ?: wallpapers.first()
+    val currentWp = wallpapers.getOrNull(pagerState.currentPage) ?: wallpapers.firstOrNull() ?: return
 
     LaunchedEffect(pagerState.settledPage) {
         wallpapers.getOrNull(pagerState.settledPage)?.let {
