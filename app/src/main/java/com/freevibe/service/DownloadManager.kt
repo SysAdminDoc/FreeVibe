@@ -46,14 +46,16 @@ class DownloadManager @Inject constructor(
         url: String,
         fileName: String,
     ): Result<Uri> = withContext(Dispatchers.IO) {
+        val contentType = "WALLPAPER"
         downloadFile(
-            id = id,
+            contentId = id,
+            historyId = buildHistoryId(contentType, id),
             url = url,
             fileName = sanitize(fileName),
             mimeType = guessMimeType(url),
             relativePath = Environment.DIRECTORY_PICTURES + "/Aura",
             collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            contentType = "WALLPAPER",
+            contentType = contentType,
         )
     }
 
@@ -64,6 +66,7 @@ class DownloadManager @Inject constructor(
         fileName: String,
         type: ContentType,
     ): Result<Uri> = withContext(Dispatchers.IO) {
+        val contentType = "SOUND"
         val relativePath = when (type) {
             ContentType.RINGTONE -> Environment.DIRECTORY_RINGTONES
             ContentType.NOTIFICATION -> Environment.DIRECTORY_NOTIFICATIONS
@@ -72,18 +75,20 @@ class DownloadManager @Inject constructor(
         } + "/Aura"
 
         downloadFile(
-            id = id,
+            contentId = id,
+            historyId = buildHistoryId(contentType, id),
             url = url,
             fileName = sanitize(fileName),
             mimeType = guessAudioMime(url),
             relativePath = relativePath,
             collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            contentType = "SOUND",
+            contentType = contentType,
         )
     }
 
     private suspend fun downloadFile(
-        id: String,
+        contentId: String,
+        historyId: String,
         url: String,
         fileName: String,
         mimeType: String,
@@ -91,7 +96,7 @@ class DownloadManager @Inject constructor(
         collection: Uri,
         contentType: String,
     ): Result<Uri> = runCatching {
-        updateProgress(id, DownloadProgress(id, fileName, 0f, 0, 0))
+        updateProgress(historyId, DownloadProgress(historyId, fileName, 0f, 0, 0))
 
         // Start HTTP download
         val request = Request.Builder().url(url).build()
@@ -135,7 +140,10 @@ class DownloadManager @Inject constructor(
                             output.write(buffer, 0, bytesRead)
                             downloadedBytes += bytesRead
                             val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
-                            updateProgress(id, DownloadProgress(id, fileName, progress, totalBytes, downloadedBytes))
+                            updateProgress(
+                                historyId,
+                                DownloadProgress(historyId, fileName, progress, totalBytes, downloadedBytes),
+                            )
                         }
                     }
                 }
@@ -147,10 +155,16 @@ class DownloadManager @Inject constructor(
                     resolver.update(uri, values, null, null)
                 }
 
+                val existingEntries = downloadDao.findMatching(
+                    type = contentType,
+                    legacyId = contentId,
+                    scopedId = historyId,
+                )
+
                 // Record in local database
                 downloadDao.insert(
                     DownloadEntity(
-                        id = id,
+                        id = historyId,
                         source = contentType,
                         type = contentType,
                         localPath = uri.toString(),
@@ -158,8 +172,25 @@ class DownloadManager @Inject constructor(
                     )
                 )
 
+                existingEntries
+                    .map { it.localPath }
+                    .filter { it.isNotBlank() && it != uri.toString() }
+                    .distinct()
+                    .forEach(::deleteStoredContent)
+
+                existingEntries
+                    .map { it.id }
+                    .filter { it != historyId }
+                    .distinct()
+                    .forEach { existingId ->
+                        downloadDao.deleteById(existingId)
+                    }
+
                 // Mark download complete
-                updateProgress(id, DownloadProgress(id, fileName, 1f, totalBytes, downloadedBytes, isComplete = true))
+                updateProgress(
+                    historyId,
+                    DownloadProgress(historyId, fileName, 1f, totalBytes, downloadedBytes, isComplete = true),
+                )
                 success = true
             } finally {
                 if (!success) {
@@ -170,18 +201,51 @@ class DownloadManager @Inject constructor(
             uri
         }
     }.onFailure { e ->
-        updateProgress(id, DownloadProgress(id, fileName, 0f, 0, 0, error = e.message))
+        updateProgress(historyId, DownloadProgress(historyId, fileName, 0f, 0, 0, error = e.message))
     }
 
     fun clearCompleted(id: String) {
         _activeDownloads.update { it - id }
     }
 
+    suspend fun deleteDownload(id: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val existing = downloadDao.getById(id)
+            existing?.localPath
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::deleteStoredContent)
+            downloadDao.deleteById(id)
+            clearCompleted(id)
+        }
+    }
+
     private fun updateProgress(id: String, progress: DownloadProgress) {
         _activeDownloads.update { it + (id to progress) }
     }
 
+    private fun deleteStoredContent(rawPath: String) {
+        val uri = runCatching { Uri.parse(rawPath) }.getOrNull()
+        when {
+            uri == null -> java.io.File(rawPath).takeIf { it.exists() }?.delete()
+            uri.scheme == null || uri.scheme.equals("file", ignoreCase = true) -> {
+                val path = uri.path ?: rawPath
+                java.io.File(path).takeIf { it.exists() }?.delete()
+            }
+            uri.scheme.equals("content", ignoreCase = true) -> {
+                try {
+                    context.contentResolver.delete(uri, null, null)
+                } catch (_: Exception) {
+                }
+            }
+            else -> {
+                java.io.File(rawPath).takeIf { it.exists() }?.delete()
+            }
+        }
+    }
+
     private fun sanitize(name: String) = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+
+    private fun buildHistoryId(type: String, id: String): String = "${type.lowercase()}:$id"
 
     private fun guessMimeType(url: String): String {
         val path = url.substringBefore("?").substringBefore("#").lowercase()

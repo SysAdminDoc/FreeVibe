@@ -3,7 +3,6 @@ package com.freevibe
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.os.Build
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -67,16 +66,14 @@ class FreeVibeApp : Application(), Configuration.Provider {
     }
 
     private fun createMediaNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "media_playback",
-                "Sound Preview",
-                NotificationManager.IMPORTANCE_LOW,
-            )
-            channel.description = "Playback controls for sound previews"
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            "media_playback",
+            "Sound Preview",
+            NotificationManager.IMPORTANCE_LOW,
+        )
+        channel.description = "Playback controls for sound previews"
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(channel)
     }
 
     private fun setupCrashLogging() {

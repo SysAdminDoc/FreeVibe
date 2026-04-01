@@ -107,7 +107,7 @@ class WallpapersViewModel @Inject constructor(
         fetchTopVoted()
     }
 
-    private fun fetchTopVoted() {
+    private fun fetchTopVoted(seedWallpapers: List<Wallpaper> = emptyList()) {
         viewModelScope.launch {
             try {
                 val topIds = withTimeoutOrNull(5000L) { voteRepo.getTopVotedIds(50) } ?: return@launch
@@ -116,8 +116,9 @@ class WallpapersViewModel @Inject constructor(
 
                 // Firebase stores sanitized keys — try both original and sanitized IDs
                 val allIds = topIds.flatMap { (id, _) -> listOf(id, id.replace("_", "."), id.replace("_", "/")) }.distinct()
-                val wallpapers = cacheManager.getByIds(allIds)
-                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Resolved ${wallpapers.size} wallpapers from cache for ${allIds.size} ID variants")
+                val cachedWallpapers = cacheManager.getByIds(allIds)
+                val wallpapers = (seedWallpapers + cachedWallpapers).distinctBy { it.id }
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Resolved ${wallpapers.size} wallpapers from seed/cache for ${allIds.size} ID variants")
 
                 val voteMap = topIds.toMap()
                 val sorted = wallpapers
@@ -469,6 +470,9 @@ class WallpapersViewModel @Inject constructor(
                         error = null,
                         errorSource = null,
                     )
+                }
+                if (currentTab == WallpaperTab.DISCOVER && (!loadMore || _topVoted.value.isEmpty())) {
+                    fetchTopVoted(result.items)
                 }
             } catch (e: Exception) {
                 // #5: Source-specific error handling
