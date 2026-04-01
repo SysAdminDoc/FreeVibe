@@ -116,13 +116,17 @@ data class RedditPost(
     /** Extract resolution from title like "[3840x2160]" */
     val parsedResolution: Pair<Int, Int>?
         get() {
-            val match = Regex("""\[?(\d{3,5})\s*[xX×]\s*(\d{3,5})]?""").find(title)
+            val match = RESOLUTION_REGEX.find(title)
             return match?.let {
                 it.groupValues[1].toIntOrNull()?.let { w ->
                     it.groupValues[2].toIntOrNull()?.let { h -> w to h }
                 }
             }
         }
+
+    companion object {
+        private val RESOLUTION_REGEX = Regex("""\[?(\d{3,5})\s*[xX×]\s*(\d{3,5})]?""")
+    }
 }
 
 @JsonClass(generateAdapter = true)

@@ -421,7 +421,8 @@ private suspend fun cropVideoConstrained(
                 val exitCode: Int
                 try {
                     processOutput = process.inputStream.bufferedReader().readText()
-                    exitCode = process.waitFor()
+                    val completed = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    exitCode = if (completed) process.exitValue() else { process.destroyForcibly(); -1 }
                 } finally {
                     process.destroy()
                 }

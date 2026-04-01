@@ -230,7 +230,7 @@ fun SoundsScreen(
                             onClick = { viewModel.selectTab(tab) },
                             label = {
                                 Text(
-                                    tab.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    tab.name.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.uppercase() },
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                             },

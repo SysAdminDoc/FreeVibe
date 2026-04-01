@@ -116,14 +116,14 @@ fun FavoritesScreen(
 
     val sortedWallpapers = remember(wallpapers, sortBy) {
         when (sortBy) {
-            "name" -> wallpapers.sortedBy { it.name.lowercase() }
+            "name" -> wallpapers.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
             "oldest" -> wallpapers.sortedBy { it.addedAt }
             else -> wallpapers.sortedByDescending { it.addedAt }
         }
     }
     val sortedSounds = remember(sounds, sortBy) {
         when (sortBy) {
-            "name" -> sounds.sortedBy { it.name.lowercase() }
+            "name" -> sounds.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
             "oldest" -> sounds.sortedBy { it.addedAt }
             else -> sounds.sortedByDescending { it.addedAt }
         }

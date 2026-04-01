@@ -172,6 +172,8 @@ private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
 
     if (normalizedId.isBlank()) return null
     if (normalizedSource.isBlank()) return null
+    val validSources = com.freevibe.data.model.ContentSource.entries.map { it.name }.toSet()
+    if (normalizedSource !in validSources) return null
     if (normalizedType !in setOf("WALLPAPER", "SOUND")) return null
 
     val normalizedName = name.trim().take(MAX_TEXT_LENGTH)
