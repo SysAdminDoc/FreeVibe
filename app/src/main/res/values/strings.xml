@@ -5,4 +5,5 @@
     <string name="weather_wallpaper_desc">Wallpaper with live weather effects (rain, snow, fog)</string>
     <string name="parallax_wallpaper_desc">Depth parallax wallpaper that responds to device tilt</string>
     <string name="widget_description">Quick wallpaper changer - shuffle, set home, or set lock screen</string>
+    <string name="widget_loading_title">Aura</string>
 </resources>

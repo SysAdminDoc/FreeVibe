@@ -183,7 +183,7 @@ fun SoundDetailScreen(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     s.tags.take(5).forEach { tag ->
                         Surface(
-                            onClick = { viewModel.search(tag); onBack() },
+                            onClick = { onSearchTag(tag) },
                             color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp),
                         ) {
                             Text("#$tag", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
