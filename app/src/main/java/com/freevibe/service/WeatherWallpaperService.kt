@@ -25,8 +25,10 @@ class WeatherWallpaperService : WallpaperService() {
         private var vfxRenderer: VfxParticleRenderer? = null
         private var wallpaperBitmap: Bitmap? = null
         private var scaledBitmap: Bitmap? = null
+        private val bitmapLock = Any()
         private val handler = Handler(Looper.getMainLooper())
         private var visible = false
+        @Volatile private var destroyed = false
         private val frameInterval = 33L // ~30 FPS
 
         private val drawRunner = Runnable { draw() }
@@ -40,9 +42,11 @@ class WeatherWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             renderer = WeatherParticleRenderer(width, height)
             vfxRenderer = VfxParticleRenderer(width, height)
-            val oldScaled = scaledBitmap
-            scaledBitmap = wallpaperBitmap?.let { scaleBitmap(it, width, height) }
-            if (oldScaled !== wallpaperBitmap && oldScaled !== scaledBitmap) oldScaled?.recycle()
+            synchronized(bitmapLock) {
+                val oldScaled = scaledBitmap
+                scaledBitmap = wallpaperBitmap?.let { scaleBitmap(it, width, height) }
+                if (oldScaled !== wallpaperBitmap && oldScaled !== scaledBitmap) oldScaled?.recycle()
+            }
             loadWeatherFromPrefs()
             loadVfxFromPrefs()
             if (visible) scheduleDraw()
@@ -68,9 +72,14 @@ class WeatherWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             super.onDestroy()
+            destroyed = true
             handler.removeCallbacks(drawRunner)
-            if (scaledBitmap !== wallpaperBitmap) scaledBitmap?.recycle()
-            wallpaperBitmap?.recycle()
+            synchronized(bitmapLock) {
+                if (scaledBitmap !== wallpaperBitmap) scaledBitmap?.recycle()
+                wallpaperBitmap?.recycle()
+                scaledBitmap = null
+                wallpaperBitmap = null
+            }
         }
 
         private fun loadWallpaperBitmap() {
@@ -82,23 +91,26 @@ class WeatherWallpaperService : WallpaperService() {
                     if (!file.exists()) return@Thread
                     val bmp = BitmapFactory.decodeFile(path) ?: return@Thread
                     handler.post {
-                        val oldWallpaper = wallpaperBitmap
-                        val oldScaled = scaledBitmap
-                        wallpaperBitmap = bmp
-                        // Re-scale if surface dimensions are known
-                        val holder = surfaceHolder
-                        val rect = holder.surfaceFrame
-                        if (rect.width() > 0 && rect.height() > 0) {
-                            scaledBitmap = scaleBitmap(bmp, rect.width(), rect.height())
-                        } else {
-                            scaledBitmap = null
-                        }
-                        // Recycle old bitmaps — check identity to avoid double-recycle
-                        if (oldScaled != null && oldScaled !== oldWallpaper && oldScaled !== scaledBitmap) {
-                            oldScaled.recycle()
-                        }
-                        if (oldWallpaper != null && oldWallpaper !== bmp) {
-                            oldWallpaper.recycle()
+                        if (destroyed) { bmp.recycle(); return@post }
+                        synchronized(bitmapLock) {
+                            val oldWallpaper = wallpaperBitmap
+                            val oldScaled = scaledBitmap
+                            wallpaperBitmap = bmp
+                            // Re-scale if surface dimensions are known
+                            val holder = surfaceHolder
+                            val rect = holder.surfaceFrame
+                            if (rect.width() > 0 && rect.height() > 0) {
+                                scaledBitmap = scaleBitmap(bmp, rect.width(), rect.height())
+                            } else {
+                                scaledBitmap = null
+                            }
+                            // Recycle old bitmaps — check identity to avoid double-recycle
+                            if (oldScaled != null && oldScaled !== oldWallpaper && oldScaled !== scaledBitmap) {
+                                oldScaled.recycle()
+                            }
+                            if (oldWallpaper != null && oldWallpaper !== bmp) {
+                                oldWallpaper.recycle()
+                            }
                         }
                     }
                 } catch (_: Exception) {}
@@ -141,9 +153,12 @@ class WeatherWallpaperService : WallpaperService() {
                 canvas = holder.lockCanvas()
                 if (canvas != null) {
                     // Draw wallpaper background
-                    scaledBitmap?.let {
-                        canvas.drawBitmap(it, 0f, 0f, null)
-                    } ?: canvas.drawColor(android.graphics.Color.BLACK)
+                    val bmp = synchronized(bitmapLock) { scaledBitmap }
+                    if (bmp != null && !bmp.isRecycled) {
+                        canvas.drawBitmap(bmp, 0f, 0f, null)
+                    } else {
+                        canvas.drawColor(android.graphics.Color.BLACK)
+                    }
 
                     // Update and draw weather particles
                     renderer?.update()

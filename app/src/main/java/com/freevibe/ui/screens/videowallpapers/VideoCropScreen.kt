@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -32,7 +33,12 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.onGloballyPositioned
 import java.io.File
 
-private val sharedHttpClient by lazy { okhttp3.OkHttpClient() }
+private val sharedHttpClient by lazy {
+    okhttp3.OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+}
 
 /**
  * Video crop editor constrained to phone screen aspect ratio.
@@ -40,6 +46,7 @@ private val sharedHttpClient by lazy { okhttp3.OkHttpClient() }
  * The visible area is cropped to match the phone's screen ratio exactly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun VideoCropScreen(
     videoUrl: String,
@@ -78,9 +85,9 @@ fun VideoCropScreen(
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var videoWidth by remember { mutableIntStateOf(0) }
     var videoHeight by remember { mutableIntStateOf(0) }
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
+    var scale by rememberSaveable { mutableFloatStateOf(1f) }
+    var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
+    var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
     var isCropping by remember { mutableStateOf(false) }
     var dimensionsReady by remember { mutableStateOf(false) }
 

@@ -43,8 +43,10 @@ class AutoWallpaperWorker @AssistedInject constructor(
             } else {
                 Result.success()
             }
-        } catch (_: Exception) {
+        } catch (_: java.io.IOException) {
             Result.retry()
+        } catch (_: Exception) {
+            Result.failure()
         }
     }
 

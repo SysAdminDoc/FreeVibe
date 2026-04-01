@@ -2,9 +2,11 @@ package com.freevibe.data.repository
 
 import android.content.Context
 import android.net.Uri
-import android.provider.Settings
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Sound
+import com.freevibe.service.CommunityIdentityProvider
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
@@ -22,7 +24,15 @@ import javax.inject.Singleton
 @Singleton
 class UploadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val identityProvider: CommunityIdentityProvider,
 ) {
+    private data class UploadFileInfo(
+        val baseName: String,
+        val originalFileName: String,
+        val extension: String,
+        val mimeType: String,
+    )
+
     private val storage by lazy {
         try { Firebase.storage } catch (_: Exception) { null }
     }
@@ -30,11 +40,6 @@ class UploadRepository @Inject constructor(
         try { Firebase.database } catch (_: Exception) { null }
     }
     private val uploadsRef by lazy { database?.reference?.child("community_sounds") }
-
-    @Suppress("HardwareIds")
-    private val deviceId: String by lazy {
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
-    }
 
     /**
      * Upload an audio file to Firebase Storage and create metadata in RTDB.
@@ -50,9 +55,23 @@ class UploadRepository @Inject constructor(
         val storageInstance = storage ?: throw IllegalStateException("Firebase Storage not available")
         val uploadsRefInstance = uploadsRef ?: throw IllegalStateException("Firebase Database not available")
 
+        // Validate file size (max 20MB)
+        val fileSize = context.contentResolver.openFileDescriptor(localUri, "r")?.use { it.statSize } ?: 0
+        if (fileSize > 20 * 1024 * 1024) {
+            throw IllegalArgumentException("File too large (max 20MB)")
+        }
+
+        // Validate audio MIME type
+        val fileMime = context.contentResolver.getType(localUri) ?: ""
+        if (fileMime.isNotBlank() && !fileMime.startsWith("audio/")) {
+            throw IllegalArgumentException("Only audio files are supported")
+        }
+
         val timestamp = System.currentTimeMillis()
-        val sanitizedName = name.replace(Regex("[^a-zA-Z0-9_\\- ]"), "").take(40)
-        val storagePath = "sounds/$deviceId/${timestamp}_${sanitizedName}.mp3"
+        val uploaderId = identityProvider.ensureSignedIn()
+        val uploaderLabel = identityProvider.currentUploaderLabel()
+        val uploadInfo = resolveUploadFileInfo(localUri, name)
+        val storagePath = "sounds/$uploaderId/${timestamp}_${uploadInfo.baseName}.${uploadInfo.extension}"
         val storageRef = storageInstance.reference.child(storagePath)
 
         // Upload file
@@ -73,8 +92,11 @@ class UploadRepository @Inject constructor(
             "category" to category,
             "tags" to tags,
             "downloadUrl" to downloadUrl,
+            "fileType" to uploadInfo.mimeType,
+            "originalFileName" to uploadInfo.originalFileName,
             "uploadedAt" to timestamp,
-            "uploaderId" to deviceId,
+            "uploaderId" to uploaderId,
+            "uploaderLabel" to uploaderLabel,
             "votes" to 0,
         )
         pushRef.setValue(metadata).await()
@@ -96,7 +118,7 @@ class UploadRepository @Inject constructor(
         }
 
         val ref = if (category != null) {
-            uploadsRefInstance.orderByChild("category").equalTo(category)
+            uploadsRefInstance.orderByChild("category").equalTo(category).limitToLast(limit)
         } else {
             uploadsRefInstance.limitToLast(limit)
         }
@@ -108,9 +130,10 @@ class UploadRepository @Inject constructor(
                     val nameVal = child.child("name").getValue(String::class.java) ?: return@mapNotNull null
                     val downloadUrl = child.child("downloadUrl").getValue(String::class.java) ?: return@mapNotNull null
                     val cat = child.child("category").getValue(String::class.java) ?: ""
-                    val votes = child.child("votes").getValue(Int::class.java) ?: 0
                     val uploaderId = child.child("uploaderId").getValue(String::class.java) ?: ""
-                    val uploadedAt = child.child("uploadedAt").getValue(Long::class.java) ?: 0L
+                    val uploaderLabel = child.child("uploaderLabel").getValue(String::class.java) ?: ""
+                    val tags = child.child("tags").children.mapNotNull { it.getValue(String::class.java) }
+                    val fileType = child.child("fileType").getValue(String::class.java) ?: ""
 
                     Sound(
                         id = "cu_$key",
@@ -120,9 +143,10 @@ class UploadRepository @Inject constructor(
                         previewUrl = downloadUrl,
                         downloadUrl = downloadUrl,
                         duration = 0.0,
-                        tags = emptyList(),
+                        fileType = fileType,
+                        tags = tags,
                         license = "User Upload",
-                        uploaderName = uploaderId.take(8),
+                        uploaderName = uploaderLabel.ifBlank { uploaderId.take(8) },
                         sourcePageUrl = "",
                     )
                 }.sortedByDescending { sound ->
@@ -141,5 +165,51 @@ class UploadRepository @Inject constructor(
 
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
+    }
+
+    private fun resolveUploadFileInfo(localUri: Uri, fallbackName: String): UploadFileInfo {
+        val resolver = context.contentResolver
+        val originalFileName = resolver.query(localUri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
+            ?: (localUri.lastPathSegment?.substringAfterLast('/') ?: fallbackName)
+
+        val mimeType = resolver.getType(localUri)
+            ?.takeIf { it.isNotBlank() }
+            ?: MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(originalFileName.substringAfterLast('.', ""))
+            ?: "audio/mpeg"
+
+        val extension = originalFileName.substringAfterLast('.', "")
+            .lowercase()
+            .takeIf { it.isNotBlank() }
+            ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+            ?: defaultExtensionForMimeType(mimeType)
+
+        val baseName = originalFileName.substringBeforeLast('.')
+            .ifBlank { fallbackName }
+            .replace(Regex("[^a-zA-Z0-9_\\- ]"), "")
+            .take(40)
+            .ifBlank { "audio" }
+
+        return UploadFileInfo(
+            baseName = baseName,
+            originalFileName = originalFileName,
+            extension = extension,
+            mimeType = mimeType,
+        )
+    }
+
+    private fun defaultExtensionForMimeType(mimeType: String): String = when (mimeType.lowercase()) {
+        "audio/ogg" -> "ogg"
+        "audio/wav", "audio/x-wav" -> "wav"
+        "audio/flac" -> "flac"
+        "audio/mp4", "audio/aac" -> "m4a"
+        else -> "mp3"
     }
 }

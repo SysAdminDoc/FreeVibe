@@ -29,8 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentType
+import com.freevibe.data.model.Sound
 import com.freevibe.service.AudioTrimmer
-import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -85,14 +85,20 @@ data class SoundEditorState(
     }
 
     override fun hashCode(): Int {
-        var result = waveform.contentHashCode()
+        var result = isLoading.hashCode()
+        result = 31 * result + waveform.contentHashCode()
         result = 31 * result + durationMs.hashCode()
         result = 31 * result + trimStartFraction.hashCode()
         result = 31 * result + trimEndFraction.hashCode()
+        result = 31 * result + playbackPosition.hashCode()
         result = 31 * result + isPlaying.hashCode()
+        result = 31 * result + isApplying.hashCode()
         result = 31 * result + fadeInMs.hashCode()
         result = 31 * result + fadeOutMs.hashCode()
         result = 31 * result + fileName.hashCode()
+        result = 31 * result + (localFilePath?.hashCode() ?: 0)
+        result = 31 * result + isLocalFile.hashCode()
+        result = 31 * result + (success?.hashCode() ?: 0)
         result = 31 * result + (error?.hashCode() ?: 0)
         return result
     }
@@ -104,7 +110,6 @@ class SoundEditorViewModel @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val soundApplier: SoundApplier,
     private val audioTrimmer: AudioTrimmer,
-    selectedContent: SelectedContentHolder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundEditorState())
@@ -112,21 +117,47 @@ class SoundEditorViewModel @Inject constructor(
 
     private var player: android.media.MediaPlayer? = null
     private var undoState: UndoSnapshot? = null
+    private var loadedSoundId: String? = null
 
     private data class UndoSnapshot(
         val trimStart: Float, val trimEnd: Float,
         val fadeIn: Long, val fadeOut: Long,
     )
 
-    init {
-        selectedContent.selectedSound.value?.let { sound ->
-            loadFromUrl(sound.downloadUrl, sound.name)
+    fun loadSound(sound: Sound): Boolean {
+        val currentState = _state.value
+        if (loadedSoundId == sound.id && (currentState.localFilePath != null || currentState.isLoading)) {
+            return true
         }
+        loadedSoundId = sound.id
+        val sourceUrl = sound.downloadUrl.ifBlank { sound.previewUrl }
+        if (sourceUrl.isBlank()) return false
+        loadFromUrl(sourceUrl, sound.name)
+        return true
     }
 
     fun loadFromUrl(url: String, name: String) {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, fileName = name, error = null, isLocalFile = false) }
+            stopPlayback()
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    waveform = floatArrayOf(),
+                    durationMs = 0,
+                    trimStartFraction = 0f,
+                    trimEndFraction = 1f,
+                    playbackPosition = 0f,
+                    isPlaying = false,
+                    isApplying = false,
+                    fadeInMs = 0,
+                    fadeOutMs = 0,
+                    fileName = name,
+                    localFilePath = null,
+                    isLocalFile = false,
+                    success = null,
+                    error = null,
+                )
+            }
             try {
                 val file = withContext(Dispatchers.IO) { downloadToCache(url, name) }
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
@@ -147,7 +178,24 @@ class SoundEditorViewModel @Inject constructor(
 
     fun loadFromLocalUri(uri: Uri) {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null, isLocalFile = true) }
+            stopPlayback()
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    waveform = floatArrayOf(),
+                    durationMs = 0,
+                    trimStartFraction = 0f,
+                    trimEndFraction = 1f,
+                    playbackPosition = 0f,
+                    isPlaying = false,
+                    isApplying = false,
+                    fadeInMs = 0,
+                    fadeOutMs = 0,
+                    error = null,
+                    isLocalFile = true,
+                    success = null,
+                )
+            }
             try {
                 val file = withContext(Dispatchers.IO) { copyUriToCache(uri) }
                 val name = file.nameWithoutExtension
@@ -170,7 +218,7 @@ class SoundEditorViewModel @Inject constructor(
         }
     }
 
-    private fun saveUndo() {
+    fun saveUndo() {
         val s = _state.value
         undoState = UndoSnapshot(s.trimStartFraction, s.trimEndFraction, s.fadeInMs, s.fadeOutMs)
     }
@@ -190,13 +238,11 @@ class SoundEditorViewModel @Inject constructor(
     val canUndo: Boolean get() = undoState != null
 
     fun setTrimStart(fraction: Float) {
-        saveUndo()
         val clamped = fraction.coerceIn(0f, _state.value.trimEndFraction - 0.02f)
         _state.update { it.copy(trimStartFraction = clamped) }
     }
 
     fun setTrimEnd(fraction: Float) {
-        saveUndo()
         val clamped = fraction.coerceIn(_state.value.trimStartFraction + 0.02f, 1f)
         _state.update { it.copy(trimEndFraction = clamped) }
     }
@@ -314,12 +360,24 @@ class SoundEditorViewModel @Inject constructor(
         }
         val file = File(cacheDir, name.replace(Regex("[^a-zA-Z0-9]"), "_") + ext)
         if (!file.exists()) {
-            val request = Request.Builder().url(url).build()
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
-                response.body?.byteStream()?.use { input ->
-                    FileOutputStream(file).use { output -> input.copyTo(output) }
+            val tmpFile = File(cacheDir, file.name + ".tmp")
+            try {
+                val request = Request.Builder().url(url).build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
+                    response.body?.byteStream()?.use { input ->
+                        FileOutputStream(tmpFile).use { output -> input.copyTo(output) }
+                    }
                 }
+                if (tmpFile.length() > 0) {
+                    tmpFile.renameTo(file)
+                } else {
+                    tmpFile.delete()
+                    throw Exception("Download produced empty file")
+                }
+            } catch (e: Exception) {
+                tmpFile.delete()
+                throw e
             }
         }
         file
@@ -408,11 +466,17 @@ class SoundEditorViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SoundEditorScreen(
+    soundId: String? = null,
     onBack: () -> Unit,
+    recoveryViewModel: com.freevibe.ui.screens.sounds.SoundsViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: SoundEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val currentSelectedSound by recoveryViewModel.selectedSound.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectionResolved by remember(soundId) {
+        mutableStateOf<Boolean?>(if (soundId == null) true else null)
+    }
 
     // Local file picker
     val filePicker = rememberLauncherForActivityResult(
@@ -426,6 +490,19 @@ fun SoundEditorScreen(
     }
     LaunchedEffect(state.error) {
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearMessages() }
+    }
+    LaunchedEffect(soundId) {
+        if (soundId == null) {
+            selectionResolved = true
+        } else {
+            val sound = recoveryViewModel.resolveSound(soundId)
+            selectionResolved = sound?.let { viewModel.loadSound(it) } ?: false
+        }
+    }
+    LaunchedEffect(soundId, currentSelectedSound?.id) {
+        if (soundId == null) {
+            currentSelectedSound?.let { viewModel.loadSound(it) }
+        }
     }
 
     Scaffold(
@@ -450,6 +527,41 @@ fun SoundEditorScreen(
             )
         },
     ) { padding ->
+        if (soundId != null && selectionResolved == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        if (soundId != null && selectionResolved == false) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.MusicOff,
+                        null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("Sound unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                }
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -486,7 +598,10 @@ fun SoundEditorScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(12.dp))
-                        Text("Open an audio file to create a ringtone", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Open an audio file to create a ringtone, notification, or alarm sound",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Spacer(Modifier.height(12.dp))
                         FilledTonalButton(onClick = { filePicker.launch("audio/*") }) {
                             Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
@@ -505,6 +620,7 @@ fun SoundEditorScreen(
                     isPlaying = state.isPlaying,
                     fadeInFraction = if (state.durationMs > 0) state.fadeInMs.toFloat() / state.durationMs else 0f,
                     fadeOutFraction = if (state.durationMs > 0) state.fadeOutMs.toFloat() / state.durationMs else 0f,
+                    onDragStart = { viewModel.saveUndo() },
                     onTrimStartChange = { viewModel.setTrimStart(it) },
                     onTrimEndChange = { viewModel.setTrimEnd(it) },
                     modifier = Modifier
@@ -638,6 +754,7 @@ private fun WaveformView(
     isPlaying: Boolean,
     fadeInFraction: Float = 0f,
     fadeOutFraction: Float = 0f,
+    onDragStart: () -> Unit = {},
     onTrimStartChange: (Float) -> Unit,
     onTrimEndChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
@@ -656,13 +773,16 @@ private fun WaveformView(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    detectHorizontalDragGestures { change, _ ->
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        val distToStart = abs(fraction - trimStart)
-                        val distToEnd = abs(fraction - trimEnd)
-                        if (distToStart < distToEnd) onTrimStartChange(fraction)
-                        else onTrimEndChange(fraction)
-                    }
+                    detectHorizontalDragGestures(
+                        onDragStart = { onDragStart() },
+                        onHorizontalDrag = { change, _ ->
+                            val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                            val distToStart = abs(fraction - trimStart)
+                            val distToEnd = abs(fraction - trimEnd)
+                            if (distToStart < distToEnd) onTrimStartChange(fraction)
+                            else onTrimEndChange(fraction)
+                        },
+                    )
                 },
         ) {
             val w = size.width

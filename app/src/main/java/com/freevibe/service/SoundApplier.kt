@@ -15,6 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
+import java.io.FileInputStream
+import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,14 +50,13 @@ class SoundApplier @Inject constructor(
 
             // Determine MIME type from URL/extension
             val mimeType = guessMimeType(url)
-            val safeFileName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-
-            // Download the audio file
-            val audioData = downloadBytes(url)
-                ?: throw IllegalStateException("Failed to download audio")
+            val safeFileName = ensureFileNameExtension(
+                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                mimeType,
+            )
 
             // Save to MediaStore
-            val uri = saveToMediaStore(safeFileName, mimeType, type, audioData)
+            val uri = saveUrlToMediaStore(safeFileName, mimeType, type, url)
                 ?: throw IllegalStateException("Failed to save audio to MediaStore")
 
             // Set as system sound
@@ -78,10 +80,11 @@ class SoundApplier @Inject constructor(
     ): Result<Uri> = withContext(Dispatchers.IO) {
         runCatching {
             val mimeType = guessMimeType(url)
-            val safeFileName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            val audioData = downloadBytes(url)
-                ?: throw IllegalStateException("Failed to download audio")
-            saveToMediaStore(safeFileName, mimeType, type, audioData)
+            val safeFileName = ensureFileNameExtension(
+                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                mimeType,
+            )
+            saveUrlToMediaStore(safeFileName, mimeType, type, url)
                 ?: throw IllegalStateException("Failed to save audio to MediaStore")
         }
     }
@@ -98,10 +101,12 @@ class SoundApplier @Inject constructor(
             }
 
             val mimeType = guessMimeType(filePath)
-            val safeFileName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            val audioData = java.io.File(filePath).readBytes()
+            val safeFileName = ensureFileNameExtension(
+                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                mimeType,
+            )
 
-            val uri = saveToMediaStore(safeFileName, mimeType, type, audioData)
+            val uri = saveLocalFileToMediaStore(safeFileName, mimeType, type, File(filePath))
                 ?: throw IllegalStateException("Failed to save audio to MediaStore")
 
             val ringtoneType = when (type) {
@@ -120,7 +125,7 @@ class SoundApplier @Inject constructor(
         fileName: String,
         mimeType: String,
         type: ContentType,
-        data: ByteArray,
+        writeContent: (OutputStream) -> Unit,
     ): Uri? {
         val relativePath = when (type) {
             ContentType.RINGTONE -> Environment.DIRECTORY_RINGTONES
@@ -146,7 +151,10 @@ class SoundApplier @Inject constructor(
             ?: return null
 
         val written = try {
-            resolver.openOutputStream(uri)?.use { it.write(data); true } ?: false
+            resolver.openOutputStream(uri)?.use {
+                writeContent(it)
+                true
+            } ?: false
         } catch (_: Exception) {
             false
         }
@@ -166,15 +174,31 @@ class SoundApplier @Inject constructor(
         return uri
     }
 
-    private suspend fun downloadBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+    private fun saveUrlToMediaStore(
+        fileName: String,
+        mimeType: String,
+        type: ContentType,
+        url: String,
+    ): Uri? {
         val request = Request.Builder().url(url).build()
-        val response = okHttpClient.newCall(request).execute()
-        response.use { resp ->
+        return okHttpClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {
                 throw IllegalStateException("Download failed: HTTP ${resp.code}")
             }
-            resp.body?.bytes()
+            val body = resp.body ?: throw IllegalStateException("Empty response body")
+            saveToMediaStore(fileName, mimeType, type) { output ->
+                body.byteStream().use { input -> input.copyTo(output) }
+            }
         }
+    }
+
+    private fun saveLocalFileToMediaStore(
+        fileName: String,
+        mimeType: String,
+        type: ContentType,
+        file: File,
+    ): Uri? = saveToMediaStore(fileName, mimeType, type) { output ->
+        FileInputStream(file).use { input -> input.copyTo(output) }
     }
 
     private fun guessMimeType(url: String): String {
@@ -183,9 +207,23 @@ class SoundApplier @Inject constructor(
             path.endsWith(".mp3") -> "audio/mpeg"
             path.endsWith(".ogg") -> "audio/ogg"
             path.endsWith(".wav") -> "audio/wav"
-            path.endsWith(".m4a") || path.endsWith(".aac") -> "audio/mp4"
+            path.endsWith(".m4a") -> "audio/mp4"
+            path.endsWith(".aac") -> "audio/aac"
             path.endsWith(".flac") -> "audio/flac"
             else -> "audio/mpeg"
         }
+    }
+
+    private fun ensureFileNameExtension(fileName: String, mimeType: String): String {
+        if (fileName.substringAfterLast('.', "").isNotBlank()) return fileName
+        val extension = when (mimeType.lowercase()) {
+            "audio/ogg" -> "ogg"
+            "audio/wav", "audio/x-wav" -> "wav"
+            "audio/flac" -> "flac"
+            "audio/mp4" -> "m4a"
+            "audio/aac" -> "aac"
+            else -> "mp3"
+        }
+        return "$fileName.$extension"
     }
 }

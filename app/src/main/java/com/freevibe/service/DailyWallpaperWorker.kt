@@ -38,7 +38,6 @@ class DailyWallpaperWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val redditApi: RedditApi,
     private val okHttpClient: OkHttpClient,
-    private val selectedContent: SelectedContentHolder,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -61,9 +60,6 @@ class DailyWallpaperWorker @AssistedInject constructor(
 
             val wallpaper = topPost.toWallpaper()
 
-            // Store in SelectedContentHolder so tapping notification opens the wallpaper
-            selectedContent.selectWallpaper(wallpaper)
-
             // Download thumbnail for notification
             val thumbUrl = topPost.thumbUrl.takeIf { it.startsWith("http") }
                 ?: wallpaper.thumbnailUrl
@@ -84,6 +80,9 @@ class DailyWallpaperWorker @AssistedInject constructor(
 
             val intent = Intent(applicationContext, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("daily_wallpaper_id", wallpaper.id)
+                putExtra("daily_wallpaper_url", wallpaper.fullUrl)
+                putExtra("daily_wallpaper_thumb", wallpaper.thumbnailUrl)
             }
             val pendingIntent = PendingIntent.getActivity(
                 applicationContext, 0, intent,
@@ -113,6 +112,7 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 .build()
 
             NotificationManagerCompat.from(applicationContext).notify(NOTIFICATION_ID, notification)
+            bitmap?.recycle()
             Result.success()
         } catch (_: Exception) {
             Result.retry()
@@ -120,8 +120,8 @@ class DailyWallpaperWorker @AssistedInject constructor(
     }
 
     private fun formatUpvotes(ups: Int): String = when {
-        ups >= 10_000 -> "%.1fk".format(ups / 1000f)
-        ups >= 1_000 -> "%.1fk".format(ups / 1000f)
+        ups >= 10_000 -> String.format(java.util.Locale.US, "%.1fk", ups / 1000f)
+        ups >= 1_000 -> String.format(java.util.Locale.US, "%.1fk", ups / 1000f)
         else -> "$ups"
     }
 

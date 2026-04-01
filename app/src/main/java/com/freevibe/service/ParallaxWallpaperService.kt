@@ -82,8 +82,9 @@ class ParallaxWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             screenWidth = width
             screenHeight = height
-            originalBitmap?.let { scaleAndSegment(it) }
-                ?: loadImage()
+            val bmp = synchronized(bitmapLock) { originalBitmap }
+            if (bmp != null) scaleAndSegment(bmp)
+            else loadImage()
             if (visible) scheduleDraw()
         }
 
@@ -307,12 +308,12 @@ class ParallaxWallpaperService : WallpaperService() {
                         fb = fallbackBitmap
                     }
 
-                    if (bg != null && fg != null) {
+                    if (bg != null && fg != null && !bg.isRecycled && !fg.isRecycled) {
                         // Draw background layer with base offset
                         canvas.drawBitmap(bg, baseX + bgOffsetX, baseY + bgOffsetY, paint)
                         // Draw foreground layer with enhanced offset
                         canvas.drawBitmap(fg, baseX + fgOffsetX, baseY + fgOffsetY, paint)
-                    } else if (fb != null) {
+                    } else if (fb != null && !fb.isRecycled) {
                         // Fallback: single image with slight parallax movement
                         canvas.drawBitmap(fb, baseX + bgOffsetX, baseY + bgOffsetY, paint)
                     }
@@ -353,8 +354,8 @@ class ParallaxWallpaperService : WallpaperService() {
         }
 
         private fun recycleBitmaps() {
-            originalBitmap?.recycle(); originalBitmap = null
             synchronized(bitmapLock) {
+                originalBitmap?.recycle(); originalBitmap = null
                 backgroundLayer?.recycle(); backgroundLayer = null
                 foregroundLayer?.recycle(); foregroundLayer = null
                 fallbackBitmap?.recycle(); fallbackBitmap = null

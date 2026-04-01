@@ -36,6 +36,7 @@ class ColorExtractor @Inject constructor(
             val request = Request.Builder().url(url).build()
             val response = okHttpClient.newCall(request).execute()
             response.use { resp ->
+                if (!resp.isSuccessful) return@use null
                 val bytes = resp.body?.bytes() ?: return@withContext null
                 // Decode at reduced size for faster palette extraction
                 val options = BitmapFactory.Options().apply {

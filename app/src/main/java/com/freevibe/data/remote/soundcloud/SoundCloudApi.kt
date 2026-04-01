@@ -34,7 +34,10 @@ data class SoundCloudTrack(
     @Json(name = "id") val id: Long = 0,
     @Json(name = "title") val title: String = "",
     @Json(name = "duration") val duration: Long = 0, // milliseconds
+    // NOTE: stream_url is a v1 field; v2 API uses media.transcodings instead.
+    // We keep the field for backwards compat but don't require it — see SoundCloudRepository.
     @Json(name = "stream_url") val streamUrl: String? = null,
+    @Json(name = "permalink_url") val permalinkUrl: String? = null,
     @Json(name = "playback_count") val playbackCount: Int = 0,
     @Json(name = "likes_count") val likesCount: Int = 0,
     @Json(name = "user") val user: SoundCloudUser? = null,
