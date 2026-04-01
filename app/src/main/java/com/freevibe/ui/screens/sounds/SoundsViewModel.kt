@@ -9,6 +9,8 @@ import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.repository.AudiusRepository
+import com.freevibe.data.repository.CcMixterRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.FreesoundV2Repository
 import com.freevibe.data.repository.SearchHistoryRepository
@@ -32,6 +34,8 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.time.Year
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 
 data class SoundsUiState(
@@ -51,6 +55,8 @@ data class SoundsUiState(
     val filterKey: Int = 0,
     val isUploading: Boolean = false,
     val uploadProgress: Float = 0f,
+    val searchReturnTab: SoundTab = SoundTab.RINGTONES,
+    val qualityFilter: SoundQualityFilter = SoundQualityFilter.BEST,
 )
 
 enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, YOUTUBE, COMMUNITY, SEARCH }
@@ -61,6 +67,8 @@ class SoundsViewModel @Inject constructor(
     private val youtubeRepo: YouTubeRepository,
     private val freesoundRepo: com.freevibe.data.repository.FreesoundRepository,
     private val freesoundV2Repo: FreesoundV2Repository,
+    private val audiusRepo: AudiusRepository,
+    private val ccMixterRepo: CcMixterRepository,
     private val favoritesRepo: FavoritesRepository,
     private val soundApplier: SoundApplier,
     private val downloadManager: DownloadManager,
@@ -99,8 +107,6 @@ class SoundsViewModel @Inject constructor(
     private val ytResolveSemaphore = Semaphore(6)
 
     private val titleBlocklist = Regex("hindi|telugu|pack|trending|popular|\\bnew\\b|\\btop\\b|\\bbest\\b", RegexOption.IGNORE_CASE)
-    private val hasFreesoundV2Key = com.freevibe.BuildConfig.FREESOUND_API_KEY.isNotBlank()
-    private val hasSoundCloudKey = com.freevibe.BuildConfig.SOUNDCLOUD_CLIENT_ID.isNotBlank()
 
     private val _communityUploads = MutableStateFlow<List<Sound>>(emptyList())
     val communityUploads = _communityUploads.asStateFlow()
@@ -132,7 +138,7 @@ class SoundsViewModel @Inject constructor(
 
                 val queries = PreferencesManager.defaultTopHitQueries(Year.now().value)
                 val allHits = mutableListOf<Sound>()
-                val seenIds = mutableSetOf<String>()
+                val seenFingerprints = mutableSetOf<String>()
                 for (q in queries) {
                     if (allHits.size >= 5) break
                     try {
@@ -142,10 +148,14 @@ class SoundsViewModel @Inject constructor(
                         )
                         result.items
                             .filter { !titleBlocklist.containsMatchIn(it.name) }
-                            .forEach { if (seenIds.add(it.id) && allHits.size < 5) allHits.add(it) }
+                            .forEach {
+                                if (seenFingerprints.add(soundFingerprint(it)) && allHits.size < 5) {
+                                    allHits.add(it)
+                                }
+                            }
                     } catch (_: Exception) {}
                 }
-                _topHits.value = allHits.take(5)
+                _topHits.value = rankSounds(allHits, SoundTab.RINGTONES, SoundQualityFilter.BEST).take(5)
 
                 // Pre-resolve preview URLs
                 supervisorScope {
@@ -153,8 +163,10 @@ class SoundsViewModel @Inject constructor(
                         launch {
                             ytResolveSemaphore.acquire()
                             try {
-                                youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))
-                                _cachedYtIds.update { it + hit.id }
+                                youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))?.let { url ->
+                                    cacheResolvedPreview(hit, url)
+                                    _cachedYtIds.update { it + hit.id }
+                                }
                             } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
                         }
                     }
@@ -167,6 +179,17 @@ class SoundsViewModel @Inject constructor(
 
     private fun nextFilterKey() = _state.value.filterKey + 1
 
+    fun setQualityFilter(filter: SoundQualityFilter) {
+        val currentTab = _state.value.selectedTab
+        _state.update {
+            it.copy(
+                qualityFilter = filter,
+                sounds = rankSounds(it.sounds, currentTab, filter),
+                filterKey = nextFilterKey(),
+            )
+        }
+    }
+
     fun selectTab(tab: SoundTab) {
         stopPlayback()
         communityJob?.cancel()
@@ -174,6 +197,8 @@ class SoundsViewModel @Inject constructor(
             it.copy(
                 selectedTab = tab, query = "", sounds = emptyList(),
                 currentPage = 1, hasMore = true, error = null, filterKey = nextFilterKey(),
+                isRefreshing = false,
+                searchReturnTab = if (tab == SoundTab.SEARCH) it.searchReturnTab else tab,
             )
         }
         if (tab == SoundTab.COMMUNITY) loadCommunityTab()
@@ -183,10 +208,12 @@ class SoundsViewModel @Inject constructor(
     fun search(query: String) {
         if (query.isBlank()) return
         stopPlayback()
+        val returnTab = _state.value.selectedTab.takeIf { it != SoundTab.SEARCH } ?: _state.value.searchReturnTab
         _state.update {
             it.copy(
                 query = query, selectedTab = SoundTab.SEARCH,
                 sounds = emptyList(), currentPage = 1, hasMore = true, filterKey = nextFilterKey(),
+                searchReturnTab = returnTab,
             )
         }
         viewModelScope.launch { searchHistoryRepo.addSoundSearch(query) }
@@ -201,38 +228,12 @@ class SoundsViewModel @Inject constructor(
                 query = query, selectedTab = SoundTab.YOUTUBE,
                 sounds = emptyList(), currentPage = 1, hasMore = true,
                 filterKey = nextFilterKey(), isLoading = true, error = null,
+                isRefreshing = false,
+                searchReturnTab = SoundTab.YOUTUBE,
             )
         }
         viewModelScope.launch { searchHistoryRepo.addSoundSearch(query) }
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            try {
-                val blocked = try {
-                    prefs.ytSoundBlockedWords.first()
-                        .split(",").map { it.trim() }.filter { it.isNotBlank() }
-                } catch (_: Exception) { emptyList() }
-
-                val result = youtubeRepo.searchSounds(
-                    query = query, maxDuration = 600, minDuration = 0,
-                    blockedWords = blocked,
-                )
-                _state.update { it.copy(sounds = result.items, isLoading = false, hasMore = result.hasMore) }
-
-                supervisorScope {
-                    result.items.forEach { yt ->
-                        launch {
-                            ytResolveSemaphore.acquire()
-                            try {
-                                youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
-                                _cachedYtIds.update { it + yt.id }
-                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = categorizeError(e)) }
-            }
-        }
+        executeYouTubeSearch(query)
     }
 
     fun importYouTubeUrl(url: String) {
@@ -273,6 +274,7 @@ class SoundsViewModel @Inject constructor(
                 )
                 _state.update { it.copy(sounds = listOf(sound), isLoading = false) }
                 youtubeRepo.getAudioPreviewUrl(videoId)?.let {
+                    cacheResolvedPreview(sound, it)
                     _cachedYtIds.update { it + "yt_$videoId" }
                 }
             } catch (e: Exception) {
@@ -301,6 +303,48 @@ class SoundsViewModel @Inject constructor(
         viewModelScope.launch { searchHistoryRepo.clearSoundHistory() }
     }
 
+    fun clearSearchMode() {
+        stopPlayback()
+        val returnTab = _state.value.searchReturnTab
+        communityJob?.cancel()
+        _state.update {
+            it.copy(
+                selectedTab = returnTab,
+                query = "",
+                sounds = emptyList(),
+                currentPage = 1,
+                hasMore = true,
+                error = null,
+                isLoading = false,
+                isLoadingMore = false,
+                isRefreshing = false,
+                filterKey = nextFilterKey(),
+            )
+        }
+        if (returnTab == SoundTab.COMMUNITY) loadCommunityTab()
+        else if (returnTab != SoundTab.YOUTUBE) loadSounds()
+    }
+
+    fun clearYouTubeSearch() {
+        stopPlayback()
+        loadJob?.cancel()
+        _state.update {
+            it.copy(
+                selectedTab = SoundTab.YOUTUBE,
+                query = "",
+                sounds = emptyList(),
+                currentPage = 1,
+                hasMore = true,
+                error = null,
+                isLoading = false,
+                isLoadingMore = false,
+                isRefreshing = false,
+                filterKey = nextFilterKey(),
+                searchReturnTab = SoundTab.YOUTUBE,
+            )
+        }
+    }
+
     fun loadMore() {
         val s = _state.value
         if (s.isLoading || s.isLoadingMore || !s.hasMore) return
@@ -310,9 +354,26 @@ class SoundsViewModel @Inject constructor(
 
     fun refresh() {
         stopPlayback()
-        _state.update { it.copy(isRefreshing = true, currentPage = 1, sounds = emptyList(), error = null) }
-        loadSounds(isRefresh = true)
-        fetchTopHits()
+        when (val tab = _state.value.selectedTab) {
+            SoundTab.COMMUNITY -> {
+                _state.update { it.copy(isRefreshing = true, error = null) }
+                loadCommunityTab(isRefresh = true)
+            }
+            SoundTab.YOUTUBE -> {
+                val query = _state.value.query
+                if (query.isBlank()) {
+                    _state.update { it.copy(isRefreshing = false, error = null) }
+                } else {
+                    _state.update { it.copy(isRefreshing = true, error = null) }
+                    executeYouTubeSearch(query)
+                }
+            }
+            else -> {
+                _state.update { it.copy(isRefreshing = true, currentPage = 1, error = null) }
+                loadSounds(isRefresh = true)
+                if (tab == SoundTab.RINGTONES) fetchTopHits()
+            }
+        }
     }
 
     // -- Playback --
@@ -360,8 +421,9 @@ class SoundsViewModel @Inject constructor(
                 val url = youtubeRepo.getAudioPreviewUrl(videoId)
                 if (_state.value.resolvingId != sound.id) return@launch // user cancelled
                 if (url != null) {
+                    val updatedSound = cacheResolvedPreview(sound, url)
                     _state.update { it.copy(resolvingId = null) }
-                    startPlayback(sound.copy(previewUrl = url))
+                    startPlayback(updatedSound)
                 } else {
                     _state.update { it.copy(resolvingId = null, error = "Could not load audio") }
                 }
@@ -369,6 +431,47 @@ class SoundsViewModel @Inject constructor(
         } else {
             startPlayback(sound)
         }
+    }
+
+    private fun cacheResolvedPreview(sound: Sound, previewUrl: String): Sound {
+        if (previewUrl.isBlank()) return sound
+        val updatedSound = sound.copy(previewUrl = previewUrl)
+
+        _state.update { st ->
+            val refreshed = st.sounds.map { existing ->
+                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                    existing.copy(previewUrl = previewUrl)
+                } else {
+                    existing
+                }
+            }
+            if (refreshed == st.sounds) st else st.copy(sounds = refreshed)
+        }
+        _topHits.update { hits ->
+            hits.map { existing ->
+                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                    existing.copy(previewUrl = previewUrl)
+                } else {
+                    existing
+                }
+            }
+        }
+        _communityUploads.update { uploads ->
+            uploads.map { existing ->
+                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                    existing.copy(previewUrl = previewUrl)
+                } else {
+                    existing
+                }
+            }
+        }
+
+        val currentSelected = selectedContent.selectedSound.value
+        if (currentSelected?.id == updatedSound.id && currentSelected.previewUrl != previewUrl) {
+            selectedContent.selectSound(currentSelected.copy(previewUrl = previewUrl))
+        }
+
+        return selectedContent.selectedSound.value?.takeIf { it.id == updatedSound.id } ?: updatedSound
     }
 
     private fun startPlayback(sound: Sound) {
@@ -462,13 +565,34 @@ class SoundsViewModel @Inject constructor(
             .filter { it.length > 2 }.take(4).joinToString(" ")
         if (keywords.isBlank()) return emptyList()
         return try {
-            if (hasFreesoundV2Key) {
-                freesoundV2Repo.search(query = keywords, minDuration = 1.0, maxDuration = 60.0).items
-                    .filter { it.id != soundId }.take(10)
-            } else {
+            val richerResults = freesoundV2Repo.search(
+                query = keywords,
+                minDuration = 1.0,
+                maxDuration = 60.0,
+            ).items.filter { it.id != soundId }
+            val fallbackResults = if (richerResults.isEmpty()) {
                 freesoundRepo.search(query = keywords, minDuration = 1.0, maxDuration = 60.0).items
-                    .filter { it.id != soundId }.take(10)
+                    .filter { it.id != soundId }
+            } else {
+                emptyList()
             }
+            val audiusResults = audiusRepo.search(
+                query = keywords,
+                minDuration = 1,
+                maxDuration = 60,
+                limit = 8,
+            ).items.filter { it.id != soundId }
+            val ccMixterResults = ccMixterRepo.search(
+                query = keywords,
+                minDuration = 1.0,
+                maxDuration = 60.0,
+                limit = 8,
+            ).items.filter { it.id != soundId }
+            rankSounds(
+                sounds = richerResults + fallbackResults + audiusResults + ccMixterResults,
+                tab = SoundTab.SEARCH,
+                filter = SoundQualityFilter.BEST,
+            ).take(10)
         } catch (_: Exception) { emptyList() }
     }
 
@@ -512,6 +636,19 @@ class SoundsViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             val s = _state.value
             val loadTab = s.selectedTab
+            if (loadTab == SoundTab.SEARCH && s.query.isBlank()) {
+                _state.update {
+                    it.copy(
+                        sounds = emptyList(),
+                        isLoading = false,
+                        isLoadingMore = false,
+                        isRefreshing = false,
+                        hasMore = false,
+                        error = null,
+                    )
+                }
+                return@launch
+            }
             if (!isRefresh && !loadMore) {
                 _state.update { it.copy(isLoading = true, error = null) }
             } else if (loadMore) {
@@ -521,6 +658,17 @@ class SoundsViewModel @Inject constructor(
             val allResults = mutableListOf<Sound>()
             val resultLock = Any()
             val seenIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+            val seenFingerprints = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+            val pagedSourcesHaveMore = AtomicBoolean(false)
+            val firstFailure = AtomicReference<Exception?>(null)
+            val firstPage = s.currentPage <= 1
+
+            if (loadMore) {
+                s.sounds.forEach { sound ->
+                    seenIds.add(sound.id)
+                    seenFingerprints.add(soundFingerprint(sound))
+                }
+            }
 
             // Show bundled content immediately while APIs load, and seed allResults so they survive flushToUi()
             if (!loadMore && !isRefresh) {
@@ -531,24 +679,50 @@ class SoundsViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 if (bundled.isNotEmpty()) {
-                    bundled.forEach { seenIds.add(it.id) }
+                    bundled.forEach {
+                        seenIds.add(it.id)
+                        seenFingerprints.add(soundFingerprint(it))
+                    }
                     synchronized(resultLock) { allResults.addAll(bundled) }
-                    _state.update { it.copy(sounds = bundled, isLoading = true) }
+                    _state.update {
+                        it.copy(
+                            sounds = rankSounds(bundled, loadTab, it.qualityFilter),
+                            isLoading = true,
+                        )
+                    }
                 }
             }
 
             fun addUnique(sound: Sound): Boolean {
                 if (titleBlocklist.containsMatchIn(sound.name)) return false
-                return if (seenIds.add(sound.id)) { synchronized(resultLock) { allResults.add(sound) }; true } else false
+                val fingerprint = soundFingerprint(sound)
+                return if (seenIds.add(sound.id) && seenFingerprints.add(fingerprint)) {
+                    synchronized(resultLock) { allResults.add(sound) }
+                    true
+                } else {
+                    false
+                }
             }
 
             fun flushToUi() {
                 _state.update { st ->
-                    val snapshot = synchronized(resultLock) { allResults.toList() }.sortedByDescending { qualityScore(it, loadTab) }
+                    val snapshot = rankSounds(
+                        sounds = synchronized(resultLock) { allResults.toList() },
+                        tab = loadTab,
+                        filter = st.qualityFilter,
+                    )
                     st.copy(
                         sounds = if (loadMore) st.sounds + snapshot.filter { snd -> st.sounds.none { it.id == snd.id } } else snapshot,
                     )
                 }
+            }
+
+            fun noteHasMore(hasMore: Boolean) {
+                if (hasMore) pagedSourcesHaveMore.set(true)
+            }
+
+            fun noteFailure(error: Exception) {
+                firstFailure.compareAndSet(null, error)
             }
 
             try {
@@ -578,19 +752,23 @@ class SoundsViewModel @Inject constructor(
                                         launch {
                                             ytResolveSemaphore.acquire()
                                             try {
-                                                youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))
-                                                _cachedYtIds.update { it + yt.id }
+                                                youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
+                                                    cacheResolvedPreview(yt, url)
+                                                    _cachedYtIds.update { it + yt.id }
+                                                }
                                             } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
                                         }
                                     }
-                                } catch (_: Exception) {}
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
                             }
                         }
                     }
 
                     // FreesoundV2
-                    if (hasFreesoundV2Key && queries.ovQueries.isNotEmpty()) {
-                        queries.ovQueries.forEach { q ->
+                    if (queries.catalogQueries.isNotEmpty()) {
+                        queries.catalogQueries.forEach { q ->
                             launch {
                                 try {
                                     val result = freesoundV2Repo.search(
@@ -598,34 +776,40 @@ class SoundsViewModel @Inject constructor(
                                         maxDuration = cappedMax.toDouble(), page = s.currentPage,
                                         sort = "downloads_desc",
                                     )
+                                    noteHasMore(result.hasMore)
                                     var added = false
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
-                                } catch (_: Exception) {}
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
                             }
                         }
                     }
 
                     // Openverse (zero auth fallback)
-                    if (queries.ovQueries.isNotEmpty()) {
-                        queries.ovQueries.forEach { q ->
+                    if (queries.catalogQueries.isNotEmpty()) {
+                        queries.catalogQueries.forEach { q ->
                             launch {
                                 try {
                                     val result = freesoundRepo.search(
                                         query = q, minDuration = cappedMin.toDouble(),
                                         maxDuration = cappedMax.toDouble(), page = s.currentPage,
                                     )
+                                    noteHasMore(result.hasMore)
                                     var added = false
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
-                                } catch (_: Exception) {}
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
                             }
                         }
                     }
 
                     // SoundCloud (CC-licensed)
-                    if (hasSoundCloudKey && queries.ovQueries.isNotEmpty()) {
-                        queries.ovQueries.take(1).forEach { q ->
+                    if (queries.catalogQueries.isNotEmpty()) {
+                        queries.catalogQueries.take(1).forEach { q ->
                             launch {
                                 try {
                                     val result = soundCloudRepo.search(
@@ -634,32 +818,113 @@ class SoundsViewModel @Inject constructor(
                                         maxDurationMs = cappedMax * 1000,
                                         offset = (s.currentPage - 1) * 20,
                                     )
+                                    noteHasMore(result.hasMore)
                                     var added = false
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
-                                } catch (_: Exception) {}
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
+                            }
+                        }
+                    }
+
+                    // Audius is a one-shot catalog here, so avoid re-querying it on later pages.
+                    if (firstPage && queries.audiusQueries.isNotEmpty()) {
+                        queries.audiusQueries.take(2).forEach { q ->
+                            launch {
+                                try {
+                                    val audiusMax = if (loadTab == SoundTab.RINGTONES) cappedMax.coerceAtLeast(60) else cappedMax
+                                    val result = audiusRepo.search(
+                                        query = q,
+                                        minDuration = cappedMin,
+                                        maxDuration = audiusMax,
+                                        limit = 20,
+                                    )
+                                    var added = false
+                                    result.items.forEach { if (addUnique(it)) added = true }
+                                    if (added) flushToUi()
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
+                            }
+                        }
+                    }
+
+                    // ccMixter is also a one-shot catalog in the current API integration.
+                    if (firstPage && queries.ccMixterQueries.isNotEmpty()) {
+                        queries.ccMixterQueries.take(1).forEach { q ->
+                            launch {
+                                try {
+                                    val result = ccMixterRepo.search(
+                                        query = q,
+                                        minDuration = cappedMin.toDouble(),
+                                        maxDuration = cappedMax.toDouble(),
+                                        limit = 15,
+                                    )
+                                    var added = false
+                                    result.items.forEach { if (addUnique(it)) added = true }
+                                    if (added) flushToUi()
+                                } catch (e: Exception) {
+                                    noteFailure(e)
+                                }
                             }
                         }
                     }
                 }
 
-                val combined = synchronized(resultLock) { allResults.toList() }.sortedByDescending { qualityScore(it, loadTab) }
+                val combined = rankSounds(
+                    sounds = synchronized(resultLock) { allResults.toList() },
+                    tab = loadTab,
+                    filter = _state.value.qualityFilter,
+                )
+                val preserveCurrentFeed = !loadMore && combined.isEmpty() && s.sounds.isNotEmpty()
+                val surfacedError = firstFailure.get()
+                    ?.takeIf { combined.isEmpty() }
+                    ?.let(::categorizeError)
                 _state.update {
                     it.copy(
-                        sounds = if (loadMore) it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } } else combined,
-                        isLoading = false, isLoadingMore = false, isRefreshing = false,
-                        hasMore = combined.size >= 3,
+                        sounds = when {
+                            loadMore -> it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } }
+                            preserveCurrentFeed -> it.sounds
+                            else -> combined
+                        },
+                        isLoading = false,
+                        isLoadingMore = false,
+                        isRefreshing = false,
+                        hasMore = if (preserveCurrentFeed) it.hasMore else pagedSourcesHaveMore.get(),
+                        error = when {
+                            preserveCurrentFeed && surfacedError != null -> "$surfacedError. Showing your last good results."
+                            else -> surfacedError
+                        },
                     )
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false, error = categorizeError(e)) }
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        isLoadingMore = false,
+                        isRefreshing = false,
+                        hasMore = it.hasMore,
+                        error = if (it.sounds.isNotEmpty()) {
+                            "${categorizeError(e)}. Showing your last good results."
+                        } else {
+                            categorizeError(e)
+                        },
+                    )
+                }
             }
         }
     }
 
     // -- Query Building --
 
-    private data class QuerySet(val ovQueries: List<String>, val ytQueries: List<String>)
+    private data class QuerySet(
+        val catalogQueries: List<String>,
+        val ytQueries: List<String>,
+        val audiusQueries: List<String>,
+        val ccMixterQueries: List<String>,
+    )
 
     private suspend fun buildQueries(s: SoundsUiState): QuerySet {
         val ytRingQ = prefs.ytSoundQueryRingtones.first()
@@ -669,22 +934,30 @@ class SoundsViewModel @Inject constructor(
 
         return when (s.selectedTab) {
             SoundTab.RINGTONES -> QuerySet(
-                listOf("ringtone melody phone ring", "ringtone tone music tune"),
-                listOf(ytRingQ, "best ringtone $currentYear phone"),
+                catalogQueries = listOf("ringtone melody phone ring", "ringtone tone music tune"),
+                ytQueries = listOf(ytRingQ, "clean ringtone $currentYear phone"),
+                audiusQueries = listOf("ringtone", "phone ringtone"),
+                ccMixterQueries = listOf("ringtone"),
             )
             SoundTab.NOTIFICATIONS -> QuerySet(
-                listOf("notification chime ding alert", "notification beep ping pop"),
-                listOf(ytNotifQ, "notification sound effect $currentYear short"),
+                catalogQueries = listOf("notification chime ding alert", "notification beep ping pop"),
+                ytQueries = listOf(ytNotifQ, "clean notification sound $currentYear short"),
+                audiusQueries = listOf("notification sound", "chime alert"),
+                ccMixterQueries = listOf("notification"),
             )
             SoundTab.ALARMS -> QuerySet(
-                listOf("alarm clock morning wake", "alarm buzzer bell siren"),
-                listOf(ytAlarmQ, "alarm clock tone morning $currentYear"),
+                catalogQueries = listOf("alarm clock morning wake", "alarm buzzer bell siren"),
+                ytQueries = listOf(ytAlarmQ, "alarm clock tone morning $currentYear"),
+                audiusQueries = listOf("alarm", "wake up tone"),
+                ccMixterQueries = listOf("alarm"),
             )
-            SoundTab.YOUTUBE -> QuerySet(emptyList(), emptyList())
-            SoundTab.COMMUNITY -> QuerySet(emptyList(), emptyList())
+            SoundTab.YOUTUBE -> QuerySet(emptyList(), emptyList(), emptyList(), emptyList())
+            SoundTab.COMMUNITY -> QuerySet(emptyList(), emptyList(), emptyList(), emptyList())
             SoundTab.SEARCH -> QuerySet(
-                listOf(s.query, "${s.query} sound effect"),
-                listOf("${s.query} sound", "${s.query} ringtone"),
+                catalogQueries = listOf(s.query, "${s.query} sound effect"),
+                ytQueries = listOf("${s.query} sound", "${s.query} ringtone"),
+                audiusQueries = listOf(s.query, "${s.query} audio"),
+                ccMixterQueries = listOf(s.query),
             )
         }
     }
@@ -704,54 +977,91 @@ class SoundsViewModel @Inject constructor(
         else -> ContentType.RINGTONE
     }
 
-    private fun qualityScore(sound: Sound, tab: SoundTab = _state.value.selectedTab): Int {
-        var score = 50
-        score += when (sound.source) {
-            ContentSource.BUNDLED -> 25
-            ContentSource.FREESOUND -> 15
-            ContentSource.YOUTUBE -> 15
-            ContentSource.SOUNDCLOUD -> 14
-            ContentSource.COMMUNITY -> 12
-            else -> 10
-        }
-        val name = sound.name
-        if (name.contains("_") && !name.contains(" ")) score -= 20
-        if (name.length in 6..59) score += 5
-        if (name.matches(Regex("^\\d+.*"))) score -= 10
-        val idealRange = when (tab) {
-            SoundTab.RINGTONES -> 10.0..25.0
-            SoundTab.NOTIFICATIONS -> 1.0..3.0
-            SoundTab.ALARMS -> 10.0..30.0
-            SoundTab.YOUTUBE -> 0.0..600.0
-            SoundTab.COMMUNITY -> 0.0..600.0
-            SoundTab.SEARCH -> 3.0..30.0
-        }
-        if (sound.duration in idealRange) score += 10
-        if (sound.tags.size >= 3) score += 5
-        if (sound.uploaderName.isNotEmpty() && sound.uploaderName != "Unknown") score += 3
-        return score
-    }
-
     // -- Community Uploads --
 
-    private fun loadCommunityTab() {
+    private fun loadCommunityTab(isRefresh: Boolean = false) {
         communityJob?.cancel()
-        _state.update { it.copy(isLoading = true, error = null) }
+        _state.update {
+            if (isRefresh) it.copy(isRefreshing = true, error = null)
+            else it.copy(isLoading = true, error = null)
+        }
         communityJob = viewModelScope.launch {
             val timeoutJob = launch {
                 kotlinx.coroutines.delay(10_000L)
-                if (_state.value.isLoading) {
-                    _state.update { it.copy(isLoading = false, error = "Community uploads timed out") }
+                val state = _state.value
+                if (state.isLoading || state.isRefreshing) {
+                    _state.update { it.copy(isLoading = false, isRefreshing = false, error = "Community uploads timed out") }
                 }
             }
             try {
                 uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
                     timeoutJob.cancel()
-                    _state.update { it.copy(sounds = sounds, isLoading = false, hasMore = false) }
+                    _state.update {
+                        it.copy(
+                            sounds = rankSounds(sounds, SoundTab.COMMUNITY, it.qualityFilter),
+                            isLoading = false,
+                            isRefreshing = false,
+                            hasMore = false,
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 timeoutJob.cancel()
-                _state.update { it.copy(isLoading = false, error = e.message) }
+                _state.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) }
+            }
+        }
+    }
+
+    private fun executeYouTubeSearch(query: String) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            try {
+                val blocked = try {
+                    prefs.ytSoundBlockedWords.first()
+                        .split(",").map { it.trim() }.filter { it.isNotBlank() }
+                } catch (_: Exception) { emptyList() }
+
+                val result = youtubeRepo.searchSounds(
+                    query = query,
+                    maxDuration = 600,
+                    minDuration = 0,
+                    blockedWords = blocked,
+                )
+                _state.update {
+                    it.copy(
+                        sounds = rankSounds(result.items, SoundTab.YOUTUBE, it.qualityFilter),
+                        isLoading = false,
+                        isRefreshing = false,
+                        // We do not support paginating the YouTube tab yet, so avoid advertising
+                        // "more" when the generic loadMore() path cannot service it.
+                        hasMore = false,
+                    )
+                }
+
+                supervisorScope {
+                    result.items.forEach { yt ->
+                        launch {
+                            ytResolveSemaphore.acquire()
+                            try {
+                                youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
+                                    cacheResolvedPreview(yt, url)
+                                    _cachedYtIds.update { it + yt.id }
+                                }
+                            } catch (_: Exception) {
+                            } finally {
+                                ytResolveSemaphore.release()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = categorizeError(e),
+                    )
+                }
             }
         }
     }

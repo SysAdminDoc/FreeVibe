@@ -271,17 +271,23 @@ fun GlassCard(
 fun SourceBadge(source: String, modifier: Modifier = Modifier) {
     val (color, label) = when (source.uppercase()) {
         "WALLHAVEN" -> MaterialTheme.colorScheme.primary to "Wallhaven"
-        "PICSUM" -> Color(0xFF111111) to "Unsplash"
+        "PICSUM" -> MaterialTheme.colorScheme.outline to "Legacy"
         "BING" -> Color(0xFF00809D) to "Bing"
         "WIKIMEDIA" -> Color(0xFF006699) to "Wikimedia"
         "INTERNET_ARCHIVE" -> Color(0xFFFF8C00) to "Archive.org"
         "REDDIT" -> Color(0xFFFF4500) to "Reddit"
         "NASA" -> Color(0xFF0B3D91) to "NASA"
         "FREESOUND" -> Color(0xFF3DB2CE) to "Freesound" // Legacy favorites only
+        "JAMENDO" -> Color(0xFF7E57C2) to "Jamendo"
+        "AUDIUS" -> Color(0xFF00C2A8) to "Audius"
+        "CCMIXTER" -> Color(0xFF8E24AA) to "ccMixter"
         "YOUTUBE" -> Color(0xFFFF0000) to "YouTube"
         "PEXELS" -> Color(0xFF05A081) to "Pexels"
         "PIXABAY" -> Color(0xFF00AB6C) to "Pixabay"
         "KLIPY" -> Color(0xFFE040FB) to "Klipy"
+        "SOUNDCLOUD" -> Color(0xFFFF5500) to "SoundCloud"
+        "COMMUNITY" -> Color(0xFF4CAF50) to "Community"
+        "BUNDLED" -> Color(0xFFFFB300) to "Aura Picks"
         else -> MaterialTheme.colorScheme.onSurfaceVariant to source
     }
 

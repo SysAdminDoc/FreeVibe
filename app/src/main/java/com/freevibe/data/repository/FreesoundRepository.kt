@@ -86,6 +86,11 @@ class FreesoundRepository @Inject constructor(
     )
 
     private fun OpenverseAudio.toSound(): Sound {
+        val contentSource = when {
+            provider.contains("jamendo", ignoreCase = true) || source.contains("jamendo", ignoreCase = true) -> ContentSource.JAMENDO
+            provider.contains("wikimedia", ignoreCase = true) || source.contains("wikimedia", ignoreCase = true) -> ContentSource.WIKIMEDIA
+            else -> ContentSource.FREESOUND
+        }
         val licenseName = when {
             license.contains("cc0", ignoreCase = true) -> "CC0"
             license == "by" -> "CC BY"
@@ -99,7 +104,7 @@ class FreesoundRepository @Inject constructor(
 
         return Sound(
             id = "ov_$id",
-            source = ContentSource.FREESOUND,
+            source = contentSource,
             name = title.replace("_", " ").trim(),
             description = "",
             previewUrl = url,

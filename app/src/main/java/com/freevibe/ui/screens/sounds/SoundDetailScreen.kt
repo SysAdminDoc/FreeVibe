@@ -47,6 +47,8 @@ fun SoundDetailScreen(
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val selectedSound by viewModel.selectedSound.collectAsState()
+    val topHits by viewModel.topHits.collectAsState()
     var restoreResolved by remember(soundId) { mutableStateOf(false) }
     var resolvedSound by remember(soundId) { mutableStateOf<Sound?>(null) }
 
@@ -55,7 +57,10 @@ fun SoundDetailScreen(
         restoreResolved = true
     }
 
-    val s = resolvedSound
+    val s = selectedSound?.takeIf { it.id == soundId }
+        ?: state.sounds.firstOrNull { it.id == soundId }
+        ?: topHits.firstOrNull { it.id == soundId }
+        ?: resolvedSound
     if (s == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (!restoreResolved) {
@@ -82,6 +87,11 @@ fun SoundDetailScreen(
     val autoPreview by viewModel.autoPreview.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
     val isPlaying = state.playingId == s.id
+    val showUploader = s.uploaderName.isNotEmpty() &&
+        s.uploaderName != "Unknown" &&
+        !(s.source == ContentSource.BUNDLED && s.uploaderName == "Aura Picks")
+    val detailBadges = remember(s, state.selectedTab) { soundBadges(s, state.selectedTab) }
+    val (sourceLabel, sourceColor) = soundSourceTone(s.source)
 
     val similarSounds = remember(s.id) { mutableStateOf<List<Sound>>(emptyList()) }
     val similarLoading = remember(s.id) { mutableStateOf(false) }
@@ -159,21 +169,34 @@ fun SoundDetailScreen(
 
             // Metadata row
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                val (label, color) = when (s.source) {
-                    ContentSource.YOUTUBE -> "YouTube" to Color(0xFFFF0000)
-                    ContentSource.FREESOUND -> "Freesound" to Color(0xFF4CAF50)
-                    else -> s.source.name to MaterialTheme.colorScheme.onSurfaceVariant
-                }
-                Surface(color = color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
-                    Text(label, Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = color)
+                Surface(color = sourceColor.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                    Text(sourceLabel, Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = sourceColor)
                 }
                 Text(formatDuration(s.duration), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (s.uploaderName.isNotEmpty() && s.uploaderName != "Unknown") {
+                if (showUploader) {
                     Text("by ${s.uploaderName}", modifier = Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (s.license.isNotEmpty()) {
                     Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(4.dp)) {
                         Text(s.license, Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+            }
+
+            if (detailBadges.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    detailBadges.forEach { badge ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            Text(
+                                badge,
+                                Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }
@@ -226,7 +249,10 @@ fun SoundDetailScreen(
 
             // More Like This
             Spacer(Modifier.height(4.dp))
-            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { onOpenSound(it.id) }
+            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { similar ->
+                viewModel.selectSound(similar)
+                onOpenSound(similar.id)
+            }
 
             Spacer(Modifier.height(80.dp)) // bottom padding for nav bar
         }

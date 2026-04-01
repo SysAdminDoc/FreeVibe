@@ -268,11 +268,17 @@ fun FreeVibeRoot(
                         nullable = true
                         defaultValue = null
                     },
+                    navArgument("similarId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
                 ),
             ) { backStackEntry ->
                 WallpapersScreen(
                     initialQuery = backStackEntry.arguments?.getString("query")?.ifBlank { null },
                     initialColor = backStackEntry.arguments?.getString("color")?.ifBlank { null },
+                    initialSimilarId = backStackEntry.arguments?.getString("similarId")?.ifBlank { null },
                     onWallpaperClick = { wallpaper ->
                         navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
@@ -389,8 +395,8 @@ fun FreeVibeRoot(
                             restoreState = false
                         }
                     },
-                    onFindSimilar = { colorHex ->
-                        navController.navigate(Screen.Wallpapers.createRoute(color = colorHex)) {
+                    onFindSimilar = { wallpaperId ->
+                        navController.navigate(Screen.Wallpapers.createRoute(similarId = wallpaperId)) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = false
                             }

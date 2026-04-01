@@ -47,9 +47,11 @@ data class WallpapersUiState(
     val pendingLiveWallpaperLaunch: Boolean = false,  // true when parallax file is ready to launch picker
     val selectedColor: String? = null,       // #9: Color filter
     val topRange: String = "1M",             // Wallhaven toplist time range
+    val discoverFilter: WallpaperDiscoverFilter = WallpaperDiscoverFilter.FOR_YOU,
+    val browseTab: WallpaperTab = WallpaperTab.DISCOVER,
 )
 
-enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, UNSPLASH, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
@@ -77,6 +79,7 @@ class WallpapersViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var lastRouteQuery: String? = null
     private var lastRouteColor: String? = null
+    private var lastRouteSimilarId: String? = null
     private var hasInitiallyLoaded = false
 
     val selectedWallpaper = selectedContent.selectedWallpaper
@@ -145,15 +148,22 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
-    fun handleRouteFilters(query: String?, color: String?) {
+    fun handleRouteFilters(query: String?, color: String?, similarId: String? = null) {
         val normalizedQuery = query?.ifBlank { null }
         val normalizedColor = color?.ifBlank { null }
+        val normalizedSimilarId = similarId?.ifBlank { null }
 
         // Skip dedup only for non-initial calls with identical filters
-        if (hasInitiallyLoaded && normalizedQuery == lastRouteQuery && normalizedColor == lastRouteColor) return
+        if (
+            hasInitiallyLoaded &&
+            normalizedQuery == lastRouteQuery &&
+            normalizedColor == lastRouteColor &&
+            normalizedSimilarId == lastRouteSimilarId
+        ) return
 
         lastRouteQuery = normalizedQuery
         lastRouteColor = normalizedColor
+        lastRouteSimilarId = normalizedSimilarId
         hasInitiallyLoaded = true
 
         when {
@@ -167,6 +177,7 @@ class WallpapersViewModel @Inject constructor(
                     searchByColor(normalizedColor)
                 }
             }
+            normalizedSimilarId != null -> findSimilarById(normalizedSimilarId)
             _state.value.wallpapers.isEmpty() && !_state.value.isLoading -> loadWallpapers()
         }
     }
@@ -176,6 +187,8 @@ class WallpapersViewModel @Inject constructor(
         _state.update {
             it.copy(
                 selectedTab = tab,
+                browseTab = if (tab == WallpaperTab.SEARCH || tab == WallpaperTab.COLOR) it.browseTab else tab,
+                query = "",
                 wallpapers = emptyList(),
                 currentPage = 1,
                 hasMore = true,
@@ -192,11 +205,41 @@ class WallpapersViewModel @Inject constructor(
         loadWallpapers()
     }
 
+    fun setDiscoverFilter(filter: WallpaperDiscoverFilter) {
+        viewModelScope.launch {
+            val preferredResolution = prefs.preferredResolution.first()
+            val userStyles = prefs.userStyles.first()
+                .split(",")
+                .map { it.trim().lowercase() }
+                .filter { it.isNotBlank() }
+            _state.update {
+                it.copy(
+                    discoverFilter = filter,
+                    wallpapers = rankWallpapers(
+                        wallpapers = it.wallpapers,
+                        filter = filter,
+                        preferredResolution = preferredResolution,
+                        userStyles = userStyles,
+                    ),
+                )
+            }
+        }
+    }
+
     fun search(query: String) {
+        if (query.isBlank()) {
+            clearActiveFilter()
+            return
+        }
+        val returnTab = _state.value.selectedTab
+            .takeIf { it != WallpaperTab.SEARCH && it != WallpaperTab.COLOR }
+            ?: _state.value.browseTab
         _state.update {
             it.copy(
                 query = query,
                 selectedTab = WallpaperTab.SEARCH,
+                browseTab = returnTab,
+                selectedColor = null,
                 wallpapers = emptyList(),
                 currentPage = 1,
                 hasMore = true,
@@ -216,9 +259,18 @@ class WallpapersViewModel @Inject constructor(
 
     // #9: Color-based search
     fun searchByColor(color: String) {
+        if (color.isBlank()) {
+            clearActiveFilter()
+            return
+        }
+        val returnTab = _state.value.selectedTab
+            .takeIf { it != WallpaperTab.SEARCH && it != WallpaperTab.COLOR }
+            ?: _state.value.browseTab
         _state.update {
             it.copy(
+                query = "",
                 selectedTab = WallpaperTab.COLOR,
+                browseTab = returnTab,
                 selectedColor = color,
                 wallpapers = emptyList(),
                 currentPage = 1,
@@ -228,10 +280,31 @@ class WallpapersViewModel @Inject constructor(
         loadWallpapers()
     }
 
+    fun clearActiveFilter() {
+        val returnTab = _state.value.browseTab
+        if (returnTab == WallpaperTab.REDDIT) redditRepo.resetPagination()
+        _state.update {
+            it.copy(
+                selectedTab = returnTab,
+                query = "",
+                selectedColor = null,
+                wallpapers = emptyList(),
+                currentPage = 1,
+                hasMore = true,
+                error = null,
+                errorSource = null,
+                isLoading = false,
+                isLoadingMore = false,
+                isRefreshing = false,
+            )
+        }
+        loadWallpapers()
+    }
+
     // #4: Pull-to-refresh
     fun refresh() {
         val tab = _state.value.selectedTab
-        _state.update { it.copy(isRefreshing = true, currentPage = 1, wallpapers = emptyList(), error = null, errorSource = null) }
+        _state.update { it.copy(isRefreshing = true, currentPage = 1, error = null, errorSource = null) }
         if (tab == WallpaperTab.REDDIT) redditRepo.resetPagination()
         loadWallpapers(isRefresh = true)
     }
@@ -439,7 +512,22 @@ class WallpapersViewModel @Inject constructor(
             if (s.selectedTab == WallpaperTab.DISCOVER && !loadMore && !isRefresh) {
                 val cached = wallpaperRepo.getCachedDiscover(s.currentPage)
                 if (!cached.isNullOrEmpty()) {
-                    _state.update { it.copy(wallpapers = cached, hasMore = true) }
+                    val preferredResolution = prefs.preferredResolution.first()
+                    val userStyles = prefs.userStyles.first()
+                        .split(",")
+                        .map { it.trim().lowercase() }
+                        .filter { it.isNotBlank() }
+                    _state.update {
+                        it.copy(
+                            wallpapers = rankWallpapers(
+                                wallpapers = cached,
+                                filter = it.discoverFilter,
+                                preferredResolution = preferredResolution,
+                                userStyles = userStyles,
+                            ),
+                            hasMore = true,
+                        )
+                    }
                     // Keep isLoading = true — network request still in progress
                 }
             }
@@ -456,17 +544,34 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.PEXELS -> wallpaperRepo.getPexelsCurated(currentPage)
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = currentPage, topRange = _state.value.topRange)
-                    WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(currentPage)
                     WallpaperTab.SEARCH -> wallpaperRepo.searchAll(_state.value.query, page = currentPage)
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(_state.value.selectedColor ?: "", currentPage)
                 }
+                val preferredResolution = prefs.preferredResolution.first()
+                val userStyles = prefs.userStyles.first()
+                    .split(",")
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotBlank() }
+                val activeFilter = if (currentTab == WallpaperTab.DISCOVER) _state.value.discoverFilter else WallpaperDiscoverFilter.FOR_YOU
+                val combined = if (loadMore) _state.value.wallpapers + result.items else result.items
+                val rankedWallpapers = rankWallpapers(
+                    wallpapers = combined,
+                    filter = activeFilter,
+                    preferredResolution = preferredResolution,
+                    userStyles = userStyles,
+                )
+                val preserveExistingDiscoverFeed =
+                    currentTab == WallpaperTab.DISCOVER &&
+                        !loadMore &&
+                        result.items.isEmpty() &&
+                        _state.value.wallpapers.isNotEmpty()
                 _state.update {
                     it.copy(
-                        wallpapers = if (loadMore) it.wallpapers + result.items else result.items,
+                        wallpapers = if (preserveExistingDiscoverFeed) it.wallpapers else rankedWallpapers,
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
-                        hasMore = result.hasMore,
+                        hasMore = if (preserveExistingDiscoverFeed) it.hasMore else result.hasMore,
                         error = null,
                         errorSource = null,
                     )
@@ -491,13 +596,26 @@ class WallpapersViewModel @Inject constructor(
 
     /** Find similar wallpapers via Wallhaven like: query + color search */
     fun findSimilar(wallpaper: Wallpaper) {
-        val whId = wallpaper.id.removePrefix("wh_")
+        val returnTab = _state.value.selectedTab
+            .takeIf { it != WallpaperTab.SEARCH && it != WallpaperTab.COLOR }
+            ?: _state.value.browseTab
         viewModelScope.launch {
-            _state.update { it.copy(selectedTab = WallpaperTab.SEARCH, query = "Similar", wallpapers = emptyList(), isLoading = true, currentPage = 1) }
+            _state.update {
+                it.copy(
+                    selectedTab = WallpaperTab.SEARCH,
+                    browseTab = returnTab,
+                    query = "Similar",
+                    selectedColor = null,
+                    wallpapers = emptyList(),
+                    isLoading = true,
+                    currentPage = 1,
+                )
+            }
             try {
                 val results = mutableListOf<Wallpaper>()
                 // Tag-similar via Wallhaven like: syntax (only for Wallhaven wallpapers)
                 if (wallpaper.source == com.freevibe.data.model.ContentSource.WALLHAVEN) {
+                    val whId = wallpaper.id.removePrefix("wh_")
                     val similar = wallpaperRepo.findSimilar(whId)
                     results.addAll(similar.items)
                 }
@@ -510,6 +628,25 @@ class WallpapersViewModel @Inject constructor(
                 _state.update { it.copy(wallpapers = results, isLoading = false, hasMore = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun findSimilarById(wallpaperId: String) {
+        viewModelScope.launch {
+            val wallpaper = resolveWallpaperSelection(wallpaperId)?.first
+            if (wallpaper != null) {
+                findSimilar(wallpaper)
+            } else {
+                _state.update {
+                    it.copy(
+                        error = "Wallpaper unavailable",
+                        errorSource = WallpaperTab.SEARCH.name,
+                        isLoading = false,
+                        isLoadingMore = false,
+                        isRefreshing = false,
+                    )
+                }
             }
         }
     }

@@ -96,9 +96,19 @@ class VideoWallpapersViewModel @Inject constructor(
     fun clearError() = _state.update { it.copy(error = null) }
 
     fun refresh() {
-        _state.update { it.copy(isRefreshing = true, pexelsPage = 1, pixabayPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), items = emptyList(), emptyLoadCount = 0) }
-        streamUrls.clear()
-        _resolvedIds.value = emptySet()
+        _state.update {
+            it.copy(
+                isRefreshing = true,
+                error = null,
+                degradedSources = emptyList(),
+                pexelsPage = 1,
+                pixabayPage = 1,
+                ytQueryIndex = 0,
+                redditSubIndex = 0,
+                redditAfters = emptyMap(),
+                emptyLoadCount = 0,
+            )
+        }
         load()
     }
 
@@ -109,14 +119,47 @@ class VideoWallpapersViewModel @Inject constructor(
     }
 
     fun setOrientation(orientation: OrientationFilter) {
-        _state.update { it.copy(orientation = orientation, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), emptyLoadCount = 0) }
+        _state.update {
+            it.copy(
+                orientation = orientation,
+                items = emptyList(),
+                error = null,
+                degradedSources = emptyList(),
+                pexelsPage = 1,
+                ytQueryIndex = 0,
+                redditSubIndex = 0,
+                redditAfters = emptyMap(),
+                emptyLoadCount = 0,
+            )
+        }
         streamUrls.clear()
         _resolvedIds.value = emptySet()
         load()
     }
 
+    fun setFocusFilter(filter: VideoFocusFilter) {
+        _state.update {
+            it.copy(
+                focusFilter = filter,
+                items = rankVideoWallpapers(it.items, filter, it.orientation),
+            )
+        }
+    }
+
     fun search(query: String) {
-        _state.update { it.copy(searchQuery = query, items = emptyList(), pexelsPage = 1, ytQueryIndex = 0, redditSubIndex = 0, redditAfters = emptyMap(), emptyLoadCount = 0) }
+        _state.update {
+            it.copy(
+                searchQuery = query,
+                items = emptyList(),
+                error = null,
+                degradedSources = emptyList(),
+                pexelsPage = 1,
+                ytQueryIndex = 0,
+                redditSubIndex = 0,
+                redditAfters = emptyMap(),
+                emptyLoadCount = 0,
+            )
+        }
         streamUrls.clear()
         _resolvedIds.value = emptySet()
         load()
@@ -205,12 +248,20 @@ class VideoWallpapersViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             try {
             if (!loadMore) {
-                _state.update { it.copy(isLoading = !it.isRefreshing, error = null) }
+                _state.update {
+                    it.copy(
+                        isLoading = !it.isRefreshing && it.items.isEmpty(),
+                        error = null,
+                        degradedSources = emptyList(),
+                    )
+                }
             }
 
             val s = _state.value
             val searchQ = s.searchQuery.ifBlank { null }
             val newItems = mutableListOf<VideoWallpaperItem>()
+            val attemptedSources = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+            val failedSources = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
             kotlinx.coroutines.supervisorScope {
                 // 1. Pexels
@@ -218,6 +269,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     try {
                         val key = prefs.pexelsApiKey.first()
                         if (key.isBlank()) return@async emptyList()
+                        attemptedSources += "Pexels"
                         val query = searchQ ?: pexelsQueries[s.pexelsPage % pexelsQueries.size]
                         val orientation = when (s.orientation) {
                             OrientationFilter.PORTRAIT -> "portrait"
@@ -238,12 +290,18 @@ class VideoWallpapersViewModel @Inject constructor(
                                 item
                             }
                         }
-                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pexels: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) {
+                        failedSources += "Pexels"
+                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pexels: ${e.message}")
+                        emptyList()
+                    }
                 }
 
                 // 2. Reddit — one subreddit per load, rotating, with per-sub pagination
                 val redditJob = async(Dispatchers.IO) {
                     val items = mutableListOf<VideoWallpaperItem>()
+                    attemptedSources += "Reddit"
+                    var redditReached = false
                     // Load 2 subreddits per call for variety
                     for (offset in 0..1) {
                         val subIdx = (s.redditSubIndex + offset) % redditSubs.size
@@ -256,6 +314,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             val resp = okHttpClient.newCall(req).execute()
                             if (!resp.isSuccessful) { resp.close(); continue }
                             val body = resp.use { it.body?.string() } ?: continue
+                            redditReached = true
 
                             // Per-subreddit after token
                             val afterToken = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
@@ -293,12 +352,14 @@ class VideoWallpapersViewModel @Inject constructor(
                             }
                         } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
                     }
+                    if (!redditReached) failedSources += "Reddit"
                     items
                 }
 
                 // 3. YouTube
                 val ytJob = async(Dispatchers.IO) {
                     try {
+                        attemptedSources += "YouTube"
                         val service = NewPipe.getService(ServiceList.YouTube.serviceId)
                         val ytQueries = when (s.orientation) {
                             OrientationFilter.PORTRAIT -> youtubePortraitQueries
@@ -328,7 +389,11 @@ class VideoWallpapersViewModel @Inject constructor(
                                 val th = thumb?.height?.takeIf { it > 0 } ?: 0
                                 VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = thumb?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount, videoWidth = tw, videoHeight = th)
                             }
-                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "YouTube: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) {
+                        failedSources += "YouTube"
+                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "YouTube: ${e.message}")
+                        emptyList()
+                    }
                 }
 
                 // 4. Pixabay Videos (animated loops + short videos)
@@ -336,6 +401,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     try {
                         val pbKey = prefs.pixabayApiKey.first()
                         if (pbKey.isBlank()) return@async emptyList<VideoWallpaperItem>()
+                        attemptedSources += "Pixabay"
                         val query = searchQ ?: "abstract loop"
                         val response = pixabayApi.searchVideos(
                             apiKey = pbKey,
@@ -363,7 +429,11 @@ class VideoWallpapersViewModel @Inject constructor(
                                 item
                             }
                         }
-                    } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pixabay: ${e.message}"); emptyList() }
+                    } catch (e: Throwable) {
+                        failedSources += "Pixabay"
+                        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pixabay: ${e.message}")
+                        emptyList()
+                    }
                 }
 
                 newItems.addAll(pexelsJob.await())
@@ -379,35 +449,45 @@ class VideoWallpapersViewModel @Inject constructor(
                 OrientationFilter.LANDSCAPE -> newItems.filter { !it.hasDimensions || it.isLandscape }
             }
 
-            // Deduplicate against existing items
-            val existingIds = s.items.map { it.id }.toSet()
+            // Deduplicate against existing items, then rank by fit / loop / battery heuristics.
+            val existingIds = if (loadMore) s.items.map { it.id }.toSet() else emptySet()
             val deduped = orientedItems.filter { it.id !in existingIds }.distinctBy { it.id }
-
-            // Interleave: Pexels, Pixabay, Reddit, YouTube round-robin
-            val px = deduped.filter { it.source == "Pexels" }.toMutableList()
-            val pb = deduped.filter { it.source == "Pixabay" }.toMutableList()
-            val rd = deduped.filter { it.source == "Reddit" }.sortedByDescending { it.popularity }.toMutableList()
-            val yt = deduped.filter { it.source == "YouTube" }.sortedByDescending { it.popularity }.toMutableList()
-            val mixed = mutableListOf<VideoWallpaperItem>()
-            while (px.isNotEmpty() || pb.isNotEmpty() || rd.isNotEmpty() || yt.isNotEmpty()) {
-                if (px.isNotEmpty()) mixed.add(px.removeAt(0))
-                if (pb.isNotEmpty()) mixed.add(pb.removeAt(0))
-                if (rd.isNotEmpty()) mixed.add(rd.removeAt(0))
-                if (yt.isNotEmpty()) mixed.add(yt.removeAt(0))
-            }
+            val mixed = rankVideoWallpapers(
+                items = deduped,
+                filter = s.focusFilter,
+                orientation = s.orientation,
+            )
 
             val newEmptyCount = if (mixed.isEmpty()) s.emptyLoadCount + 1 else 0
+            val sourceFailures = failedSources.toList().sorted()
+            val sourceFailureSet = sourceFailures.toSet()
+            val attemptedCount = attemptedSources.size
+            val allAttemptedFailed = attemptedCount > 0 && sourceFailures.size == attemptedCount
+            val preserveCurrentFeed = !loadMore && mixed.isEmpty() && s.items.isNotEmpty()
 
             _state.update {
                 it.copy(
-                    items = if (loadMore) it.items + mixed else mixed,
-                    isLoading = false, isLoadingMore = false, isRefreshing = false,
-                    hasMore = newEmptyCount < 3,
-                    pexelsPage = it.pexelsPage + 1,
-                    pixabayPage = it.pixabayPage + 1,
-                    ytQueryIndex = it.ytQueryIndex + 1,
-                    redditSubIndex = it.redditSubIndex + 2,
-                    emptyLoadCount = newEmptyCount,
+                    items = when {
+                        loadMore -> it.items + mixed
+                        preserveCurrentFeed -> it.items
+                        else -> mixed
+                    },
+                    isLoading = false,
+                    isLoadingMore = false,
+                    isRefreshing = false,
+                    error = when {
+                        allAttemptedFailed && preserveCurrentFeed -> "Video sources are unavailable right now. Showing your last good results."
+                        allAttemptedFailed -> "Video sources are unavailable right now."
+                        sourceFailures.isNotEmpty() && mixed.isEmpty() && !preserveCurrentFeed -> "Limited source availability right now."
+                        else -> null
+                    },
+                    degradedSources = sourceFailures,
+                    hasMore = if (preserveCurrentFeed) it.hasMore else newEmptyCount < 3,
+                    pexelsPage = if ("Pexels" !in sourceFailureSet && "Pexels" in attemptedSources) it.pexelsPage + 1 else it.pexelsPage,
+                    pixabayPage = if ("Pixabay" !in sourceFailureSet && "Pixabay" in attemptedSources) it.pixabayPage + 1 else it.pixabayPage,
+                    ytQueryIndex = if ("YouTube" !in sourceFailureSet && "YouTube" in attemptedSources) it.ytQueryIndex + 1 else it.ytQueryIndex,
+                    redditSubIndex = if ("Reddit" !in sourceFailureSet && "Reddit" in attemptedSources) it.redditSubIndex + 2 else it.redditSubIndex,
+                    emptyLoadCount = if (preserveCurrentFeed) it.emptyLoadCount else newEmptyCount,
                 )
             }
 
