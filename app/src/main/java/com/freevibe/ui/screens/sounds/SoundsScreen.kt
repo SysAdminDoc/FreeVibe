@@ -55,6 +55,13 @@ fun SoundsScreen(
     val cachedYtIds by viewModel.cachedYtIds.collectAsState()
     val topHits by viewModel.topHits.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
+    val displayTopHits = remember(topHits, state.selectedTab, state.query, state.qualityFilter) {
+        if (state.selectedTab == SoundTab.RINGTONES && state.query.isBlank()) {
+            rankSounds(topHits, SoundTab.RINGTONES, state.qualityFilter).take(5)
+        } else {
+            emptyList()
+        }
+    }
     var searchQuery by remember { mutableStateOf("") }
     LaunchedEffect(state.query) { searchQuery = state.query }
     LaunchedEffect(initialQuery) {
@@ -70,6 +77,7 @@ fun SoundsScreen(
     // Upload state
     var showUploadDialog by remember { mutableStateOf(false) }
     var selectedAudioUri by remember { mutableStateOf<Uri?>(null) }
+    var awaitingUploadResult by remember { mutableStateOf(false) }
     val audioPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> if (uri != null) { selectedAudioUri = uri; showUploadDialog = true } }
@@ -80,17 +88,22 @@ fun SoundsScreen(
             isUploading = state.isUploading,
             uploadProgress = state.uploadProgress,
             onUpload = { name, category ->
+                awaitingUploadResult = true
                 viewModel.uploadSound(selectedAudioUri!!, name, category)
             },
             onDismiss = {
                 if (!state.isUploading) {
                     showUploadDialog = false; selectedAudioUri = null
+                    awaitingUploadResult = false
                 }
             },
         )
         // Auto-dismiss when upload completes
-        LaunchedEffect(state.isUploading) {
-            if (!state.isUploading && showUploadDialog && state.uploadProgress > 0f) {
+        LaunchedEffect(state.isUploading, state.applySuccess, state.error) {
+            if (awaitingUploadResult && !state.isUploading) {
+                awaitingUploadResult = false
+            }
+            if (!state.isUploading && showUploadDialog && state.applySuccess == "Upload complete") {
                 showUploadDialog = false
                 selectedAudioUri = null
             }
@@ -115,7 +128,7 @@ fun SoundsScreen(
         state.applySuccess?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
     }
     LaunchedEffect(state.error) {
-        if (state.sounds.isNotEmpty()) {
+        if (state.sounds.isNotEmpty() || displayTopHits.isNotEmpty()) {
             state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
         }
     }
@@ -182,8 +195,10 @@ fun SoundsScreen(
                                     searchQuery = ""
                                     showSearchHistory = false
                                     focusManager.clearFocus()
-                                    if (state.selectedTab == SoundTab.SEARCH || state.selectedTab == SoundTab.YOUTUBE) {
-                                        viewModel.selectTab(SoundTab.RINGTONES)
+                                    when (state.selectedTab) {
+                                        SoundTab.SEARCH -> viewModel.clearSearchMode()
+                                        SoundTab.YOUTUBE -> viewModel.clearYouTubeSearch()
+                                        else -> Unit
                                     }
                                 }) { Icon(Icons.Default.Clear, "Clear") }
                             }
@@ -236,7 +251,7 @@ fun SoundsScreen(
                             onClick = { viewModel.selectTab(tab) },
                             label = {
                                 Text(
-                                    tab.name.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.uppercase() },
+                                    soundTabLabel(tab),
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                             },
@@ -262,11 +277,31 @@ fun SoundsScreen(
                         )
                     }
                 }
+
+                Spacer(Modifier.height(12.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(SoundQualityFilter.entries, key = { it.name }) { filter ->
+                        AssistChip(
+                            onClick = { viewModel.setQualityFilter(filter) },
+                            label = { Text(soundFilterLabel(filter)) },
+                            leadingIcon = if (state.qualityFilter == filter) {
+                                { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) }
+                            } else null,
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = if (state.qualityFilter == filter) {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+                                } else {
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.28f)
+                                },
+                            ),
+                        )
+                    }
+                }
             }
 
             // Content
             Box(modifier = Modifier.fillMaxSize()) {
-                if (state.error != null && state.sounds.isEmpty() && !state.isLoading) {
+                if (state.error != null && state.sounds.isEmpty() && displayTopHits.isEmpty() && !state.isLoading && !state.isRefreshing) {
                     Column(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -275,7 +310,7 @@ fun SoundsScreen(
                         Spacer(Modifier.height(12.dp))
                         Text(state.error ?: "Error", color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(16.dp))
-                        FilledTonalButton(onClick = { viewModel.selectTab(state.selectedTab) }) {
+                        FilledTonalButton(onClick = { viewModel.refresh() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Retry", Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Retry")
@@ -285,10 +320,14 @@ fun SoundsScreen(
                     PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { viewModel.refresh() }) {
                         SoundsList(
                             sounds = state.sounds,
+                            selectedTab = state.selectedTab,
+                            query = state.query,
                             isLoading = state.isLoading,
+                            isRefreshing = state.isRefreshing,
                             playingId = state.playingId,
                             resolvingId = state.resolvingId,
                             isLoadingMore = state.isLoadingMore,
+                            hasMore = state.hasMore,
                             cachedYtIds = cachedYtIds,
                             filterKey = state.filterKey,
                             onSoundClick = { viewModel.selectSound(it); onSoundClick(it) },
@@ -296,7 +335,7 @@ fun SoundsScreen(
                             onPlayClick = { viewModel.togglePlayback(it) },
                             onLoadMore = { viewModel.loadMore() },
                             playbackProgress = playbackProgress,
-                            topHits = if (state.selectedTab == SoundTab.RINGTONES && state.query.isBlank()) topHits else emptyList(),
+                            topHits = displayTopHits,
                         )
                     }
                 }
@@ -310,15 +349,28 @@ private fun isYouTubeUrl(text: String): Boolean {
     return t.contains("youtube.com/") || t.contains("youtu.be/") || t.contains("youtube.com/shorts/")
 }
 
+private fun soundTabLabel(tab: SoundTab): String = when (tab) {
+    SoundTab.RINGTONES -> "Ringtones"
+    SoundTab.NOTIFICATIONS -> "Notifications"
+    SoundTab.ALARMS -> "Alarms"
+    SoundTab.YOUTUBE -> "YouTube"
+    SoundTab.COMMUNITY -> "Community"
+    SoundTab.SEARCH -> "Search"
+}
+
 // -- Sounds List --
 
 @Composable
 private fun SoundsList(
     sounds: List<Sound>,
+    selectedTab: SoundTab,
+    query: String,
     isLoading: Boolean,
+    isRefreshing: Boolean,
     playingId: String?,
     resolvingId: String?,
     isLoadingMore: Boolean,
+    hasMore: Boolean,
     cachedYtIds: Set<String>,
     filterKey: Int,
     onSoundClick: (Sound) -> Unit,
@@ -337,7 +389,9 @@ private fun SoundsList(
             info.totalItemsCount > 5 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 5
         }
     }
-    LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) onLoadMore() }
+    LaunchedEffect(shouldLoadMore, hasMore) {
+        if (hasMore && shouldLoadMore) onLoadMore()
+    }
 
     LazyColumn(
         state = listState,
@@ -360,6 +414,7 @@ private fun SoundsList(
             items(topHits, key = { "hit_${it.id}" }, contentType = { "sound_card" }) { sound ->
                 SoundCard(
                     sound = sound,
+                    tab = SoundTab.RINGTONES,
                     isPlaying = playingId == sound.id,
                     isResolving = sound.id == resolvingId,
                     playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
@@ -380,6 +435,7 @@ private fun SoundsList(
         items(filteredSounds, key = { it.id }, contentType = { "sound_card" }) { sound ->
             SoundCard(
                 sound = sound,
+                tab = selectedTab,
                 isPlaying = playingId == sound.id,
                 isResolving = sound.id == resolvingId,
                 playbackProgress = if (playingId == sound.id) playbackProgress else 0f,
@@ -390,7 +446,7 @@ private fun SoundsList(
         }
 
         // Loading spinner
-        if (isLoading && sounds.isEmpty()) {
+        if ((isLoading || isRefreshing) && sounds.isEmpty() && topHits.isEmpty()) {
             item(key = "loading", contentType = "loading") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
@@ -399,12 +455,21 @@ private fun SoundsList(
         }
 
         // Empty state
-        if (!isLoading && sounds.isEmpty() && topHits.isEmpty()) {
+        if (!isLoading && !isRefreshing && sounds.isEmpty() && topHits.isEmpty()) {
             item(key = "empty") {
+                val (icon, title, supportingText) = soundsEmptyState(selectedTab, query)
                 Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.MusicOff, contentDescription = "No sounds", Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    Icon(icon, contentDescription = title, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                     Spacer(Modifier.height(12.dp))
-                    Text("No sounds found", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    supportingText?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        )
+                    }
                 }
             }
         }
@@ -421,12 +486,39 @@ private fun SoundsList(
     }
 }
 
+private fun soundsEmptyState(
+    selectedTab: SoundTab,
+    query: String,
+): Triple<androidx.compose.ui.graphics.vector.ImageVector, String, String?> = when {
+    selectedTab == SoundTab.YOUTUBE && query.isBlank() -> Triple(
+        Icons.Default.SmartDisplay,
+        "Search YouTube or paste a video URL",
+        "Import audio from a specific video or try a short search like calm ringtone.",
+    )
+    selectedTab == SoundTab.COMMUNITY -> Triple(
+        Icons.Default.UploadFile,
+        "No community sounds yet",
+        "Uploads will appear here once the community feed has content.",
+    )
+    selectedTab == SoundTab.SEARCH && query.isNotBlank() -> Triple(
+        Icons.Default.MusicOff,
+        "No sounds found for \"$query\"",
+        "Try fewer words, a broader mood, or another source tab.",
+    )
+    else -> Triple(
+        Icons.Default.MusicOff,
+        "No sounds found",
+        "Try another tab or switch to a different quality filter.",
+    )
+}
+
 // -- Sound Card --
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SoundCard(
     sound: Sound,
+    tab: SoundTab,
     isPlaying: Boolean,
     isResolving: Boolean = false,
     playbackProgress: Float = 0f,
@@ -434,6 +526,11 @@ private fun SoundCard(
     onLongPress: () -> Unit = {},
     onPlayClick: () -> Unit,
 ) {
+    val showUploader = sound.uploaderName.isNotEmpty() &&
+        sound.uploaderName != "Unknown" &&
+        !(sound.source == ContentSource.BUNDLED && sound.uploaderName == "Aura Picks")
+    val (sourceLabel, sourceColor) = soundSourceTone(sound.source)
+    val badges = remember(sound, tab) { soundBadges(sound, tab) }
     Surface(
         color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
         shape = RoundedCornerShape(20.dp),
@@ -488,29 +585,21 @@ private fun SoundCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Source badge
-                        if (sound.source == ContentSource.BUNDLED) {
-                            Surface(color = Color(0xFFFFB300).copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
-                                Text("Aura Picks", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
-                            }
-                        } else if (sound.source == ContentSource.YOUTUBE) {
-                            Surface(color = Color(0xFFFF0000).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                                Text("YT", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF0000))
-                            }
-                        } else if (sound.source == ContentSource.SOUNDCLOUD) {
-                            Surface(color = Color(0xFFFF5500).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                                Text("SC", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF5500))
-                            }
-                        } else if (sound.source == ContentSource.COMMUNITY) {
-                            Surface(color = Color(0xFF4CAF50).copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                                Text("Community", Modifier.padding(horizontal = 5.dp, vertical = 1.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF4CAF50))
-                            }
+                        Surface(color = sourceColor.copy(alpha = 0.14f), shape = RoundedCornerShape(8.dp)) {
+                            Text(
+                                sourceLabel,
+                                Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = sourceColor,
+                                fontWeight = if (sound.source == ContentSource.BUNDLED) FontWeight.Bold else FontWeight.Medium,
+                            )
                         }
                         Text(
                             formatDuration(sound.duration),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (sound.uploaderName.isNotEmpty() && sound.uploaderName != "Unknown") {
+                        if (showUploader) {
                             Text(
                                 sound.uploaderName,
                                 style = MaterialTheme.typography.bodySmall,
@@ -519,6 +608,24 @@ private fun SoundCard(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
+                        }
+                    }
+                    if (badges.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(badges, key = { badge -> "${sound.id}_$badge" }) { badge ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                    shape = RoundedCornerShape(10.dp),
+                                ) {
+                                    Text(
+                                        badge,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -578,6 +685,14 @@ private fun formatDuration(seconds: Double): String {
     val m = total / 60
     val s = total % 60
     return if (m > 0) "${m}:${s.toString().padStart(2, '0')}" else "0:${s.toString().padStart(2, '0')}"
+}
+
+private fun soundFilterLabel(filter: SoundQualityFilter): String = when (filter) {
+    SoundQualityFilter.BEST -> "Best"
+    SoundQualityFilter.CLEAN -> "Clean"
+    SoundQualityFilter.SHORT -> "Short"
+    SoundQualityFilter.CALM -> "Calm"
+    SoundQualityFilter.PUNCHY -> "Punchy"
 }
 
 // -- Quick Apply Bottom Sheet --

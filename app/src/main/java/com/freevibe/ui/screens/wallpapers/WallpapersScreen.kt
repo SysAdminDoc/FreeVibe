@@ -37,6 +37,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
@@ -71,6 +72,7 @@ private val WALLHAVEN_COLORS = listOf(
 fun WallpapersScreen(
     initialQuery: String? = null,
     initialColor: String? = null,
+    initialSimilarId: String? = null,
     onWallpaperClick: (Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
@@ -98,11 +100,26 @@ fun WallpapersScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var showColorPicker by remember { mutableStateOf(false) }
     var showSearchHistory by remember { mutableStateOf(false) }
 
-    LaunchedEffect(initialQuery, initialColor) {
-        viewModel.handleRouteFilters(initialQuery, initialColor)
+    LaunchedEffect(initialQuery, initialColor, initialSimilarId) {
+        viewModel.handleRouteFilters(initialQuery, initialColor, initialSimilarId)
+    }
+    LaunchedEffect(state.applySuccess) {
+        state.applySuccess?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSuccess()
+        }
+    }
+    LaunchedEffect(state.error, state.wallpapers.isNotEmpty()) {
+        if (state.wallpapers.isNotEmpty()) {
+            state.error?.let {
+                snackbarHostState.showSnackbar(it)
+                viewModel.clearError()
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -139,10 +156,14 @@ fun WallpapersScreen(
                             trailingIcon = {
                                 if (searchQuery.isNotEmpty()) {
                                     IconButton(onClick = {
-                                        searchQuery = ""
                                         showSearchHistory = false
                                         focusManager.clearFocus()
-                                        viewModel.selectTab(WallpaperTab.DISCOVER)
+                                        if (state.selectedTab == WallpaperTab.SEARCH || state.selectedTab == WallpaperTab.COLOR) {
+                                            searchQuery = ""
+                                            viewModel.clearActiveFilter()
+                                        } else {
+                                            searchQuery = ""
+                                        }
                                     }) {
                                         Icon(Icons.Default.Clear, contentDescription = "Clear")
                                     }
@@ -224,7 +245,7 @@ fun WallpapersScreen(
                         },
                         onClear = if (state.selectedColor != null) {
                             {
-                                viewModel.selectTab(WallpaperTab.DISCOVER)
+                                viewModel.clearActiveFilter()
                                 showColorPicker = false
                             }
                         } else null,
@@ -270,6 +291,33 @@ fun WallpapersScreen(
                         )
                     }
                 }
+
+                if (state.selectedTab == WallpaperTab.DISCOVER) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        WallpaperDiscoverFilter.entries.forEach { filter ->
+                            AssistChip(
+                                onClick = { viewModel.setDiscoverFilter(filter) },
+                                label = { Text(wallpaperFilterLabel(filter)) },
+                                leadingIcon = if (state.discoverFilter == filter) {
+                                    { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) }
+                                } else null,
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = if (state.discoverFilter == filter) {
+                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.24f)
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
             }
 
             // Download progress
@@ -300,10 +348,10 @@ fun WallpapersScreen(
             // Content with pull-to-refresh (#4)
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
-                    state.isLoading -> {
+                    state.isLoading && state.wallpapers.isEmpty() -> {
                         ShimmerWallpaperGrid(Modifier.fillMaxSize())
                     }
-                    state.error != null -> {
+                    state.error != null && state.wallpapers.isEmpty() -> {
                         // #5: Source-specific error with retry
                         Column(
                             modifier = Modifier.align(Alignment.Center).padding(32.dp),
@@ -328,7 +376,7 @@ fun WallpapersScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = { viewModel.selectTab(state.selectedTab) }) {
+                            FilledTonalButton(onClick = { viewModel.refresh() }) {
                                 Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Retry")
@@ -401,6 +449,13 @@ fun WallpapersScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+        )
 
         // Compact FABs
         Column(
@@ -512,11 +567,10 @@ private fun WallpaperGrid(
     val topVotedIds by remember(topVoted, isDiscoverTab) {
         derivedStateOf { if (isDiscoverTab) topVoted.map { it.first.id }.toSet() else emptySet() }
     }
-    val visibleWallpapers by remember(wallpapers, hiddenIds, topVotedIds, voteCounts) {
+    val visibleWallpapers by remember(wallpapers, hiddenIds, topVotedIds) {
         derivedStateOf {
             wallpapers
                 .filter { it.id !in hiddenIds && it.id !in topVotedIds }
-                .sortedByDescending { voteCounts[it.id] ?: 0 }
         }
     }
 
@@ -724,7 +778,7 @@ private fun WallpaperGrid(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun WallpaperCard(
     wallpaper: Wallpaper,
@@ -739,6 +793,13 @@ private fun WallpaperCard(
     val aspectRatio = if (wallpaper.width > 0 && wallpaper.height > 0) {
         wallpaper.width.toFloat() / wallpaper.height.toFloat()
     } else 0.67f
+    val hints = wallpaper.qualityHints()
+    val badges = buildList {
+        add(hints.resolutionLabel)
+        add(hints.orientationLabel)
+        if (hints.isAmoled) add("AMOLED")
+        if (hints.isIconSafe) add("Icon-safe")
+    }
 
     Card(
         modifier = Modifier
@@ -807,30 +868,59 @@ private fun WallpaperCard(
                     )
                     .padding(6.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SourceBadge(wallpaper.source.name)
-                        if (onUpvote != null && voteCount > 0) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SourceBadge(wallpaper.source.name)
+                            if (onUpvote != null && voteCount > 0) {
+                                Surface(
+                                    onClick = onUpvote,
+                                    color = Color.White.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(10.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    ) {
+                                        Icon(Icons.Default.ThumbUp, contentDescription = "Upvotes", Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.9f))
+                                        Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
+                                    }
+                                }
+                            }
+                        }
+                        if (wallpaper.category.isNotBlank()) {
+                            Text(
+                                wallpaper.category,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.72f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        badges.take(4).forEach { badge ->
                             Surface(
-                                onClick = onUpvote,
-                                color = Color.White.copy(alpha = 0.15f),
+                                color = Color.White.copy(alpha = 0.16f),
                                 shape = RoundedCornerShape(10.dp),
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                ) {
-                                    Icon(Icons.Default.ThumbUp, contentDescription = "Upvotes", Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.9f))
-                                    Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
-                                }
+                                Text(
+                                    badge,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                )
                             }
                         }
                     }
@@ -874,7 +964,14 @@ private fun wallpaperTabLabel(tab: WallpaperTab): String =
         WallpaperTab.PIXABAY -> "Pixabay"
         WallpaperTab.REDDIT -> "Reddit"
         WallpaperTab.WALLHAVEN -> "Wallhaven"
-        WallpaperTab.UNSPLASH -> "Picsum"
         WallpaperTab.COLOR -> "Color"
         WallpaperTab.SEARCH -> "Search"
     }
+
+private fun wallpaperFilterLabel(filter: WallpaperDiscoverFilter): String = when (filter) {
+    WallpaperDiscoverFilter.FOR_YOU -> "For You"
+    WallpaperDiscoverFilter.AMOLED -> "AMOLED"
+    WallpaperDiscoverFilter.HIGH_RES -> "4K+"
+    WallpaperDiscoverFilter.PORTRAIT -> "Portrait"
+    WallpaperDiscoverFilter.ICON_SAFE -> "Icon Safe"
+}

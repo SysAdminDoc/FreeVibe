@@ -4,8 +4,6 @@ import com.freevibe.data.model.*
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.bing.BingImage
 import com.freevibe.data.remote.pixabay.PixabayPhoto
-import com.freevibe.data.remote.picsum.PicsumApi
-import com.freevibe.data.remote.picsum.PicsumPhoto
 import com.freevibe.data.remote.reddit.RedditPost
 import com.freevibe.data.remote.wallhaven.WallhavenWallpaper
 
@@ -26,21 +24,6 @@ fun WallhavenWallpaper.toWallpaper() = Wallpaper(
     sourcePageUrl = url,
     views = views,
     favorites = favorites,
-)
-
-// -- Picsum -> Wallpaper --
-
-fun PicsumPhoto.toWallpaper() = Wallpaper(
-    id = "ps_$id",
-    source = ContentSource.PICSUM,
-    thumbnailUrl = PicsumApi.thumbUrl(id),
-    fullUrl = PicsumApi.imageUrl(id),
-    width = width,
-    height = height,
-    category = "photography",
-    tags = listOf("unsplash", "photography"),
-    sourcePageUrl = url,
-    uploaderName = author,
 )
 
 // -- Bing Daily -> Wallpaper --

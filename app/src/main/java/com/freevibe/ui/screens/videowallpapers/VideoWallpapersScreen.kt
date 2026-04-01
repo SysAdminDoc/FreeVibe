@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
@@ -77,6 +78,8 @@ data class VideoWallpapersState(
     val hasMore: Boolean = true,
     val emptyLoadCount: Int = 0,
     val orientation: OrientationFilter = OrientationFilter.PORTRAIT,
+    val focusFilter: VideoFocusFilter = VideoFocusFilter.BEST,
+    val degradedSources: List<String> = emptyList(),
 )
 
 internal fun persistSelectedVideoWallpaper(context: Context, file: File) {
@@ -163,6 +166,9 @@ fun VideoWallpapersScreen(
     var cropItem by remember { mutableStateOf<Pair<VideoWallpaperItem, String>?>(null) }
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
+    val visibleItems = remember(state.items, hiddenIds) {
+        state.items.filter { it.id !in hiddenIds }
+    }
 
     // Video crop editor
     cropItem?.let { (item, streamUrl) ->
@@ -183,8 +189,10 @@ fun VideoWallpapersScreen(
     var searchQuery by rememberSaveable(state.searchQuery) { mutableStateOf(state.searchQuery) }
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(state.error) {
-        state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
+    LaunchedEffect(state.error, state.items.isNotEmpty()) {
+        if (state.items.isNotEmpty()) {
+            state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
+        }
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
@@ -284,6 +292,37 @@ fun VideoWallpapersScreen(
             }
         }
 
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(VideoFocusFilter.entries) { filter ->
+                AssistChip(
+                    onClick = { viewModel.setFocusFilter(filter) },
+                    label = { Text(videoFocusLabel(filter)) },
+                    leadingIcon = if (state.focusFilter == filter) {
+                        { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) }
+                    } else null,
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (state.focusFilter == filter) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+                        } else {
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.24f)
+                        },
+                    ),
+                )
+            }
+        }
+
+        if (state.degradedSources.isNotEmpty()) {
+            Text(
+                text = videoSourceHealthSummary(state.degradedSources),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         // Video category quick-search chips
         androidx.compose.foundation.lazy.LazyRow(
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -313,7 +352,7 @@ fun VideoWallpapersScreen(
 
         Box(Modifier.fillMaxSize()) {
             when {
-                state.isLoading -> {
+                (state.isLoading || state.isRefreshing) && state.items.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
@@ -334,11 +373,22 @@ fun VideoWallpapersScreen(
                     }
                 }
                 state.items.isEmpty() -> {
+                    val (icon, title, detail) = videoEmptyState(
+                        query = state.searchQuery,
+                        orientation = state.orientation,
+                        everythingHidden = false,
+                    )
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.VideoLibrary, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                            Icon(icon, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                             Spacer(Modifier.height(12.dp))
-                            Text("No video wallpapers found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                detail,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                             Spacer(Modifier.height(12.dp))
                             FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Retry") }
                         }
@@ -359,12 +409,9 @@ fun VideoWallpapersScreen(
                             }
                         }
                         LaunchedEffect(shouldLoadMore) {
-                            if (shouldLoadMore && !state.isLoadingMore) viewModel.loadMore()
+                            if (shouldLoadMore && state.hasMore && !state.isLoadingMore) viewModel.loadMore()
                         }
 
-                        val visibleItems = state.items
-                            .filter { it.id !in hiddenIds }
-                            .sortedByDescending { voteCounts[it.id] ?: 0 }
                         val activePreviewId by remember(visibleItems, listState) {
                             androidx.compose.runtime.derivedStateOf {
                                 val layoutInfo = listState.layoutInfo
@@ -381,28 +428,52 @@ fun VideoWallpapersScreen(
                             }
                         }
 
-                        LazyColumn(
-                            state = listState,
-                            contentPadding = PaddingValues(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(visibleItems, key = { it.id }) { item ->
-                                val isResolved = item.id in resolvedIds
-                                VideoCard(
-                                    item = item,
-                                    streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
-                                    shouldPreview = item.id == activePreviewId,
-                                    isApplying = state.isApplying == item.id,
-                                    voteCount = voteCounts[item.id] ?: 0,
-                                    onApply = { confirmItem = item },
-                                    onUpvote = { viewModel.upvote(item.id) },
-                                    onDownvote = { viewModel.downvote(item.id) },
-                                )
+                        if (visibleItems.isEmpty()) {
+                            val (icon, title, detail) = videoEmptyState(
+                                query = state.searchQuery,
+                                orientation = state.orientation,
+                                everythingHidden = true,
+                            )
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(icon, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        detail,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Refresh Feed") }
+                                }
                             }
-                            if (state.isLoadingMore) {
-                                item {
-                                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                contentPadding = PaddingValues(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                items(visibleItems, key = { it.id }) { item ->
+                                    val isResolved = item.id in resolvedIds
+                                    VideoCard(
+                                        item = item,
+                                        orientation = state.orientation,
+                                        streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
+                                        shouldPreview = item.id == activePreviewId,
+                                        isApplying = state.isApplying == item.id,
+                                        voteCount = voteCounts[item.id] ?: 0,
+                                        onApply = { confirmItem = item },
+                                        onUpvote = { viewModel.upvote(item.id) },
+                                        onDownvote = { viewModel.downvote(item.id) },
+                                    )
+                                }
+                                if (state.isLoadingMore) {
+                                    item {
+                                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                        }
                                     }
                                 }
                             }
@@ -445,6 +516,8 @@ fun VideoWallpapersScreen(
                         Spacer(Modifier.height(2.dp))
                         Text("${item.videoWidth}x${item.videoHeight} (${if (item.isPortrait) "Portrait" else "Landscape"})", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text("${item.loopBadge()} · ${item.batteryBadge()} · ${item.fitBadge(state.orientation)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     if (needsCrop) {
                         Text("This is a landscape video. Crop recommended to avoid stretching.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -491,9 +564,11 @@ fun VideoWallpapersScreen(
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VideoCard(
     item: VideoWallpaperItem,
+    orientation: OrientationFilter,
     streamUrl: String?,
     shouldPreview: Boolean,
     isApplying: Boolean,
@@ -503,6 +578,10 @@ private fun VideoCard(
     onDownvote: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val previewAspectRatio = item.previewAspectRatio()
+    val metadataBadges = remember(item, orientation) {
+        listOf(item.loopBadge(), item.batteryBadge(), item.fitBadge(orientation))
+    }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -535,7 +614,7 @@ private fun VideoCard(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(9f / 16f)
+                        .aspectRatio(previewAspectRatio)
                         .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                 )
             } else {
@@ -543,7 +622,7 @@ private fun VideoCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(9f / 16f)
+                        .aspectRatio(previewAspectRatio)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -629,11 +708,30 @@ private fun VideoCard(
         // Title + Vote + Apply button
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(item.uploaderName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    metadataBadges.forEach { badge ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text(
+                                badge,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
             }
             // Vote buttons
             IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
@@ -661,4 +759,44 @@ private fun VideoCard(
             }
         }
     }
+}
+
+private fun videoEmptyState(
+    query: String,
+    orientation: OrientationFilter,
+    everythingHidden: Boolean,
+): Triple<androidx.compose.ui.graphics.vector.ImageVector, String, String> = when {
+    everythingHidden -> Triple(
+        Icons.Default.VisibilityOff,
+        "Everything here is hidden",
+        "Pull to refresh for a fresh batch, or change orientation and focus filters.",
+    )
+    query.isNotBlank() -> Triple(
+        Icons.Default.SearchOff,
+        "No matches for \"$query\"",
+        "Try fewer words, a broader mood, or switch the ${orientation.label()} filter.",
+    )
+    else -> Triple(
+        Icons.Default.VideoLibrary,
+        "No video wallpapers found",
+        "Try another focus filter or switch the ${orientation.label()} view.",
+    )
+}
+
+private fun OrientationFilter.label(): String = when (this) {
+    OrientationFilter.ALL -> "All"
+    OrientationFilter.PORTRAIT -> "Portrait"
+    OrientationFilter.LANDSCAPE -> "Landscape"
+}
+
+private fun videoFocusLabel(filter: VideoFocusFilter): String = when (filter) {
+    VideoFocusFilter.BEST -> "Best"
+    VideoFocusFilter.LOOP_SAFE -> "Loop-safe"
+    VideoFocusFilter.LOW_BATTERY -> "Low battery"
+    VideoFocusFilter.PHONE_FIT -> "Phone fit"
+}
+
+private fun videoSourceHealthSummary(degradedSources: List<String>): String {
+    val labels = degradedSources.sorted().joinToString(", ")
+    return "Limited source health right now: $labels"
 }
