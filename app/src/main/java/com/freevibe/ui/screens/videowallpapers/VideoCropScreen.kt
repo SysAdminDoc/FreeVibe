@@ -339,7 +339,8 @@ private suspend fun cropVideoConstrained(
             val cacheFile = File(context.cacheDir, "crop_input.mp4")
             sharedHttpClient.newCall(okhttp3.Request.Builder().url(videoUrl).build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
-                resp.body?.byteStream()?.use { input ->
+                val body = resp.body ?: return@withContext null
+                body.byteStream().use { input ->
                     cacheFile.outputStream().use { output -> input.copyTo(output) }
                 }
             }
@@ -416,8 +417,14 @@ private suspend fun cropVideoConstrained(
                 pb.environment().putAll(env)
                 val process = pb.start()
 
-                val processOutput = process.inputStream.bufferedReader().readText()
-                val exitCode = process.waitFor()
+                val processOutput: String
+                val exitCode: Int
+                try {
+                    processOutput = process.inputStream.bufferedReader().readText()
+                    exitCode = process.waitFor()
+                } finally {
+                    process.destroy()
+                }
 
                 if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg exit=$exitCode, output size=${tempOutput.length() / 1024}KB")
                 if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: ${processOutput.takeLast(500)}")
