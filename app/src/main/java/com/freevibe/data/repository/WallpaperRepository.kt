@@ -7,7 +7,6 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.pexels.PexelsApi
-import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
@@ -21,7 +20,6 @@ import javax.inject.Singleton
 @Singleton
 class WallpaperRepository @Inject constructor(
     private val wallhavenApi: WallhavenApi,
-    private val picsumApi: PicsumApi,
     private val bingApi: BingDailyApi,
     private val pixabayApi: PixabayApi,
     private val pexelsApi: PexelsApi,
@@ -169,19 +167,6 @@ class WallpaperRepository @Inject constructor(
         }
     }
 
-    // -- Unsplash via Lorem Picsum --
-
-    suspend fun getPicsum(page: Int = 1): SearchResult<Wallpaper> =
-        withCacheFallback("picsum_$page", ContentSource.PICSUM) {
-            val photos = picsumApi.list(page = page, limit = 30)
-            SearchResult(
-                items = photos.map { it.toWallpaper() },
-                totalCount = 1000,
-                currentPage = page,
-                hasMore = photos.size >= 30,
-            )
-        }
-
     // -- Bing Daily --
 
     suspend fun getBingDaily(page: Int = 1): SearchResult<Wallpaper> =
@@ -261,7 +246,6 @@ class WallpaperRepository @Inject constructor(
         val perSourceTimeout = 6000L // Don't let any single source hold up the feed
         val sources = mutableListOf(
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getWallhaven(page = page) }.getOrNull() } },
-            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPicsum(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPixabay(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getBingDaily(page = page) }.getOrNull() } },
             async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPexelsCurated(page = page) }.getOrNull() } },
@@ -291,7 +275,7 @@ class WallpaperRepository @Inject constructor(
 
         SearchResult(
             items = interleaved,
-            totalCount = interleaved.size * 5,
+            totalCount = interleaved.size * results.count { it != null }.coerceAtLeast(1),
             currentPage = page,
             hasMore = interleaved.isNotEmpty(),
         )

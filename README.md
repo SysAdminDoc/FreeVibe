@@ -16,9 +16,9 @@
 
 ## What Makes Aura Different
 
-- **YouTube-powered sounds** — search YouTube for ringtones, notifications, and alarms. NewPipe Extractor for search, yt-dlp for stream extraction.
-- **Video wallpapers from YouTube** — browse, preview with ExoPlayer auto-play, crop landscape to portrait, apply as live wallpaper.
-- **20+ content sources** — Wallhaven, Pexels, Pixabay, Reddit, YouTube, Freesound, Openverse, SoundCloud, and community uploads.
+- **Quality-ranked sounds** — ringtones, notifications, and alarms are re-ranked for cleaner intros, better duration, and clearer source trust.
+- **Video wallpapers from multiple sources** — browse Reddit, Pexels, Pixabay, and YouTube with loop/battery/fit hints, preview, crop, and apply.
+- **20+ content sources** — Wallhaven, Bing, Pexels, Pixabay, Reddit, YouTube, Freesound, Openverse, Audius, ccMixter, SoundCloud, and community uploads.
 - **Instant startup** — Discover feed is cached locally. On subsequent launches wallpapers appear immediately while fresh results load in the background.
 - **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings.
 
@@ -35,16 +35,21 @@ Open in Android Studio and run. Everything works out of the box.
 
 | Feature | Description |
 |---------|-------------|
-| **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Unsplash & Reddit |
+| **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Bing & Reddit |
+| **Wallpaper Quality Filters** | Discover chips for For You, AMOLED, 4K+, Portrait, and Icon Safe with curated ranking |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview |
+| **Video Quality Hints** | Loop-safe, low-battery, and phone-fit filters plus per-card motion hints |
 | **Video Crop Editor** | Convert landscape videos to portrait with draggable 9:16 crop overlay |
 | **Parallax Wallpapers** | ML Kit depth segmentation for layered tilt-responsive live wallpapers |
 | **Weather Wallpapers** | Live weather effects overlay on wallpapers |
 | **YouTube Sounds** | Search YouTube for ringtones, notifications, alarms — powered by yt-dlp |
-| **Freesound + Openverse** | CC-licensed audio from Freesound v2 (primary) and Openverse (fallback, zero auth) |
+| **Freesound + Openverse** | CC-licensed audio from Freesound v2 (primary) and Openverse (fallback, including Jamendo/Wikimedia results) |
+| **Audius** | Public streamable tracks for ringtone/music discovery without setup |
+| **ccMixter** | Direct Creative Commons audio catalog for ringtone-ready tracks |
 | **SoundCloud** | CC-licensed tracks with optional client_id |
 | **Community Uploads** | Upload and share sounds via Firebase Storage |
 | **Sound Source Badges** | Color-coded source indicators on every sound card |
+| **Sound Quality Filters** | Best, Clean, Short, Calm, and Punchy filters with intent-aware badges |
 | **Real-Time Waveform** | Mini waveform on each sound card tracks actual playback position |
 | **Configurable Search** | Customize YouTube search queries and blocked words per sound tab |
 | **Ringtones & Sounds** | Tab-based browsing: Ringtones (8-30s), Notifications (0-5s), Alarms (5-40s) |
@@ -71,7 +76,9 @@ Open in Android Studio and run. Everything works out of the box.
 | [Reddit](https://reddit.com) | 7 wallpaper + 4 video subreddits | None |
 | [YouTube](https://youtube.com) | Video wallpapers + sounds via NewPipe + yt-dlp | None |
 | [Freesound](https://freesound.org) | CC-licensed sound effects (v2 API) | Built-in key |
-| [Openverse](https://openverse.org) | CC-licensed audio fallback | None |
+| [Openverse](https://openverse.org) | CC-licensed audio fallback including Jamendo/Wikimedia providers | None |
+| [Audius](https://audius.co) | Public streamable music tracks | None |
+| [ccMixter](https://ccmixter.org) | Creative Commons audio catalog | None |
 | [SoundCloud](https://soundcloud.com) | CC-licensed tracks | Optional key |
 | Firebase | Community uploads + voting | Built-in |
 
@@ -82,7 +89,8 @@ Jetpack Compose UI (16+ screens, 5 bottom nav tabs)
   Wallpapers | Videos | Sounds | Favorites | Settings
   Editors | Collections | Downloads | Onboarding | Widget
 ViewModels (Hilt) + Cache Layer
-  Repos: Wallhaven, Picsum, Pexels, Pixabay, Bing, Reddit, YouTube, Openverse, Freesound, Collections
+  Repos: Wallhaven, Pexels, Pixabay, Bing, Reddit, YouTube, Openverse, Freesound,
+         Audius, ccMixter, SoundCloud, Collections
   Services: WallpaperApplier, SoundApplier, VideoWallpaperService,
             ParallaxWallpaperService, WeatherWallpaperService, DualWallpaperService,
             DownloadManager, AudioTrimmer, BatchDownload,

@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,14 +26,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImagePainter
-import coil.compose.SubcomposeAsyncImage
-import coil.compose.SubcomposeAsyncImageContent
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.service.ParallaxWallpaperService
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.launchLiveWallpaperPicker
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +45,7 @@ fun WallpaperDetailScreen(
     onCrop: (String) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     onSearchColor: (String) -> Unit = {},
-    onFindSimilar: ((String) -> Unit)? = null,
+    onFindSimilar: (String) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -123,13 +122,7 @@ fun WallpaperDetailScreen(
 
     val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
-    val colorPalette by viewModel.colorPalette.collectAsState()
     val voteCount by viewModel.getVoteCount(wp.id).collectAsState(initial = 0)
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(wp.id) {
-        viewModel.extractColors(wp.thumbnailUrl.ifEmpty { wp.fullUrl })
-    }
 
     var showApplyOptions by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -347,7 +340,7 @@ fun WallpaperDetailScreen(
                     ActionCircle(
                         icon = Icons.Default.ImageSearch,
                         contentDescription = "Find similar wallpapers",
-                        onClick = { viewModel.findSimilar(wp); onBack() },
+                        onClick = { onFindSimilar(wp.id) },
                     )
                     ActionCircle(
                         icon = Icons.Default.Share,
@@ -394,16 +387,9 @@ fun WallpaperDetailScreen(
                     onEdit = { showMoreMenu = false; onEdit(wp.id) },
                     onCrop = { showMoreMenu = false; onCrop(wp.id) },
                     onCollection = { showMoreMenu = false; showCollectionPicker = true },
-                    onFindSimilar = colorPalette?.dominantColor?.takeIf { it != 0 }?.let { color ->
-                        {
-                            showMoreMenu = false
-                            val hex = String.format("%06x", color and 0xFFFFFF)
-                            if (onFindSimilar != null) onFindSimilar(hex)
-                            else {
-                                viewModel.searchByColor(hex)
-                                onBack()
-                            }
-                        }
+                    onFindSimilar = {
+                        showMoreMenu = false
+                        onFindSimilar(wp.id)
                     },
                     uploaderName = wp.uploaderName,
                 )
@@ -525,7 +511,7 @@ private fun MoreActionsSheet(
             SheetOption(Icons.Default.Crop, "Crop & position") { onCrop() }
             SheetOption(Icons.Default.CreateNewFolder, "Save to collection") { onCollection() }
             if (onFindSimilar != null) {
-                SheetOption(Icons.Default.ColorLens, "Find similar colors") { onFindSimilar() }
+                SheetOption(Icons.Default.ColorLens, "Find similar wallpapers") { onFindSimilar() }
             }
         }
     }

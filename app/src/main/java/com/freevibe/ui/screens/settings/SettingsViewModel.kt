@@ -38,6 +38,7 @@ class SettingsViewModel @Inject constructor(
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
     val redditSubs = prefs.redditSubreddits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallpapers,MobileWallpaper,MinimalWallpaper")
     val preferredRes = prefs.preferredResolution.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val userStyles = prefs.userStyles.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val ytRingtonesQuery = prefs.ytSoundQueryRingtones.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultRingtoneQuery())
     val ytNotificationsQuery = prefs.ytSoundQueryNotifications.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultNotificationQuery())
     val ytAlarmsQuery = prefs.ytSoundQueryAlarms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultAlarmQuery())
@@ -46,6 +47,7 @@ class SettingsViewModel @Inject constructor(
     val wallhavenApiKey = prefs.wallhavenApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pexelsApiKey = prefs.pexelsApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pixabayApiKey = prefs.pixabayApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val freesoundApiKey = prefs.freesoundApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     fun setYtRingtonesQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryRingtones(q) }
     fun setYtNotificationsQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryNotifications(q) }
@@ -102,6 +104,10 @@ class SettingsViewModel @Inject constructor(
         prefs.setPreferredResolution(res)
     }
 
+    fun setUserStyles(styles: String) = viewModelScope.launch {
+        prefs.setUserStyles(styles)
+    }
+
     fun setWallhavenKey(key: String) = viewModelScope.launch {
         prefs.setWallhavenKey(key)
     }
@@ -112,6 +118,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setPixabayKey(key: String) = viewModelScope.launch {
         prefs.setPixabayKey(key)
+    }
+
+    fun setFreesoundKey(key: String) = viewModelScope.launch {
+        prefs.setFreesoundKey(key)
     }
 
     fun setVideoFpsLimit(fps: Int) = viewModelScope.launch {

@@ -24,15 +24,17 @@ sealed class Screen(
         title = "Wallpapers",
         icon = Icons.Outlined.Wallpaper,
         selectedIcon = Icons.Filled.Wallpaper,
-        destinationPattern = "wallpapers?query={query}&color={color}",
+        destinationPattern = "wallpapers?query={query}&color={color}&similarId={similarId}",
     ) {
         fun createRoute(
             query: String? = null,
             color: String? = null,
+            similarId: String? = null,
         ): String {
             val params = buildList {
                 query?.takeIf { it.isNotBlank() }?.let { add("query=${Uri.encode(it)}") }
                 color?.takeIf { it.isNotBlank() }?.let { add("color=${Uri.encode(it)}") }
+                similarId?.takeIf { it.isNotBlank() }?.let { add("similarId=${Uri.encode(it)}") }
             }
             return if (params.isEmpty()) route else "$route?${params.joinToString("&")}"
         }
