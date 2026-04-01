@@ -88,6 +88,9 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): DownloadEntity?
 
+    @Query("SELECT * FROM downloads WHERE type = :type AND (id = :legacyId OR id = :scopedId) ORDER BY downloadedAt DESC")
+    suspend fun findMatching(type: String, legacyId: String, scopedId: String): List<DownloadEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(download: DownloadEntity)
 

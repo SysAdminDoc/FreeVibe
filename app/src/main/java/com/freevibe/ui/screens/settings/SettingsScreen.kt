@@ -1,7 +1,6 @@
 package com.freevibe.ui.screens.settings
 
 import android.Manifest
-import android.app.WallpaperManager
 import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
@@ -9,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -32,6 +32,9 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.service.DailyWallpaperWorker
 import com.freevibe.service.WeatherUpdateWorker
+import com.freevibe.service.VideoWallpaperService
+import com.freevibe.ui.LiveWallpaperLaunchMode
+import com.freevibe.ui.launchLiveWallpaperPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,14 +94,8 @@ fun SettingsScreen(
     }
 
     fun openNotificationSettings() {
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            }
-        } else {
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:${context.packageName}")
-            }
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         }
         context.startActivity(intent)
     }
@@ -109,14 +106,23 @@ fun SettingsScreen(
     ) { uri: Uri? ->
         uri?.let {
             viewModel.setVideoWallpaperPath(it)
-            // Launch live wallpaper picker
-            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                putExtra(
-                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                    ComponentName(context, com.freevibe.service.VideoWallpaperService::class.java),
+            when (
+                launchLiveWallpaperPicker(
+                    context = context,
+                    serviceComponent = ComponentName(context, VideoWallpaperService::class.java),
+                    tag = "SettingsVideoWallpaper",
                 )
+            ) {
+                LiveWallpaperLaunchMode.DIRECT -> {
+                    Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+                }
+                LiveWallpaperLaunchMode.CHOOSER -> {
+                    Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                }
+                null -> {
+                    Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                }
             }
-            try { context.startActivity(intent) } catch (_: Exception) {}
         }
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
