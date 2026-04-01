@@ -4,8 +4,6 @@ import app.cash.turbine.test
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.model.DownloadEntity
 import com.freevibe.service.DownloadManager
-import com.freevibe.service.DownloadProgress
-import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -86,9 +84,9 @@ class DownloadsViewModelTest {
     }
 
     @Test
-    fun `deleteDownload calls dao deleteById`() = runTest {
+    fun `deleteDownload calls downloadManager deleteDownload`() = runTest {
         viewModel.deleteDownload("1")
-        coVerify { downloadDao.deleteById("1") }
+        coVerify { downloadManager.deleteDownload("1") }
     }
 
     @Test
