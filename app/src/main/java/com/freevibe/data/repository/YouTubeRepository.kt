@@ -189,7 +189,7 @@ class DownloaderImpl private constructor() : org.schabi.newpipe.extractor.downlo
                 .mapValues { (_, v) -> v }
             val responseBody = try {
                 (if (responseCode < 400) conn.inputStream else conn.errorStream)
-                    ?.bufferedReader()?.readText() ?: ""
+                    ?.bufferedReader()?.use { it.readText() } ?: ""
             } catch (_: Exception) { "" }
 
             return org.schabi.newpipe.extractor.downloader.Response(
