@@ -28,7 +28,7 @@ Gradle 8.12 pinned via wrapper. AGP 8.7.3. SDK path in `local.properties` must p
 ```
 Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorites, Settings)
   ViewModels (Hilt) + SelectedContentHolder singleton (bridges state between screens)
-    Wallpaper sources: Wallhaven, Picsum, Pexels, Pixabay, Bing Daily, Reddit (7 subs)
+    Wallpaper sources: Wallhaven, Pexels, Pixabay, Bing Daily, Reddit (7 subs)
     Video sources: Pexels, YouTube, Reddit (4 subs), Pixabay
     Sound sources: Freesound v2 (primary), Openverse (fallback, zero auth), YouTube (NewPipe + yt-dlp)
     Services: WallpaperApplier, SoundApplier, DownloadManager, AudioTrimmer,

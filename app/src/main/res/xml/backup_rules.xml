@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="freevibe_dark_mode.xml" />
+    <exclude domain="sharedpref" path="freevibe_live_wp.xml" />
+    <exclude domain="sharedpref" path="freevibe_weather_wp.xml" />
+    <exclude domain="database" path="freevibe_db-journal" />
+    <exclude domain="database" path="freevibe_db-wal" />
+    <exclude domain="file" path="datastore/freevibe_prefs.preferences_pb" />
+    <exclude domain="file" path="crash.log" />
+</full-backup-content>

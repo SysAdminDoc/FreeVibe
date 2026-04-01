@@ -118,7 +118,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
             }
             "favorites" -> favoritesRepo.getWallpapers().first().map { it.toWallpaper() }
             "wallhaven" -> wallpaperRepo.getWallhaven(page = (1..5).random()).items
-            "unsplash" -> wallpaperRepo.getPicsum(page = (1..10).random()).items
+            "unsplash" -> wallpaperRepo.getDiscover(page = (1..3).random()).items
             "bing" -> wallpaperRepo.getBingDaily(page = 1).items
             "reddit" -> redditRepo.getMultiSubreddit().items
             "pixabay" -> wallpaperRepo.getPixabay(page = (1..5).random()).items

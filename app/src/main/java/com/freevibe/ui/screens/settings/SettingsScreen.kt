@@ -36,7 +36,7 @@ import com.freevibe.service.VideoWallpaperService
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.launchLiveWallpaperPicker
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onDownloadsClick: () -> Unit = {},
@@ -60,6 +60,7 @@ fun SettingsScreen(
     val previewVolume by viewModel.previewVolume.collectAsState()
     val redditSubs by viewModel.redditSubs.collectAsState()
     val preferredRes by viewModel.preferredRes.collectAsState()
+    val userStyles by viewModel.userStyles.collectAsState()
     val schedulerEnabled by viewModel.schedulerEnabled.collectAsState()
     val schedulerInterval by viewModel.schedulerInterval.collectAsState()
     val schedulerSource by viewModel.schedulerSource.collectAsState()
@@ -73,6 +74,7 @@ fun SettingsScreen(
     val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsState()
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsState()
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsState()
+    val freesoundApiKey by viewModel.freesoundApiKey.collectAsState()
     var dailyWp by remember {
         mutableStateOf(
             context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
@@ -152,6 +154,7 @@ fun SettingsScreen(
     var showColumnsPicker by remember { mutableStateOf(false) }
     var showRedditEditor by remember { mutableStateOf(false) }
     var showResPicker by remember { mutableStateOf(false) }
+    var showStylePicker by remember { mutableStateOf(false) }
     var showYtSoundEditor by remember { mutableStateOf(false) }
     var showYtBlockedEditor by remember { mutableStateOf(false) }
 
@@ -213,6 +216,12 @@ fun SettingsScreen(
                 title = "Preferred resolution",
                 subtitle = if (preferredRes.isEmpty()) "Any resolution" else preferredRes,
                 onClick = { showResPicker = true },
+            )
+            SettingsItem(
+                icon = Icons.Default.Palette,
+                title = "Style preferences",
+                subtitle = userStylesSummary(userStyles),
+                onClick = { showStylePicker = true },
             )
             SettingsItem(
                 icon = Icons.Default.Forum,
@@ -319,7 +328,7 @@ fun SettingsScreen(
                 val sources = listOf(
                     "discover" to "Discover (mixed)", "favorites" to "My Favorites",
                     "wallhaven" to "Wallhaven", "pixabay" to "Pixabay", "reddit" to "Reddit",
-                    "unsplash" to "Unsplash", "bing" to "Bing Daily", "collection" to "Collection",
+                    "bing" to "Bing Daily", "collection" to "Collection",
                 )
                 AlertDialog(
                     onDismissRequest = { showSchedulerSource = false },
@@ -479,6 +488,12 @@ fun SettingsScreen(
                 subtitle = "${ytBlockedWords.split(",").size} words filtered from results",
                 onClick = { showYtBlockedEditor = true },
             )
+            SettingsItem(
+                icon = Icons.Default.LibraryMusic,
+                title = "Sound sources",
+                subtitle = "YouTube, Freesound, Openverse, Audius, ccMixter, SoundCloud, community uploads",
+                onClick = onLicensesClick,
+            )
         }
 
         // Video Wallpapers
@@ -604,6 +619,49 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showPixabayKey = false }) { Text("Cancel") }
+                    },
+                )
+            }
+            var showFreesoundKey by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Key,
+                title = "Freesound API Key",
+                subtitle = if (freesoundApiKey.isBlank()) {
+                    "Optional: higher limits for Freesound v2 (freesound.org/docs/api)"
+                } else {
+                    "Connected for Freesound v2 searches and similar-sound lookup"
+                },
+                onClick = { showFreesoundKey = true },
+            )
+            if (showFreesoundKey) {
+                var keyText by remember { mutableStateOf(freesoundApiKey) }
+                AlertDialog(
+                    onDismissRequest = { showFreesoundKey = false },
+                    title = { Text("Freesound API Key") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Add your Freesound token for higher search limits and more reliable related-sound results.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedTextField(
+                                value = keyText,
+                                onValueChange = { keyText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Paste API key here") },
+                                singleLine = true,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setFreesoundKey(keyText.trim())
+                            showFreesoundKey = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showFreesoundKey = false }) { Text("Cancel") }
                     },
                 )
             }
@@ -738,6 +796,74 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showResPicker = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showStylePicker) {
+        val styleOptions = remember {
+            listOf(
+                "minimal",
+                "amoled",
+                "nature",
+                "space",
+                "anime",
+                "abstract",
+                "neon",
+                "city",
+                "gradient",
+                "dark",
+            )
+        }
+        var selectedStyles by remember(showStylePicker, userStyles) {
+            mutableStateOf(
+                userStyles.split(",")
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+            )
+        }
+        AlertDialog(
+            onDismissRequest = { showStylePicker = false },
+            title = { Text("Style preferences") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "These styles are prioritized across wallpaper discovery and ranking.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        styleOptions.forEach { style ->
+                            FilterChip(
+                                selected = style in selectedStyles,
+                                onClick = {
+                                    selectedStyles = if (style in selectedStyles) {
+                                        selectedStyles - style
+                                    } else {
+                                        selectedStyles + style
+                                    }
+                                },
+                                label = { Text(stylePreferenceLabel(style)) },
+                                leadingIcon = if (style in selectedStyles) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setUserStyles(selectedStyles.sorted().joinToString(","))
+                    showStylePicker = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStylePicker = false }) { Text("Cancel") }
             },
         )
     }
@@ -965,6 +1091,17 @@ private fun SettingsToggle(
     }
 }
 
+private fun userStylesSummary(raw: String): String {
+    val styles = raw.split(",")
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+    if (styles.isEmpty()) return "No style preference"
+    return styles.joinToString(" • ") { stylePreferenceLabel(it) }
+}
+
+private fun stylePreferenceLabel(style: String): String =
+    style.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+
 private fun formatInterval(minutes: Long): String = when {
     minutes < 60 -> "$minutes minutes"
     minutes == 60L -> "1 hour"
@@ -986,7 +1123,6 @@ private fun SourcePickerDialog(
         "wallhaven" to "Wallhaven",
         "pixabay" to "Pixabay",
         "bing" to "Bing Daily",
-        "unsplash" to "Unsplash",
     )
 
     AlertDialog(

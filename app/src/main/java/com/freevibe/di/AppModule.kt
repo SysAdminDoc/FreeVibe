@@ -10,11 +10,12 @@ import com.freevibe.data.local.FreeVibeDatabase
 import com.freevibe.data.local.SearchHistoryDao
 import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
+import com.freevibe.data.remote.audius.AudiusApi
 import com.freevibe.data.remote.bing.BingDailyApi
+import com.freevibe.data.remote.ccmixter.CcMixterApi
 import com.freevibe.data.remote.freesound.FreesoundV2Api
 import com.freevibe.data.remote.weather.OpenMeteoApi
 import com.freevibe.data.remote.pexels.PexelsApi
-import com.freevibe.data.remote.picsum.PicsumApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.freesound.FreesoundApi
@@ -76,16 +77,6 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(WallhavenApi::class.java)
-
-    @Provides
-    @Singleton
-    fun providePicsumApi(client: OkHttpClient, moshi: Moshi): PicsumApi =
-        Retrofit.Builder()
-            .baseUrl(PicsumApi.BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(PicsumApi::class.java)
 
     @Provides
     @Singleton
@@ -166,6 +157,26 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(SoundCloudApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAudiusApi(client: OkHttpClient, moshi: Moshi): AudiusApi =
+        Retrofit.Builder()
+            .baseUrl(AudiusApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(AudiusApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideCcMixterApi(client: OkHttpClient, moshi: Moshi): CcMixterApi =
+        Retrofit.Builder()
+            .baseUrl(CcMixterApi.BASE_URL)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(CcMixterApi::class.java)
 
     // -- Database --
 
