@@ -90,9 +90,14 @@ data class RedditPost(
 ) {
     /** Check if post is a usable image */
     val isImage: Boolean
-        get() = postHint == "image" ||
-            url.endsWith(".jpg", ignoreCase = true) || url.endsWith(".jpeg", ignoreCase = true) ||
-            url.endsWith(".png", ignoreCase = true) || url.endsWith(".webp", ignoreCase = true)
+        get() {
+            if (postHint == "image") return true
+            val path = url.substringBefore("?").substringBefore("#")
+            return path.endsWith(".jpg", ignoreCase = true) ||
+                path.endsWith(".jpeg", ignoreCase = true) ||
+                path.endsWith(".png", ignoreCase = true) ||
+                path.endsWith(".webp", ignoreCase = true)
+        }
 
     /** Get best resolution image URL */
     val imageUrl: String

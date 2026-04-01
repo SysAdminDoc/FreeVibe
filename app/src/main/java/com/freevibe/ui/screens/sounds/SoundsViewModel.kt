@@ -390,6 +390,10 @@ class SoundsViewModel @Inject constructor(
         if (dur > 0) audioPlaybackManager.seekTo((fraction * dur).toLong())
     }
 
+    fun stopIfPlaying(soundId: String) {
+        if (_state.value.playingId == soundId) stopPlayback()
+    }
+
     private fun stopPlayback() {
         progressJob?.cancel()
         _playbackProgress.value = 0f
