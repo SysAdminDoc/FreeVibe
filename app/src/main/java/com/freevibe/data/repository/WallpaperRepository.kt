@@ -187,12 +187,12 @@ class WallpaperRepository @Inject constructor(
             val idx = (page - 1) / marketsCount
             val marketIndex = (page - 1) % marketsCount
             val market = BingDailyApi.MARKETS[marketIndex]
-            val response = bingApi.getImages(idx = idx * 8, n = 8, market = market)
+            val response = bingApi.getImages(idx = (idx * 8).coerceAtMost(7), n = 8, market = market)
             SearchResult(
                 items = response.images.map { it.toWallpaper() },
-                totalCount = marketsCount * 8 * 2,
+                totalCount = marketsCount * 8,
                 currentPage = page,
-                hasMore = idx < 1,
+                hasMore = page < marketsCount,
             )
         }
 

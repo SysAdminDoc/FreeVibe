@@ -32,6 +32,8 @@ class DualWallpaperService @Inject constructor(
                 homeBitmap.await()
             } catch (e: Exception) {
                 lockBitmap.cancel()
+                // Recycle if lock download already completed
+                try { lockBitmap.await().recycle() } catch (_: Exception) {}
                 throw e
             }
             val lock = try {

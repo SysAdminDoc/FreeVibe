@@ -87,7 +87,8 @@ fun SoundDetailScreen(
     val similarLoading = remember(s.id) { mutableStateOf(false) }
 
     DisposableEffect(s.id) {
-        onDispose { if (viewModel.state.value.playingId == s.id) viewModel.togglePlayback(s) }
+        val soundId = s.id
+        onDispose { viewModel.stopIfPlaying(soundId) }
     }
     LaunchedEffect(s.id) {
         if (autoPreview && state.playingId != s.id) viewModel.togglePlayback(s)
