@@ -55,8 +55,8 @@ class BatchDownloadService @Inject constructor(
                                 }.onFailure {
                                     _state.update { s -> s.copy(failedCount = s.failedCount + 1) }
                                 }
-                            } catch (_: CancellationException) {
-                                throw CancellationException()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (_: Exception) {
                                 _state.update { s -> s.copy(failedCount = s.failedCount + 1) }
                             }

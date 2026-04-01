@@ -43,7 +43,7 @@ class SoundCloudRepository @Inject constructor(
             items = sounds,
             totalCount = response.totalResults,
             currentPage = (offset / limit) + 1,
-            hasMore = sounds.size >= limit,
+            hasMore = response.collection.size >= limit,
         )
     }
 

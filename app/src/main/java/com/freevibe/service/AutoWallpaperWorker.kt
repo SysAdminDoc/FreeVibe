@@ -45,7 +45,8 @@ class AutoWallpaperWorker @AssistedInject constructor(
             }
         } catch (_: java.io.IOException) {
             Result.retry()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure()
         }
     }
