@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
-import android.os.Build
 import com.freevibe.data.model.WallpaperTarget
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -96,8 +95,7 @@ class WallpaperApplier @Inject constructor(
 
     /** Check if wallpaper operations are supported */
     fun isSupported(): Boolean {
-        return wallpaperManager.isWallpaperSupported &&
-            (Build.VERSION.SDK_INT < 24 || wallpaperManager.isSetWallpaperAllowed)
+        return wallpaperManager.isWallpaperSupported && wallpaperManager.isSetWallpaperAllowed
     }
 
     /** Get screen dimensions for optimal crop suggestions */

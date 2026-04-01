@@ -1,6 +1,7 @@
 package com.freevibe.service
 
 import android.content.Intent
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -33,8 +34,18 @@ class AudioPlaybackService : MediaSessionService() {
             .build()
     }
 
+    @OptIn(UnstableApi::class)
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
-        mediaSession
+        mediaSession.takeIf {
+            controllerInfo.isTrusted ||
+                controllerInfo.packageName == packageName ||
+                controllerInfo.packageName == MediaSessionService.SERVICE_INTERFACE
+        } ?: run {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                Log.w("AudioPlaybackService", "Rejected controller from ${controllerInfo.packageName}")
+            }
+            null
+        }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = mediaSession?.player

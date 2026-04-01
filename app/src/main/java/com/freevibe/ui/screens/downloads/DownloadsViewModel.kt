@@ -20,6 +20,6 @@ class DownloadsViewModel @Inject constructor(
     val soundDownloads = downloadDao.getByType("SOUND").stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val activeDownloads = downloadManager.activeDownloads
 
-    fun deleteDownload(id: String) = viewModelScope.launch { downloadDao.deleteById(id) }
+    fun deleteDownload(id: String) = viewModelScope.launch { downloadManager.deleteDownload(id) }
     fun dismissActive(id: String) = downloadManager.clearCompleted(id)
 }
