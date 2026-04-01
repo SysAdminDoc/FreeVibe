@@ -112,9 +112,27 @@ class WallpaperApplier @Inject constructor(
         response.use { resp ->
             if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
             val body = resp.body ?: throw java.io.IOException("Empty response body")
-            body.byteStream().use { stream ->
-                BitmapFactory.decodeStream(stream)
+            val bytes = body.bytes()
+
+            // First pass: get image dimensions without allocating pixels
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+
+            // Calculate inSampleSize to keep bitmap within 2x screen width
+            val screenWidth = context.resources.displayMetrics.widthPixels
+            val targetWidth = screenWidth * 2
+            var sampleSize = 1
+            if (bounds.outWidth > targetWidth) {
+                var width = bounds.outWidth
+                while (width / 2 >= targetWidth) {
+                    sampleSize *= 2
+                    width /= 2
+                }
             }
+
+            // Second pass: decode with sub-sampling
+            val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         }
     }
 }

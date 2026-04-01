@@ -2,15 +2,13 @@ package com.freevibe.ui.screens.wallpapers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Context
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.model.ContentSource
-import com.freevibe.data.model.SearchResult
-import com.freevibe.data.model.WallpaperCollectionEntity
-import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
@@ -25,6 +23,7 @@ import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.flow.first
@@ -45,6 +44,7 @@ data class WallpapersUiState(
     val selectedTab: WallpaperTab = WallpaperTab.DISCOVER,
     val isApplying: Boolean = false,
     val applySuccess: String? = null,
+    val pendingLiveWallpaperLaunch: Boolean = false,  // true when parallax file is ready to launch picker
     val selectedColor: String? = null,       // #9: Color filter
     val topRange: String = "1M",             // Wallhaven toplist time range
 )
@@ -53,9 +53,9 @@ enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, UNSPLASH
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val wallpaperRepo: WallpaperRepository,
     private val redditRepo: RedditRepository,
-    private val pexelsApi: PexelsApi,
     private val favoritesRepo: FavoritesRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val downloadManager: DownloadManager,
@@ -300,13 +300,15 @@ class WallpapersViewModel @Inject constructor(
             val ext = guessImageExtension(wallpaper.fileType, wallpaper.fullUrl)
             wallpaperApplier.prepareParallaxWallpaper(wallpaper.fullUrl, "parallax_wp.$ext")
                 .onSuccess {
-                    _state.update { it.copy(isApplying = false, applySuccess = "parallax_ready") }
+                    _state.update { it.copy(isApplying = false, pendingLiveWallpaperLaunch = true) }
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isApplying = false, error = e.message) }
                 }
         }
     }
+
+    fun clearPendingLaunch() = _state.update { it.copy(pendingLiveWallpaperLaunch = false) }
 
     fun downloadWallpaper(wallpaper: Wallpaper) {
         viewModelScope.launch {
@@ -448,35 +450,9 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(
                         page = currentPage,
                         redditRepo = redditRepo,
-                        pexelsApi = pexelsApi,
-                        pexelsKey = prefs.pexelsApiKey.first(),
                     )
                     WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(currentPage)
-                    WallpaperTab.PEXELS -> {
-                        val key = prefs.pexelsApiKey.first()
-                        if (key.isNotBlank()) {
-                            val response = pexelsApi.curatedPhotos(apiKey = key, page = currentPage)
-                            SearchResult(
-                                items = response.photos.map { photo ->
-                                    Wallpaper(
-                                        id = "px_${photo.id}",
-                                        source = ContentSource.PEXELS,
-                                        thumbnailUrl = photo.src.medium,
-                                        fullUrl = photo.src.original,
-                                        width = photo.width,
-                                        height = photo.height,
-                                        sourcePageUrl = photo.url,
-                                        uploaderName = photo.photographer,
-                                    )
-                                },
-                                totalCount = response.totalResults,
-                                currentPage = response.page,
-                                hasMore = response.nextPage != null,
-                            )
-                        } else {
-                            SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
-                        }
-                    }
+                    WallpaperTab.PEXELS -> wallpaperRepo.getPexelsCurated(currentPage)
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = currentPage, topRange = _state.value.topRange)
                     WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(currentPage)
@@ -553,7 +529,7 @@ class WallpapersViewModel @Inject constructor(
     }
 
     /** Match wallpapers to system Material You colors */
-    fun matchMyTheme(context: android.content.Context) {
+    fun matchMyTheme() {
         viewModelScope.launch {
             try {
                 val color = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
@@ -615,9 +591,10 @@ class WallpapersViewModel @Inject constructor(
         is java.net.ConnectException -> "Could not connect to server"
         is retrofit2.HttpException -> when (e.code()) {
             401, 403 -> "API key invalid or expired"
+            404 -> "Content not found"
             429 -> "Rate limited — wait a moment and retry"
-            in 500..599 -> "Server error (${e.code()}) — try again later"
-            else -> "HTTP error ${e.code()}"
+            in 500..599 -> "Server error — try again later"
+            else -> "Service temporarily unavailable"
         }
         else -> e.message ?: "Failed to load wallpapers"
     }

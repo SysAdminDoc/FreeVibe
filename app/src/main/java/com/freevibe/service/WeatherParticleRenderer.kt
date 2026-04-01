@@ -31,6 +31,12 @@ class WeatherParticleRenderer(
     private val starPaint = Paint().apply { isAntiAlias = true }
     private val flashPaint = Paint()
 
+    // Pre-computed star data for CLEAR_NIGHT — initialized in setWeather()
+    private val starX = FloatArray(30)
+    private val starY = FloatArray(30)
+    private val starSize = FloatArray(30)
+    private val starPhase = FloatArray(30)
+
     data class Particle(
         var x: Float,
         var y: Float,
@@ -45,6 +51,15 @@ class WeatherParticleRenderer(
         this.effect = effect
         this.windSpeed = windSpeed
         initParticles()
+        if (effect == WeatherEffect.CLEAR_NIGHT) {
+            val rng = Random(12345L)
+            repeat(30) { i ->
+                starX[i] = rng.nextFloat() * screenWidth
+                starY[i] = rng.nextFloat() * screenHeight * 0.6f
+                starSize[i] = 1f + rng.nextFloat() * 2f
+                starPhase[i] = (rng.nextFloat() * (2 * Math.PI)).toFloat()
+            }
+        }
     }
 
     private fun initParticles() {
@@ -171,16 +186,11 @@ class WeatherParticleRenderer(
 
     private fun drawStars(canvas: Canvas) {
         // Static twinkling stars for clear night with per-star phase offset
-        val seed = 12345L
-        val rng = Random(seed)
-        repeat(30) {
-            val x = rng.nextFloat() * screenWidth
-            val y = rng.nextFloat() * screenHeight * 0.6f
-            val size = 1f + rng.nextFloat() * 2f
-            val phase = rng.nextFloat() * (2 * Math.PI)
-            val twinkle = (sin(System.currentTimeMillis() * 0.003 + phase) * 0.5 + 0.5).toFloat()
+        val now = System.currentTimeMillis() * 0.003
+        repeat(30) { i ->
+            val twinkle = (sin(now + starPhase[i]) * 0.5 + 0.5).toFloat()
             starPaint.color = Color.argb((twinkle * 180).toInt(), 255, 255, 255)
-            canvas.drawCircle(x, y, size, starPaint)
+            canvas.drawCircle(starX[i], starY[i], starSize[i], starPaint)
         }
     }
 }
