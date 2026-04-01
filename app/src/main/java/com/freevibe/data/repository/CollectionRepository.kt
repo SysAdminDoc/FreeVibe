@@ -43,7 +43,8 @@ class CollectionRepository @Inject constructor(
         dao.removeItem(collectionId, wallpaperId)
 
     suspend fun delete(collectionId: Long) {
-        dao.deleteCollection(collectionId) // Items auto-deleted via FK CASCADE
+        dao.deleteCollectionItems(collectionId) // Explicit delete (PRAGMA foreign_keys is per-connection)
+        dao.deleteCollection(collectionId)
     }
 
     suspend fun rename(collectionId: Long, name: String) =

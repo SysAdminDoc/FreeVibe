@@ -364,7 +364,7 @@ class VideoWallpapersViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     private fun load(loadMore: Boolean = false) {
-        loadJob?.cancel()
+        if (!loadMore) loadJob?.cancel()
         loadJob = viewModelScope.launch {
             try {
             if (!loadMore) {
