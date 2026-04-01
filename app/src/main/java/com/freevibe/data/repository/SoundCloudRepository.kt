@@ -36,7 +36,7 @@ class SoundCloudRepository @Inject constructor(
         )
 
         val sounds = response.collection
-            .filter { it.duration > 0 && it.streamUrl != null }
+            .filter { it.duration > 0 }
             .map { it.toDomain() }
 
         return SearchResult(
@@ -57,10 +57,15 @@ class SoundCloudRepository @Inject constructor(
         search("alarm clock morning wake", minDurationMs = 5000, maxDurationMs = 60000, offset = offset)
 
     private fun SoundCloudTrack.toDomain(): Sound {
+        // v2 API doesn't return stream_url; construct from permalink or track ID
         val streamWithAuth = if (streamUrl != null && clientId.isNotBlank()) {
             if (streamUrl.contains("?")) "$streamUrl&client_id=$clientId"
             else "$streamUrl?client_id=$clientId"
-        } else streamUrl ?: ""
+        } else if (permalinkUrl != null && clientId.isNotBlank()) {
+            "$permalinkUrl/stream?client_id=$clientId"
+        } else if (clientId.isNotBlank()) {
+            "https://api-v2.soundcloud.com/tracks/$id/stream?client_id=$clientId"
+        } else ""
 
         return Sound(
             id = "sc_$id",

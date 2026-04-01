@@ -3,21 +3,40 @@ package com.freevibe.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import android.net.Uri
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.freevibe.data.model.Sound
+import com.freevibe.data.model.Wallpaper
 
 sealed class Screen(
     val route: String,
     val title: String,
     val icon: ImageVector,
     val selectedIcon: ImageVector,
+    val destinationPattern: String = route,
 ) {
+    fun matchesDestination(destinationRoute: String?): Boolean =
+        destinationRoute == route || destinationRoute == destinationPattern
+
     // ── Bottom nav tabs ───────────────────────────────────────────
     data object Wallpapers : Screen(
         route = "wallpapers",
         title = "Wallpapers",
         icon = Icons.Outlined.Wallpaper,
         selectedIcon = Icons.Filled.Wallpaper,
-    )
+        destinationPattern = "wallpapers?query={query}&color={color}",
+    ) {
+        fun createRoute(
+            query: String? = null,
+            color: String? = null,
+        ): String {
+            val params = buildList {
+                query?.takeIf { it.isNotBlank() }?.let { add("query=${Uri.encode(it)}") }
+                color?.takeIf { it.isNotBlank() }?.let { add("color=${Uri.encode(it)}") }
+            }
+            return if (params.isEmpty()) route else "$route?${params.joinToString("&")}"
+        }
+    }
     data object VideoWallpapers : Screen(
         route = "video_wallpapers",
         title = "Videos",
@@ -49,15 +68,29 @@ sealed class Screen(
         title = "Preview",
         icon = Icons.Filled.Wallpaper,
         selectedIcon = Icons.Filled.Wallpaper,
+        destinationPattern = "wallpaper/{id}?source={source}&thumbnailUrl={thumbnailUrl}&fullUrl={fullUrl}&width={width}&height={height}",
     ) {
-        fun createRoute(id: String) = "wallpaper/$id"
+        fun createRoute(id: String) = "wallpaper/${Uri.encode(id)}"
+
+        fun createRoute(wallpaper: Wallpaper): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(wallpaper.source.name)}")
+                add("thumbnailUrl=${Uri.encode(wallpaper.thumbnailUrl)}")
+                add("fullUrl=${Uri.encode(wallpaper.fullUrl)}")
+                add("width=${wallpaper.width}")
+                add("height=${wallpaper.height}")
+            }.joinToString("&")
+            return "${createRoute(wallpaper.id)}?$queryParams"
+        }
     }
     data object WallpaperEditor : Screen(
-        route = "wallpaper_editor",
+        route = "wallpaper_editor/{id}",
         title = "Edit",
         icon = Icons.Filled.Edit,
         selectedIcon = Icons.Filled.Edit,
-    )
+    ) {
+        fun createRoute(id: String) = "wallpaper_editor/${Uri.encode(id)}"
+    }
 
     // ── Sound detail + editor ─────────────────────────────────────
     data object SoundDetail : Screen(
@@ -66,22 +99,27 @@ sealed class Screen(
         icon = Icons.Filled.MusicNote,
         selectedIcon = Icons.Filled.MusicNote,
     ) {
-        fun createRoute(id: String) = "sound/$id"
+        fun createRoute(id: String) = "sound/${Uri.encode(id)}"
     }
     data object SoundEditor : Screen(
-        route = "sound_editor",
+        route = "sound_editor?soundId={soundId}",
         title = "Edit Sound",
         icon = Icons.Filled.ContentCut,
         selectedIcon = Icons.Filled.ContentCut,
-    )
+    ) {
+        fun createRoute(soundId: String? = null) =
+            soundId?.let { "sound_editor?soundId=${Uri.encode(it)}" } ?: "sound_editor"
+    }
 
     // ── Crop/Position ─────────────────────────────────────────────
     data object WallpaperCrop : Screen(
-        route = "wallpaper_crop",
+        route = "wallpaper_crop/{id}",
         title = "Crop",
         icon = Icons.Filled.Crop,
         selectedIcon = Icons.Filled.Crop,
-    )
+    ) {
+        fun createRoute(id: String) = "wallpaper_crop/${Uri.encode(id)}"
+    }
 
     // ── Contact Ringtone Picker ───────────────────────────────────
     data object ContactPicker : Screen(
@@ -89,8 +127,19 @@ sealed class Screen(
         title = "Pick Contact",
         icon = Icons.Filled.Contacts,
         selectedIcon = Icons.Filled.Contacts,
+        destinationPattern = "contact_picker/{soundId}?source={source}&name={name}&previewUrl={previewUrl}&downloadUrl={downloadUrl}",
     ) {
-        fun createRoute(soundId: String) = "contact_picker/$soundId"
+        fun createRoute(soundId: String) = "contact_picker/${Uri.encode(soundId)}"
+
+        fun createRoute(sound: Sound): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(sound.source.name)}")
+                add("name=${Uri.encode(sound.name)}")
+                add("previewUrl=${Uri.encode(sound.previewUrl)}")
+                add("downloadUrl=${Uri.encode(sound.downloadUrl)}")
+            }.joinToString("&")
+            return "${createRoute(sound.id)}?$queryParams"
+        }
     }
 
     // ── Onboarding ────────────────────────────────────────────────

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <files-path name="internal" path="." />
-    <cache-path name="cache" path="." />
+    <files-path name="shared" path="shared/" />
+    <files-path name="offline_favorites" path="offline_favorites/" />
+    <cache-path name="cache_images" path="images/" />
+    <cache-path name="cache_sounds" path="sounds/" />
+    <cache-path name="cache_trimmed" path="trimmed/" />
+    <cache-path name="cache_audio_edit" path="audio_edit/" />
 </paths>

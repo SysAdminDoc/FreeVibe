@@ -17,6 +17,7 @@ class FavoritesRepository @Inject constructor(
     fun isFavorite(id: String): Flow<Boolean> = dao.isFavorite(id)
     fun allIds(): Flow<Set<String>> = dao.allIds().map { it.toSet() }
     fun count(): Flow<Int> = dao.count()
+    suspend fun getById(id: String): FavoriteEntity? = dao.getById(id)
     suspend fun add(favorite: FavoriteEntity) = dao.insert(favorite)
     suspend fun remove(id: String) = dao.deleteById(id)
     suspend fun toggle(favorite: FavoriteEntity, isFav: Boolean) {

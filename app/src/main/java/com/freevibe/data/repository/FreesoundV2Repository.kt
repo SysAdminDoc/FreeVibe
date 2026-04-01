@@ -1,19 +1,22 @@
 package com.freevibe.data.repository
 
 import com.freevibe.BuildConfig
+import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.freesound.FreesoundV2Api
 import com.freevibe.data.remote.freesound.FreesoundV2Sound
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class FreesoundV2Repository @Inject constructor(
-    private val api: FreesoundV2Api
+    private val api: FreesoundV2Api,
+    private val prefs: PreferencesManager,
 ) {
-    private val apiKey: String = BuildConfig.FREESOUND_API_KEY
+    private suspend fun apiKey(): String = prefs.freesoundApiKey.first().ifBlank { BuildConfig.FREESOUND_API_KEY }
 
     suspend fun search(
         query: String,
@@ -22,7 +25,8 @@ class FreesoundV2Repository @Inject constructor(
         page: Int = 1,
         sort: String = "score"
     ): SearchResult<Sound> {
-        if (apiKey.isBlank()) {
+        val key = apiKey()
+        if (key.isBlank()) {
             return SearchResult(items = emptyList(), totalCount = 0, currentPage = page, hasMore = false)
         }
 
@@ -32,7 +36,7 @@ class FreesoundV2Repository @Inject constructor(
             filter = filter,
             page = page,
             sort = sort,
-            token = apiKey
+            token = key
         )
 
         val sounds = response.results

@@ -1,5 +1,6 @@
 package com.freevibe.data.local
 
+import androidx.room.withTransaction
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperCacheEntity
@@ -9,12 +10,15 @@ import javax.inject.Singleton
 @Singleton
 class WallpaperCacheManager @Inject constructor(
     private val cacheDao: WallpaperCacheDao,
+    private val db: FreeVibeDatabase,
 ) {
     companion object {
         const val TTL_DEFAULT = 6 * 60 * 60 * 1000L    // 6 hours
         const val TTL_REDDIT = 2 * 60 * 60 * 1000L     // 2 hours (fast-changing)
         const val TTL_PICSUM = 24 * 60 * 60 * 1000L    // 24 hours (static catalog)
         const val TTL_BING = 4 * 60 * 60 * 1000L       // 4 hours (daily rotation)
+        private const val MAX_ENTRIES_PER_KEY = 180
+        private const val MAX_TOTAL_ENTRIES = 1800
     }
 
     /** Get cached wallpapers if fresh enough */
@@ -34,23 +38,30 @@ class WallpaperCacheManager @Inject constructor(
         return if (entries.isNotEmpty()) entries.map { it.toWallpaper() } else null
     }
 
-    /** Get cached wallpapers by their IDs (across all cache keys) */
+    /** Get cached wallpapers by their IDs (across all cache keys). Chunked to avoid SQLite bind limit. */
     suspend fun getByIds(ids: List<String>): List<Wallpaper> {
         if (ids.isEmpty()) return emptyList()
-        return cacheDao.getByIds(ids).map { it.toWallpaper() }
+        return ids.chunked(500).flatMap { chunk ->
+            cacheDao.getByIds(chunk).map { it.toWallpaper() }
+        }
     }
 
     /** Cache wallpapers with key */
     suspend fun cache(cacheKey: String, wallpapers: List<Wallpaper>) {
-        cacheDao.evictByKey(cacheKey)
-        val now = System.currentTimeMillis()
-        cacheDao.insertAll(wallpapers.map { it.toCacheEntity(cacheKey, now) })
+        db.withTransaction {
+            cacheDao.evictByKey(cacheKey)
+            val now = System.currentTimeMillis()
+            cacheDao.insertAll(wallpapers.map { it.toCacheEntity(cacheKey, now) })
+            cacheDao.pruneCacheKey(cacheKey, MAX_ENTRIES_PER_KEY)
+            cacheDao.pruneToMaxEntries(MAX_TOTAL_ENTRIES)
+        }
     }
 
     /** Remove all expired entries (uses longest TTL — per-source freshness is checked in getCached) */
     suspend fun evictExpired() {
         val oldest = System.currentTimeMillis() - TTL_PICSUM
         cacheDao.evictOlderThan(oldest)
+        cacheDao.pruneToMaxEntries(MAX_TOTAL_ENTRIES)
     }
 
     /** Full cache clear */
@@ -71,10 +82,14 @@ class WallpaperCacheManager @Inject constructor(
         width = width,
         height = height,
         category = category,
-        tags = if (tags.isBlank()) emptyList() else tags.split(","),
+        tags = if (tags.isBlank()) emptyList() else tags.split(" ||| "),
+        colors = if (colors.isBlank()) emptyList() else colors.split(" ||| "),
         fileSize = fileSize,
         fileType = fileType,
         uploaderName = uploaderName,
+        sourcePageUrl = sourcePageUrl,
+        views = views,
+        favorites = favorites,
     )
 
     private fun Wallpaper.toCacheEntity(cacheKey: String, timestamp: Long) = WallpaperCacheEntity(
@@ -85,10 +100,14 @@ class WallpaperCacheManager @Inject constructor(
         width = width,
         height = height,
         category = category,
-        tags = tags.joinToString(","),
+        tags = tags.joinToString(" ||| "),
+        colors = colors.joinToString(" ||| "),
         fileSize = fileSize,
         fileType = fileType,
         uploaderName = uploaderName,
+        sourcePageUrl = sourcePageUrl,
+        views = views,
+        favorites = favorites,
         cacheKey = cacheKey,
         cachedAt = timestamp,
     )

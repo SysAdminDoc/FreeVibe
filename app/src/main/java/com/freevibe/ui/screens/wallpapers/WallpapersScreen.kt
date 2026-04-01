@@ -83,15 +83,16 @@ fun WallpapersScreen(
     val topVoted by viewModel.topVoted.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
 
-    // Vote counts for visible wallpapers
-    val wallpaperIds = remember(state.wallpapers) { state.wallpapers.map { it.id } }
-    val voteCounts by remember(wallpaperIds) {
+    // Vote counts for visible wallpapers — use derivedStateOf to avoid recomputing on referential inequality
+    val wallpaperIds by remember { derivedStateOf { state.wallpapers.map { it.id } } }
+    val voteCountsFlow = remember(wallpaperIds) {
         if (wallpaperIds.isNotEmpty()) {
             viewModel.voteRepo.getVoteCounts(wallpaperIds)
         } else {
             kotlinx.coroutines.flow.flowOf(emptyMap())
         }
-    }.collectAsState(initial = emptyMap())
+    }
+    val voteCounts by voteCountsFlow.collectAsState(initial = emptyMap())
     var searchQuery by remember { mutableStateOf(state.query) }
     LaunchedEffect(state.query) { searchQuery = state.query }
     val context = LocalContext.current

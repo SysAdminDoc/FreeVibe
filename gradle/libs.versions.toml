@@ -22,6 +22,9 @@ activity-compose = "1.9.3"
 material3 = "1.3.1"
 serialization = "1.7.3"
 moshi = "1.15.1"
+junit4 = "4.13.2"
+androidx-test-ext-junit = "1.2.1"
+androidx-test-runner = "1.6.2"
 
 [libraries]
 # Core
@@ -57,6 +60,7 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
+room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
 # Network
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
@@ -94,6 +98,11 @@ serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serializ
 # Glance Widgets
 glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+
+# Testing
+junit4 = { group = "junit", name = "junit", version.ref = "junit4" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.time.Year
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,6 +18,23 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("f
 class PreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    companion object {
+        fun defaultRingtoneQuery(year: Int = Year.now().value): String =
+            "best ringtone $year trending phone ringtone download"
+
+        fun defaultNotificationQuery(): String =
+            "short notification sound effect beep chime ding alert"
+
+        fun defaultAlarmQuery(): String =
+            "alarm clock tone buzzer morning wake up sound"
+
+        fun defaultTopHitQueries(year: Int = Year.now().value): List<String> = listOf(
+            "top songs this week $year ringtone",
+            "billboard hot 100 this week ringtone $year",
+            "most popular songs right now ringtone $year",
+        )
+    }
+
     private val dataStore = context.dataStore
 
     // ── API Keys (optional, for higher rate limits) ────────────────
@@ -71,9 +89,9 @@ class PreferencesManager @Inject constructor(
 
     // ── YouTube sound search ──────────────────────────────────────
 
-    val ytSoundQueryRingtones: Flow<String> = get(Keys.YT_SOUND_RINGTONES, "best ringtone 2025 2026 trending phone ringtone download")
-    val ytSoundQueryNotifications: Flow<String> = get(Keys.YT_SOUND_NOTIFICATIONS, "short notification sound effect beep chime ding alert")
-    val ytSoundQueryAlarms: Flow<String> = get(Keys.YT_SOUND_ALARMS, "alarm clock tone buzzer morning wake up sound")
+    val ytSoundQueryRingtones: Flow<String> = get(Keys.YT_SOUND_RINGTONES, defaultRingtoneQuery())
+    val ytSoundQueryNotifications: Flow<String> = get(Keys.YT_SOUND_NOTIFICATIONS, defaultNotificationQuery())
+    val ytSoundQueryAlarms: Flow<String> = get(Keys.YT_SOUND_ALARMS, defaultAlarmQuery())
     val ytSoundBlockedWords: Flow<String> = get(Keys.YT_SOUND_BLOCKED, "compilation,mix,playlist,ranked,tier list,reaction,review,tutorial,how to,podcast,interview,live stream,part,episode")
 
     suspend fun setYtSoundQueryRingtones(q: String) = set(Keys.YT_SOUND_RINGTONES, q)
@@ -109,7 +127,13 @@ class PreferencesManager @Inject constructor(
     val videoPlaybackSpeed: Flow<Float> = get(Keys.VIDEO_PLAYBACK_SPEED, 1.0f)
 
     suspend fun setVideoFpsLimit(fps: Int) = set(Keys.VIDEO_FPS_LIMIT, fps)
-    suspend fun setVideoPlaybackSpeed(speed: Float) = set(Keys.VIDEO_PLAYBACK_SPEED, speed)
+    suspend fun setVideoPlaybackSpeed(speed: Float) {
+        set(Keys.VIDEO_PLAYBACK_SPEED, speed)
+        // Also write to SharedPreferences so VideoWallpaperService can read it
+        // (WallpaperService cannot easily access DataStore)
+        context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
+            .edit().putFloat("video_playback_speed", speed).apply()
+    }
 
     // ── Effects / adaptive settings ─────────────────────────────
 

@@ -9,10 +9,16 @@ import android.graphics.BitmapFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
+// TODO: This feature is non-functional due to two independent issues:
+//  1. The SharedPreferences keys "dark_wallpaper_url" and "light_wallpaper_url"
+//     (in "freevibe_dark_mode") are never written anywhere in the codebase.
+//  2. This BroadcastReceiver is never registered dynamically (registerReceiver)
+//     nor declared in AndroidManifest.xml, so onReceive is never called.
 /**
  * Listens for system UI mode changes (dark/light) and applies the
  * corresponding wallpaper stored in preferences.
@@ -44,17 +50,20 @@ class DarkModeReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                sharedClient.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                    val bytes = resp.body?.bytes()
-                    if (bytes != null) {
-                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        if (bitmap != null) {
-                            try {
-                                val wm = WallpaperManager.getInstance(context)
-                                wm.setBitmap(bitmap, null, true,
-                                    WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
-                            } finally {
-                                bitmap.recycle()
+                withTimeout(8000) {
+                    quickClient.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+                        if (!resp.isSuccessful) return@withTimeout
+                        val bytes = resp.body?.bytes()
+                        if (bytes != null) {
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bitmap != null) {
+                                try {
+                                    val wm = WallpaperManager.getInstance(context)
+                                    wm.setBitmap(bitmap, null, true,
+                                        WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK)
+                                } finally {
+                                    bitmap.recycle()
+                                }
                             }
                         }
                     }
@@ -67,10 +76,11 @@ class DarkModeReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private val sharedClient by lazy {
+        /** Dedicated client with short timeouts to fit within the withTimeout(8000) deadline. */
+        private val quickClient by lazy {
             OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .connectTimeout(3, TimeUnit.SECONDS)
+                .readTimeout(4, TimeUnit.SECONDS)
                 .build()
         }
     }

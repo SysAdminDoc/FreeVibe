@@ -42,8 +42,8 @@ interface WallhavenApi {
 
 @JsonClass(generateAdapter = true)
 data class WallhavenSearchResponse(
-    @Json(name = "data") val data: List<WallhavenWallpaper>,
-    @Json(name = "meta") val meta: WallhavenMeta,
+    @Json(name = "data") val data: List<WallhavenWallpaper> = emptyList(),
+    @Json(name = "meta") val meta: WallhavenMeta = WallhavenMeta(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -103,6 +103,6 @@ data class WallhavenMeta(
     @Json(name = "last_page") val lastPage: Int = 1,
     @Json(name = "per_page") val perPage: Int = 24,
     @Json(name = "total") val total: Int = 0,
-    @Json(name = "query") val query: Any? = null,
+    @Transient val query: Any? = null,
     @Json(name = "seed") val seed: String? = null,
 )
