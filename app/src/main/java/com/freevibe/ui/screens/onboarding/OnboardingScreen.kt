@@ -55,8 +55,8 @@ class OnboardingViewModel @Inject constructor(
     fun complete() {
         viewModelScope.launch {
             prefs.setUserStyles(_state.value.selectedStyles.joinToString(","))
+            _state.update { it.copy(isComplete = true) }
         }
-        _state.update { it.copy(isComplete = true) }
     }
 
     fun skip() {
