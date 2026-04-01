@@ -96,7 +96,7 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 val subName = "r/${topPost.subreddit}"
 
                 val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle("Wallpaper of the Day")
                     .setContentText("$upvotes upvotes on $subName ${resText}- tap to preview")
                     .setContentIntent(pendingIntent)
