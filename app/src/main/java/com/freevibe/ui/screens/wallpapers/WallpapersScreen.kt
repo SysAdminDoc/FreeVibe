@@ -534,7 +534,7 @@ private fun WallpaperGrid(
                     ) {
                         SubcomposeAsyncImage(
                             model = pick.fullUrl.ifEmpty { pick.thumbnailUrl },
-                            contentDescription = null,
+                            contentDescription = "Wallpaper of the Day",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         ) {
@@ -564,7 +564,7 @@ private fun WallpaperGrid(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                Icon(Icons.Default.AutoAwesome, null, Modifier.size(16.dp), tint = Color(0xFFFFD700))
+                                Icon(Icons.Default.AutoAwesome, contentDescription = "Featured", Modifier.size(16.dp), tint = Color(0xFFFFD700))
                                 Text("Wallpaper of the Day", style = MaterialTheme.typography.titleSmall, color = Color.White)
                             }
                             Text(
@@ -575,7 +575,7 @@ private fun WallpaperGrid(
                         }
                         // Arrow
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward, null,
+                            Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "View wallpaper",
                             tint = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).size(20.dp),
                         )
@@ -615,7 +615,7 @@ private fun WallpaperGrid(
                                     selected = false,
                                     onClick = { onSearch?.invoke(query) },
                                     label = { Text(name) },
-                                    leadingIcon = { Icon(Icons.Default.Collections, null, Modifier.size(16.dp)) },
+                                    leadingIcon = { Icon(Icons.Default.Collections, contentDescription = null, Modifier.size(16.dp)) },
                                     shape = RoundedCornerShape(18.dp),
                                 )
                             }
@@ -646,7 +646,7 @@ private fun WallpaperGrid(
                                 AssistChip(
                                     onClick = { onSearch?.invoke(term) },
                                     label = { Text(term) },
-                                    leadingIcon = { Icon(Icons.Default.Whatshot, null, Modifier.size(16.dp)) },
+                                    leadingIcon = { Icon(Icons.Default.Whatshot, contentDescription = null, Modifier.size(16.dp)) },
                                     shape = RoundedCornerShape(18.dp),
                                 )
                             }
@@ -768,7 +768,7 @@ private fun WallpaperCard(
                             Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Default.BrokenImage, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Default.BrokenImage, contentDescription = "Failed to load", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     else -> SubcomposeAsyncImageContent()
@@ -822,7 +822,7 @@ private fun WallpaperCard(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
-                                    Icon(Icons.Default.ThumbUp, null, Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.9f))
+                                    Icon(Icons.Default.ThumbUp, contentDescription = "Upvotes", Modifier.size(11.dp), tint = Color.White.copy(alpha = 0.9f))
                                     Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.9f))
                                 }
                             }

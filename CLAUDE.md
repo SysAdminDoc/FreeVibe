@@ -5,7 +5,7 @@ Open-source Android app for device personalization. Wallpapers, video wallpapers
 
 ## Tech Stack
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
-- Hilt 2.53.1 DI, Room 2.6.1 DB (v10), Retrofit 2.11.0 + OkHttp, Moshi + KSP
+- Hilt 2.53.1 DI, Room 2.6.1 DB (v11), Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
 - NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop + audio fade/convert/normalize)
 - Freesound v2 API (primary sound source, requires client_id), Openverse API (fallback, zero auth)
@@ -21,7 +21,7 @@ JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot" ./gradlew as
 Gradle 8.12 pinned via wrapper. AGP 8.7.3. SDK path in `local.properties` must point to `C:/Users/Xray/AppData/Local/Android/Sdk`.
 
 ## Version
-- **v5.5.0** (versionCode 55)
+- **v5.6.0** (versionCode 56)
 - Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
 
 ## Architecture
@@ -35,7 +35,7 @@ Compose UI (16+ screens, 5 bottom nav tabs: Wallpapers, Videos, Sounds, Favorite
               DualWallpaper, BatchDownload, ContactRingtone, FavoritesExporter,
               OfflineFavorites, WallpaperHistory, VideoWallpaperService, CollectionRepository
     Firebase: VoteRepository (community votes, admin moderation, top voted leaderboard)
-Room DB (v10): favorites, downloads, search_history, wallpaper_cache,
+Room DB (v11): favorites, downloads, search_history, wallpaper_cache,
               wallpaper_history, wallpaper_collections, wallpaper_collection_items
 DataStore: Settings, Onboarding, User Styles
 ```
@@ -117,7 +117,7 @@ DataStore: Settings, Onboarding, User Styles
 ## Key Files
 - `FreeVibeApp.kt` - Application class, crash logging, cache eviction, yt-dlp + FFmpeg init
 - `FreeVibeRoot.kt` - NavHost with animated transitions, bottom nav, Hilt EntryPoint, widget deep linking via `initialNavigateTo`
-- `AppModule.kt` - Hilt DI, OkHttp, Retrofit services, Room DB v9 with migrations v1-v9
+- `AppModule.kt` - Hilt DI, OkHttp, Retrofit services, Room DB v11 with migrations v1-v11
 - `SelectedContentHolder.kt` - Singleton: selectedWallpaper + wallpaperList + selectedSound + pendingCategoryQuery
 - `WallpapersViewModel.kt` - Wallpaper state, tabs, findSimilar, matchMyTheme, cached discover, loadJob cancellation
 - `WallpapersScreen.kt` - Staggered grid, WOTD hero, collections, Community Favorites, time filters
@@ -154,6 +154,7 @@ DataStore: Settings, Onboarding, User Styles
 - SelectedContentHolder does not survive process death (in-memory singleton)
 
 ## Version History
+- v5.6.0: Improvement audit — security, performance, UX. **Security**: SHA-256 hashed admin device IDs (no plaintext in APK); strict audio MIME whitelist for uploads (10 allowed types); upload name sanitization (length cap, empty check). **Performance**: DB indexes on favorites.addedAt, favorites.type+addedAt, downloads.downloadedAt, wallpaper_history.appliedAt (migration v10→v11); shared YouTube resolve semaphore (6 permits, reused across all resolve calls); replaced CopyOnWriteArrayList with synchronized ArrayList in sound loading (eliminates ~80 array copies per load). **UX**: "Resolving audio..." text indicator during YouTube URL resolution; categorized error messages (network/timeout/auth/rate-limit/server); accessibility contentDescription on 15+ icons across Sounds and Wallpapers screens. DB v10→v11.
 - v5.5.0: Bug audit — 30+ fixes across 20 files. **Critical**: VideoWallpaperService onPrepared race on released MediaPlayer (clear listener before release); ParallaxWallpaperService bitmap recycle outside bitmapLock (native crash); AudioPlaybackManager release() didn't set stopped flag (zombie reconnection), added generation counter and main executor for callbacks; BatchDownloadService scope leak on cancel. **High**: NavHost missing bottom padding (content hidden behind nav bar); CollectionsScreen Flow leak per recomposition (cache with remember); WeatherWallpaperService bitmap race conditions (added bitmapLock + destroyed flag + isRecycled checks); DualWallpaperService OOM (streaming decode instead of double-buffer); SelectedContentHolder non-atomic dual assignment (@Synchronized); VideoWallpapersVM isLoading stuck on cancel (finally resets all flags); WallpapersVM stale state capture (re-read after suspension); FreesoundV2Repository reads user API key from PreferencesManager; AppModule writeTimeout + dynamic User-Agent via BuildConfig. **Medium**: SoundEditorState hashCode missing 6 fields; WallpaperCropVM premature bitmap recycle; WallpaperCropScreen/VideoCropScreen gesture state lost on config change (rememberSaveable); WallpapersScreen voteCounts Flow restart (derivedStateOf); WallhavenSearchResponse/RedditListingResponse null-safe defaults; WallpaperCacheManager @Transaction; WallpaperCacheDao chunked IN clause (500 limit); UploadRepository audio MIME validation. **Low**: DailyWallpaperWorker bitmap recycle; OfflineFavoritesManager debug logging; FavoritesVM .update{}; WallpapersVM randomOrNull; FavoritesScreen/DownloadsScreen rememberSaveable for tabs/sort.
 - v5.4.0: Bug audit — 13 fixes. **Critical**: Wallpapers not loading (handleRouteFilters null==null dedup returned early on first call, never triggered loadWallpapers); Room DB crash on startup (missing indices on favorites.type, downloads.type, wallpaper_cache.cacheKey — added migration v9→v10). **High**: ParallaxWallpaperService bitmap race + segmenter leak; WeatherWallpaperService double-recycle crash; AudioPlaybackManager @Volatile; CollectionsScreen !! NPE; LicensesScreen/SettingsScreen unguarded startActivity. **Medium**: OfflineFavoritesManager renameTo fallback; FreeVibeWidget shuffle variety. **UI**: Compact header (removed verbose subtitle), small FABs (replaced wide labeled buttons with SmallFloatingActionButton), removed resolution text from cards, explicit tab labels. Version sync 5.2.0→5.4.0. DB v9→v10.
 - v5.3.0: Comprehensive 4-round codebase audit — 121 bugs fixed. Crashes: bitmap double-recycle in ParallaxWallpaperService/WeatherWallpaperService/DualWallpaperService, Moshi Any? crash in WallhavenMeta, null-on-NOT-NULL in favorites metadata, AudioTrimmer MP3 muxer crash (now uses FFmpeg). Data-loss: favorite metadata not persisted through export/import, orphaned MediaStore entries in DownloadManager, non-atomic file writes in OfflineFavoritesManager/SoundEditorScreen, WallpaperHistory REPLACE clobbering timestamps. Race conditions: MutableStateFlow .update{} in 8+ files, loadJob cancellation in WallpapersViewModel/VideoWallpapersScreen, stale tab capture in SoundsViewModel. Navigation: missing NavType argument declarations, Uri.encode for special chars in route IDs. Services: VideoWallpaperService blocking prepare(), DailyWallpaperWorker clobbering SelectedContentHolder, AudioPlaybackManager stale controller callbacks. Security: scoped FileProvider paths, auto-backup exclusion rules. DB v7→v8→v9 (metadata columns on favorites + wallpaper_cache). Room indices on hot query columns.
