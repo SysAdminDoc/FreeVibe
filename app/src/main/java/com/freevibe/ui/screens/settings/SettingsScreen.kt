@@ -553,13 +553,8 @@ fun SettingsScreen(
                     }
                 },
             )
-            SettingsToggle(
-                icon = Icons.Default.DarkMode,
-                title = "Dark/light auto-switch",
-                subtitle = "Different wallpaper for dark vs light mode",
-                checked = darkModeSwitch,
-                onCheckedChange = { viewModel.setDarkModeSwitch(it) },
-            )
+            // Dark/light auto-switch toggle removed — DarkModeReceiver is not implemented
+            // (never registered, SharedPreferences keys never written)
             // VFX particle overlays
             var showVfxPicker by remember { mutableStateOf(false) }
             SettingsItem(

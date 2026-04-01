@@ -78,8 +78,6 @@ class RedditRepository @Inject constructor(
     suspend fun getMultiSubreddit(
         subreddits: List<String> = redditWallpaperSubs,
     ): SearchResult<Wallpaper> = coroutineScope {
-        // Reset pagination so each call starts from page 1 (avoids stale afterTokens)
-        resetPagination()
         val results = subreddits.map { sub ->
             async {
                 try {
