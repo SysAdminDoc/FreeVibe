@@ -411,8 +411,7 @@ class WallpapersViewModel @Inject constructor(
 
     fun applyRandom() {
         val wallpapers = _state.value.wallpapers
-        if (wallpapers.isEmpty()) return
-        val wp = wallpapers.random()
+        val wp = wallpapers.randomOrNull() ?: return
         applyWallpaper(wp, WallpaperTarget.BOTH)
     }
 
@@ -442,19 +441,21 @@ class WallpapersViewModel @Inject constructor(
                 }
             }
 
+            val currentTab = _state.value.selectedTab
+            val currentPage = _state.value.currentPage
             try {
-                val result = when (s.selectedTab) {
+                val result = when (currentTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(
-                        page = s.currentPage,
+                        page = currentPage,
                         redditRepo = redditRepo,
                         pexelsApi = pexelsApi,
                         pexelsKey = prefs.pexelsApiKey.first(),
                     )
-                    WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(s.currentPage)
+                    WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(currentPage)
                     WallpaperTab.PEXELS -> {
                         val key = prefs.pexelsApiKey.first()
                         if (key.isNotBlank()) {
-                            val response = pexelsApi.curatedPhotos(apiKey = key, page = s.currentPage)
+                            val response = pexelsApi.curatedPhotos(apiKey = key, page = currentPage)
                             SearchResult(
                                 items = response.photos.map { photo ->
                                     Wallpaper(
@@ -477,10 +478,10 @@ class WallpapersViewModel @Inject constructor(
                         }
                     }
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
-                    WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = s.currentPage, topRange = s.topRange)
-                    WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(s.currentPage)
-                    WallpaperTab.SEARCH -> wallpaperRepo.searchAll(s.query, page = s.currentPage)
-                    WallpaperTab.COLOR -> wallpaperRepo.searchByColor(s.selectedColor ?: "", s.currentPage)
+                    WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = currentPage, topRange = _state.value.topRange)
+                    WallpaperTab.UNSPLASH -> wallpaperRepo.getPicsum(currentPage)
+                    WallpaperTab.SEARCH -> wallpaperRepo.searchAll(_state.value.query, page = currentPage)
+                    WallpaperTab.COLOR -> wallpaperRepo.searchByColor(_state.value.selectedColor ?: "", currentPage)
                 }
                 _state.update {
                     it.copy(
@@ -501,7 +502,7 @@ class WallpapersViewModel @Inject constructor(
                         isLoadingMore = false,
                         isRefreshing = false,
                         error = e.message ?: "Failed to load wallpapers",
-                        errorSource = s.selectedTab.name,
+                        errorSource = currentTab.name,
                     )
                 }
             }

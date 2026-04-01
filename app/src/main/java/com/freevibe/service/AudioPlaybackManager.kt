@@ -9,7 +9,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.freevibe.data.model.Sound
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +24,7 @@ class AudioPlaybackManager @Inject constructor(
     @Volatile private var controllerFuture: ListenableFuture<MediaController>? = null
     @Volatile private var controller: MediaController? = null
     @Volatile private var stopped = false
+    @Volatile private var connectionGeneration = 0
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -57,6 +58,9 @@ class AudioPlaybackManager @Inject constructor(
         // Release old controller/future before creating new ones
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller?.removeListener(playerListener)
+        controller = null
+
+        val generation = ++connectionGeneration
 
         try {
             val token = SessionToken(
@@ -66,7 +70,7 @@ class AudioPlaybackManager @Inject constructor(
             controllerFuture = MediaController.Builder(context, token).buildAsync().also { future ->
                 future.addListener({
                     try {
-                        if (stopped) return@addListener
+                        if (stopped || generation != connectionGeneration) return@addListener
                         val mc = future.get()
                         controller = mc
                         mc.addListener(playerListener)
@@ -75,7 +79,7 @@ class AudioPlaybackManager @Inject constructor(
                         _currentSoundId.value = null
                         _isPlaying.value = false
                     }
-                }, MoreExecutors.directExecutor())
+                }, androidx.core.content.ContextCompat.getMainExecutor(context))
             }
         } catch (e: Exception) {
             _currentSoundId.value = null
@@ -148,6 +152,7 @@ class AudioPlaybackManager @Inject constructor(
     }
 
     fun release() {
+        stopped = true
         controller?.removeListener(playerListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controller = null

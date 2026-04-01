@@ -143,16 +143,17 @@ class VideoWallpaperService : WallpaperService() {
                     // SCALE_TO_FIT_WITH_CROPPING: scale video uniformly to fill the surface,
                     // center it, and crop overflow. This preserves aspect ratio.
                     try { setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING) } catch (_: Exception) {}
-                    prepare()
-
-                    // If MediaMetadataRetriever didn't get dimensions, read from MediaPlayer
-                    if (videoW <= 0 || videoH <= 0) {
-                        videoW = this.videoWidth
-                        videoH = this.videoHeight
+                    setOnPreparedListener { mp ->
+                        // If MediaMetadataRetriever didn't get dimensions, read from MediaPlayer
+                        if (videoW <= 0 || videoH <= 0) {
+                            videoW = mp.videoWidth
+                            videoH = mp.videoHeight
+                        }
+                        mp.isLooping = true
+                        try { mp.playbackParams = mp.playbackParams.setSpeed(speed) } catch (_: Exception) {}
+                        mp.start()
                     }
-
-                    try { playbackParams = playbackParams.setSpeed(speed) } catch (_: Exception) {}
-                    start()
+                    prepareAsync()
                 }
 
                 if (BuildConfig.DEBUG) android.util.Log.d("VideoWPService",
@@ -165,6 +166,7 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun releasePlayer() {
             mediaPlayer?.apply {
+                try { setOnPreparedListener(null) } catch (_: Exception) {}
                 try { if (isPlaying) stop() } catch (_: Exception) {}
                 try { release() } catch (_: Exception) {}
             }

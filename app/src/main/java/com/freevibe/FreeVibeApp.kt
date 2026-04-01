@@ -8,6 +8,8 @@ import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.freevibe.data.local.WallpaperCacheManager
+import com.freevibe.service.CommunityIdentityProvider
+import com.freevibe.service.OfflineFavoritesManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +32,12 @@ class FreeVibeApp : Application(), Configuration.Provider {
     @Inject
     lateinit var wallpaperCacheManager: WallpaperCacheManager
 
+    @Inject
+    lateinit var offlineFavoritesManager: OfflineFavoritesManager
+
+    @Inject
+    lateinit var communityIdentityProvider: CommunityIdentityProvider
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -42,6 +50,7 @@ class FreeVibeApp : Application(), Configuration.Provider {
         setupCrashLogging()
         createMediaNotificationChannel()
         evictStaleCaches()
+        warmCommunityIdentity()
         initYtDlp()
     }
 
@@ -82,14 +91,14 @@ class FreeVibeApp : Application(), Configuration.Provider {
                 // Keep log file reasonable (max 500KB) — trim tail without full read
                 if (logFile.length() > 512_000) {
                     try {
-                        val raf = java.io.RandomAccessFile(logFile, "r")
-                        val keepBytes = 256_000
-                        val skipTo = raf.length() - keepBytes
-                        raf.seek(skipTo.coerceAtLeast(0))
-                        val tail = ByteArray(keepBytes.coerceAtMost(raf.length().toInt()))
-                        raf.readFully(tail)
-                        raf.close()
-                        logFile.writeBytes(tail)
+                        java.io.RandomAccessFile(logFile, "r").use { raf ->
+                            val keepBytes = 256_000
+                            val skipTo = raf.length() - keepBytes
+                            raf.seek(skipTo.coerceAtLeast(0))
+                            val tail = ByteArray(keepBytes.coerceAtMost(raf.length().toInt()))
+                            raf.readFully(tail)
+                            logFile.writeBytes(tail)
+                        }
                     } catch (_: Exception) {}
                 }
             } catch (_: Exception) {
@@ -103,9 +112,16 @@ class FreeVibeApp : Application(), Configuration.Provider {
         appScope.launch {
             try {
                 wallpaperCacheManager.evictExpired()
+                offlineFavoritesManager.pruneOrphans()
             } catch (e: Exception) {
                 Log.w("FreeVibeApp", "Cache eviction failed", e)
             }
+        }
+    }
+
+    private fun warmCommunityIdentity() {
+        appScope.launch {
+            communityIdentityProvider.ensureSignedIn()
         }
     }
 }

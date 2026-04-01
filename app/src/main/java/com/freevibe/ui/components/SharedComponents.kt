@@ -223,18 +223,45 @@ fun GlassCard(
 ) {
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(24.dp),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
         ),
         tonalElevation = 0.dp,
+        shadowElevation = 12.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            content = content,
-        )
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f),
+                        ),
+                    ),
+                ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                Color.Transparent,
+                            ),
+                            radius = 520f,
+                        ),
+                    ),
+            )
+            Column(
+                modifier = Modifier.padding(18.dp),
+                content = content,
+            )
+        }
     }
 }
 

@@ -58,49 +58,86 @@ class AudioTrimmer @Inject constructor(
 
                 extractor.selectTrack(audioTrackIndex)
 
-                val muxerFormat = when (ext.lowercase()) {
-                    "mp4", "m4a", "aac" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-                    "webm", "ogg" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
-                    else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
-                }
-
-                muxer = MediaMuxer(outputFile.absolutePath, muxerFormat)
-                val muxerTrackIndex = muxer.addTrack(audioFormat)
-                muxer.start()
-
-                val startUs = startMs * 1000L
-                val endUs = endMs * 1000L
-
-                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-
-                val bufferSize = audioFormat.getInteger(
-                    MediaFormat.KEY_MAX_INPUT_SIZE,
-                    256 * 1024,
-                ).coerceIn(8192, 1024 * 1024)
-                val buffer = ByteBuffer.allocate(bufferSize)
-                val bufferInfo = MediaCodec.BufferInfo()
-
-                while (true) {
-                    val sampleSize = extractor.readSampleData(buffer, 0)
-                    if (sampleSize < 0) break
-
-                    val sampleTime = extractor.sampleTime
-                    if (sampleTime > endUs) break
-
-                    if (sampleTime >= startUs) {
-                        bufferInfo.offset = 0
-                        bufferInfo.size = sampleSize
-                        bufferInfo.presentationTimeUs = sampleTime - startUs
-                        bufferInfo.flags = extractor.sampleFlags
-
-                        muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                if (ext.lowercase() == "mp3") {
+                    // MediaMuxer can't handle MP3 - use FFmpeg for lossless trim
+                    extractor.release()
+                    val ffmpegInfo = getYtdlpFfmpeg() ?: throw Exception("FFmpeg not available for MP3 trim")
+                    val (ffmpegPath, ldLibPath) = ffmpegInfo
+                    val cmd = mutableListOf(
+                        ffmpegPath.absolutePath,
+                        "-y",
+                        "-i", inputPath,
+                        "-ss", "${startMs / 1000.0}",
+                        "-to", "${endMs / 1000.0}",
+                        "-c:a", "copy",
+                        outputFile.absolutePath,
+                    )
+                    val pb = ProcessBuilder(cmd).redirectErrorStream(true).directory(outputDir)
+                    if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
+                    val process = pb.start()
+                    process.inputStream.bufferedReader().use { it.readText() }
+                    val exitCode = process.waitFor()
+                    if (exitCode != 0 || !outputFile.exists() || outputFile.length() <= 0) {
+                        throw Exception("FFmpeg MP3 trim failed (exit $exitCode)")
+                    }
+                } else {
+                    val muxerFormat = when (ext.lowercase()) {
+                        "mp4", "m4a", "aac" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
+                        "webm", "ogg" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
+                        else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                     }
 
-                    extractor.advance()
-                    buffer.clear()
-                }
+                    muxer = MediaMuxer(outputFile.absolutePath, muxerFormat)
+                    val muxerTrackIndex = muxer.addTrack(audioFormat)
+                    muxer.start()
 
-                muxer.stop()
+                    val startUs = startMs * 1000L
+                    val endUs = endMs * 1000L
+
+                    extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+                    val bufferSize = (
+                        if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                            audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                        } else {
+                            256 * 1024
+                        }
+                    ).coerceIn(8192, 1024 * 1024)
+                    val buffer = ByteBuffer.allocate(bufferSize)
+                    val bufferInfo = MediaCodec.BufferInfo()
+
+                    while (true) {
+                        val sampleSize = extractor.readSampleData(buffer, 0)
+                        if (sampleSize < 0) break
+
+                        val sampleTime = extractor.sampleTime
+                        if (sampleTime > endUs) break
+
+                        if (sampleTime >= startUs) {
+                            bufferInfo.offset = 0
+                            bufferInfo.size = sampleSize
+                            bufferInfo.presentationTimeUs = sampleTime - startUs
+                            var sampleFlags = 0
+                            if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                                sampleFlags = sampleFlags or MediaCodec.BUFFER_FLAG_KEY_FRAME
+                            }
+                            if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+                                sampleFlags = sampleFlags or MediaCodec.BUFFER_FLAG_PARTIAL_FRAME
+                            }
+                            bufferInfo.flags = sampleFlags
+
+                            muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                        }
+
+                        extractor.advance()
+                        buffer.clear()
+                    }
+
+                    muxer.stop()
+                }
+            } catch (e: Exception) {
+                outputFile.delete()
+                throw e
             } finally {
                 try { muxer?.release() } catch (_: Exception) {}
                 try { extractor.release() } catch (_: Exception) {}
@@ -141,7 +178,14 @@ class AudioTrimmer @Inject constructor(
                 "-y",
                 "-i", file.absolutePath,
                 "-af", filters.joinToString(","),
-                "-c:a", "libmp3lame",
+                "-c:a", when (file.extension.lowercase()) {
+                    "mp3" -> "libmp3lame"
+                    "ogg" -> "libvorbis"
+                    "flac" -> "flac"
+                    "wav" -> "pcm_s16le"
+                    "m4a", "aac" -> "aac"
+                    else -> "libmp3lame"
+                },
                 "-q:a", "2",
                 tempOut.absolutePath,
             )

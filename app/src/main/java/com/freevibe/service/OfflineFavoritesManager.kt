@@ -73,7 +73,10 @@ class OfflineFavoritesManager @Inject constructor(
                     enforceStorageBudget(protectedPaths = setOf(file.absolutePath))
                     file.absolutePath
                 } else null
-            } catch (_: Exception) { null }
+            } catch (e: Exception) {
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.w("OfflineFavMgr", "cacheOffline failed for $id: ${e.message}")
+                null
+            }
         }
 
     /** Remove offline cache for an item */

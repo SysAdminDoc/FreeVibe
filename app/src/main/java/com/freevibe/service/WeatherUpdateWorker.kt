@@ -45,8 +45,10 @@ class WeatherUpdateWorker @AssistedInject constructor(
                 .apply()
 
             Result.success()
-        } catch (_: Exception) {
+        } catch (_: java.io.IOException) {
             Result.retry()
+        } catch (_: Exception) {
+            Result.failure()
         }
     }
 
@@ -83,6 +85,7 @@ class WeatherUpdateWorker @AssistedInject constructor(
                 30, TimeUnit.MINUTES,
             )
                 .setConstraints(constraints)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(

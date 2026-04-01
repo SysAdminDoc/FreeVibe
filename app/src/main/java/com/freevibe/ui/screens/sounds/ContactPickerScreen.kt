@@ -30,11 +30,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentType
+import com.freevibe.data.model.Sound
+import com.freevibe.data.remote.toSound
+import com.freevibe.data.repository.FavoritesRepository
+import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.ContactInfo
 import com.freevibe.service.ContactRingtoneService
-import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -46,6 +51,7 @@ data class ContactPickerState(
     val isLoading: Boolean = false,
     val query: String = "",
     val hasPermission: Boolean = false,
+    val selectedSound: Sound? = null,
     val isApplying: Boolean = false,
     val success: String? = null,
     val error: String? = null,
@@ -55,31 +61,52 @@ data class ContactPickerState(
 class ContactPickerViewModel @Inject constructor(
     private val contactService: ContactRingtoneService,
     private val soundApplier: SoundApplier,
-    private val selectedContent: SelectedContentHolder,
+    private val favoritesRepo: FavoritesRepository,
+    private val bundledContent: BundledContentProvider,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactPickerState())
     val state = _state.asStateFlow()
+    private var searchJob: Job? = null
 
     fun setPermissionGranted(granted: Boolean) {
         _state.update { it.copy(hasPermission = granted) }
-        if (granted) search("")
+        if (granted) search(_state.value.query, immediate = true)
     }
 
-    fun search(query: String) {
-        _state.update { it.copy(query = query, isLoading = true) }
-        viewModelScope.launch {
+    suspend fun ensureSelectedSound(soundId: String, fallbackSound: Sound?): Boolean {
+        val sound = resolveSound(soundId) ?: fallbackSound ?: run {
+            _state.update { it.copy(selectedSound = null) }
+            return false
+        }
+        _state.update { it.copy(selectedSound = sound, error = null) }
+        return true
+    }
+
+    fun search(query: String, immediate: Boolean = false) {
+        searchJob?.cancel()
+        _state.update { it.copy(query = query, isLoading = true, error = null) }
+        searchJob = viewModelScope.launch {
             try {
+                if (!immediate && query.isNotBlank()) {
+                    delay(250)
+                }
                 val contacts = contactService.searchContacts(query)
-                _state.update { it.copy(contacts = contacts, isLoading = false) }
+                _state.update { current ->
+                    if (current.query != query) current
+                    else current.copy(contacts = contacts, isLoading = false)
+                }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message) }
+                _state.update { current ->
+                    if (current.query != query) current
+                    else current.copy(isLoading = false, error = e.message)
+                }
             }
         }
     }
 
     fun assignToContact(contactId: Long) {
-        val sound = selectedContent.selectedSound.value ?: run {
+        val sound = _state.value.selectedSound ?: run {
             _state.update { it.copy(error = "No sound selected") }
             return
         }
@@ -107,11 +134,26 @@ class ContactPickerViewModel @Inject constructor(
     }
 
     fun clearMessages() = _state.update { it.copy(success = null, error = null) }
+
+    private suspend fun resolveSound(soundId: String): Sound? {
+        favoritesRepo.getById(soundId)
+            ?.takeIf { it.type == "SOUND" }
+            ?.toSound()
+            ?.let { return it }
+
+        return listOf(
+            bundledContent.getRingtones(),
+            bundledContent.getNotifications(),
+            bundledContent.getAlarms(),
+        ).flatten().firstOrNull { it.id == soundId }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactPickerScreen(
+    soundId: String,
+    fallbackSound: Sound? = null,
     onBack: () -> Unit,
     viewModel: ContactPickerViewModel = hiltViewModel(),
 ) {
@@ -119,6 +161,12 @@ fun ContactPickerScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
+    var permissionPermanentlyDenied by remember { mutableStateOf(false) }
+    var soundResolved by remember(soundId) { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(soundId, fallbackSound?.id, fallbackSound?.downloadUrl, fallbackSound?.previewUrl) {
+        soundResolved = viewModel.ensureSelectedSound(soundId, fallbackSound)
+    }
 
     // Permission handling
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -126,7 +174,18 @@ fun ContactPickerScreen(
     ) { permissions ->
         val readGranted = permissions[Manifest.permission.READ_CONTACTS] == true
         val writeGranted = permissions[Manifest.permission.WRITE_CONTACTS] == true
-        viewModel.setPermissionGranted(readGranted && writeGranted)
+        if (readGranted && writeGranted) {
+            viewModel.setPermissionGranted(true)
+        } else {
+            viewModel.setPermissionGranted(false)
+            val activity = context as? android.app.Activity
+            if (activity != null &&
+                !activity.shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS) &&
+                !activity.shouldShowRequestPermissionRationale(Manifest.permission.WRITE_CONTACTS)
+            ) {
+                permissionPermanentlyDenied = true
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -170,6 +229,37 @@ fun ContactPickerScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            when (soundResolved) {
+                null -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(12.dp))
+                            Text("Loading selected sound...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    return@Scaffold
+                }
+                false -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.MusicOff,
+                                null,
+                                modifier = Modifier.size(56.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text("Selected sound is no longer available", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.height(8.dp))
+                            FilledTonalButton(onClick = onBack) { Text("Back") }
+                        }
+                    }
+                    return@Scaffold
+                }
+                true -> Unit
+            }
+
             if (!state.hasPermission) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -180,14 +270,29 @@ fun ContactPickerScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         )
                         Spacer(Modifier.height(16.dp))
-                        Text("Contacts permission required", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
-                            permissionLauncher.launch(
-                                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
-                            )
-                        }) {
-                            Text("Grant Permission")
+                        if (permissionPermanentlyDenied) {
+                            Text("Permission permanently denied", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Please enable contacts permission in app settings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            }) {
+                                Text("Open Settings")
+                            }
+                        } else {
+                            Text("Contacts permission required", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = {
+                                permissionLauncher.launch(
+                                    arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
+                                )
+                            }) {
+                                Text("Grant Permission")
+                            }
                         }
                     }
                 }
@@ -195,6 +300,38 @@ fun ContactPickerScreen(
             }
 
             // Search bar
+            state.selectedSound?.let { sound ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(sound.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "This sound will be assigned as the contact ringtone",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = state.query,
                 onValueChange = { viewModel.search(it) },

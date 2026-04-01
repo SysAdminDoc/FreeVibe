@@ -82,7 +82,7 @@ fun OnboardingScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFF0A0A0F), Color(0xFF12121A))
+                    listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant)
                 )
             ),
     ) {

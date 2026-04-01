@@ -261,8 +261,10 @@ private fun CollectionCard(
     viewModel: CollectionsViewModel,
     onClick: () -> Unit,
 ) {
-    val count by viewModel.getItemCount(collection.collectionId).collectAsState(initial = 0)
-    val covers by viewModel.getCoverThumbnails(collection.collectionId).collectAsState(initial = emptyList())
+    val countFlow = remember(collection.collectionId) { viewModel.getItemCount(collection.collectionId) }
+    val coversFlow = remember(collection.collectionId) { viewModel.getCoverThumbnails(collection.collectionId) }
+    val count by countFlow.collectAsState(initial = 0)
+    val covers by coversFlow.collectAsState(initial = emptyList())
 
     Card(
         onClick = onClick,
