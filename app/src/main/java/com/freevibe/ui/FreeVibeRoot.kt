@@ -192,7 +192,7 @@ fun FreeVibeRoot(
                                                         containerColor = MaterialTheme.colorScheme.primary,
                                                         contentColor = MaterialTheme.colorScheme.onPrimary,
                                                     ) {
-                                                        Text("$favoritesCount")
+                                                        Text(if (favoritesCount > 99) "99+" else "$favoritesCount")
                                                     }
                                                 }) {
                                                     Icon(
@@ -274,40 +274,50 @@ fun FreeVibeRoot(
                     initialQuery = backStackEntry.arguments?.getString("query")?.ifBlank { null },
                     initialColor = backStackEntry.arguments?.getString("color")?.ifBlank { null },
                     onWallpaperClick = { wallpaper ->
-                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper))
+                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
                 )
             }
             composable(Screen.VideoWallpapers.route) {
                 VideoWallpapersScreen()
             }
-            composable(Screen.Sounds.route) {
+            composable(
+                route = Screen.Sounds.destinationPattern,
+                arguments = listOf(
+                    navArgument("query") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { backStackEntry ->
                 SoundsScreen(
                     onSoundClick = { sound ->
-                        navController.navigate(Screen.SoundDetail.createRoute(sound.id))
+                        navController.navigate(Screen.SoundDetail.createRoute(sound.id)) { launchSingleTop = true }
                     },
                     onCreateRingtone = {
-                        navController.navigate(Screen.SoundEditor.createRoute())
+                        navController.navigate(Screen.SoundEditor.createRoute()) { launchSingleTop = true }
                     },
+                    initialQuery = backStackEntry.arguments?.getString("query")?.ifBlank { null },
                 )
             }
             composable(Screen.Favorites.route) {
                 FavoritesScreen(
                     onWallpaperClick = { fav ->
-                        navController.navigate(Screen.WallpaperDetail.createRoute(fav.id))
+                        navController.navigate(Screen.WallpaperDetail.createRoute(fav.id)) { launchSingleTop = true }
                     },
                     onSoundClick = { fav ->
-                        navController.navigate(Screen.SoundDetail.createRoute(fav.id))
+                        navController.navigate(Screen.SoundDetail.createRoute(fav.id)) { launchSingleTop = true }
                     },
                 )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onDownloadsClick = { navController.navigate(Screen.Downloads.route) },
-                    onLicensesClick = { navController.navigate(Screen.Licenses.route) },
-                    onCategoriesClick = { navController.navigate(Screen.Categories.route) },
-                    onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) },
-                    onCollectionsClick = { navController.navigate(Screen.Collections.route) },
+                    onDownloadsClick = { navController.navigate(Screen.Downloads.route) { launchSingleTop = true } },
+                    onLicensesClick = { navController.navigate(Screen.Licenses.route) { launchSingleTop = true } },
+                    onCategoriesClick = { navController.navigate(Screen.Categories.route) { launchSingleTop = true } },
+                    onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) { launchSingleTop = true } },
+                    onCollectionsClick = { navController.navigate(Screen.Collections.route) { launchSingleTop = true } },
                 )
             }
 
@@ -359,8 +369,8 @@ fun FreeVibeRoot(
                     wallpaperId = wallpaperId,
                     fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
-                    onEdit = { id -> navController.navigate(Screen.WallpaperEditor.createRoute(id)) },
-                    onCrop = { id -> navController.navigate(Screen.WallpaperCrop.createRoute(id)) },
+                    onEdit = { id -> navController.navigate(Screen.WallpaperEditor.createRoute(id)) { launchSingleTop = true } },
+                    onCrop = { id -> navController.navigate(Screen.WallpaperCrop.createRoute(id)) { launchSingleTop = true } },
                     onFindSimilar = { colorHex ->
                         navController.navigate(Screen.Wallpapers.createRoute(color = colorHex)) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -380,14 +390,22 @@ fun FreeVibeRoot(
                 SoundDetailScreen(
                     soundId = soundId,
                     onBack = { navController.popBackStack() },
-                    onEdit = { id -> navController.navigate(Screen.SoundEditor.createRoute(id)) },
+                    onEdit = { id -> navController.navigate(Screen.SoundEditor.createRoute(id)) { launchSingleTop = true } },
                     onContactPicker = { sound ->
-                        navController.navigate(Screen.ContactPicker.createRoute(sound))
+                        navController.navigate(Screen.ContactPicker.createRoute(sound)) { launchSingleTop = true }
                     },
                     onOpenSound = { id ->
-                        navController.navigate(Screen.SoundDetail.createRoute(id))
+                        navController.navigate(Screen.SoundDetail.createRoute(id)) { launchSingleTop = true }
                     },
-                    onSearchTag = { /* Tag search handled by SoundsViewModel directly */ },
+                    onSearchTag = { tag ->
+                        navController.navigate(Screen.Sounds.createRoute(query = tag)) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
                 )
             }
 
@@ -508,7 +526,7 @@ fun FreeVibeRoot(
                 CollectionsScreen(
                     onBack = { navController.popBackStack() },
                     onWallpaperClick = { wallpaperId ->
-                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaperId))
+                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaperId)) { launchSingleTop = true }
                     },
                 )
             }
@@ -527,7 +545,7 @@ fun FreeVibeRoot(
                             width = entry.width,
                             height = entry.height,
                         )
-                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper))
+                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
                 )
             }

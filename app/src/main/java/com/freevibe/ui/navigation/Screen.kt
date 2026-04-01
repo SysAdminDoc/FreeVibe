@@ -48,7 +48,13 @@ sealed class Screen(
         title = "Sounds",
         icon = Icons.Outlined.MusicNote,
         selectedIcon = Icons.Filled.MusicNote,
-    )
+        destinationPattern = "sounds?query={query}",
+    ) {
+        fun createRoute(query: String? = null): String {
+            return if (query.isNullOrBlank()) route
+            else "$route?query=${Uri.encode(query)}"
+        }
+    }
     data object Favorites : Screen(
         route = "favorites",
         title = "Favorites",

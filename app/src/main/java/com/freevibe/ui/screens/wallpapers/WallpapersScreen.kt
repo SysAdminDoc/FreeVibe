@@ -412,7 +412,7 @@ fun WallpapersScreen(
         ) {
             if (state.selectedTab == WallpaperTab.DISCOVER) {
                 SmallFloatingActionButton(
-                    onClick = { viewModel.matchMyTheme(context) },
+                    onClick = { viewModel.matchMyTheme() },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 ) {
                     Icon(Icons.Default.Palette, contentDescription = "Match my theme", modifier = Modifier.size(20.dp))
@@ -507,6 +507,17 @@ private fun WallpaperGrid(
 
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) onLoadMore()
+    }
+
+    val topVotedIds by remember(topVoted, isDiscoverTab) {
+        derivedStateOf { if (isDiscoverTab) topVoted.map { it.first.id }.toSet() else emptySet() }
+    }
+    val visibleWallpapers by remember(wallpapers, hiddenIds, topVotedIds, voteCounts) {
+        derivedStateOf {
+            wallpapers
+                .filter { it.id !in hiddenIds && it.id !in topVotedIds }
+                .sortedByDescending { voteCounts[it.id] ?: 0 }
+        }
     }
 
     LazyVerticalStaggeredGrid(
@@ -665,7 +676,6 @@ private fun WallpaperGrid(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                 )
             }
-            val topVotedIds = topVoted.map { it.first.id }.toSet()
             topVoted.filter { it.first.id !in hiddenIds }.take(10).forEach { (wp, votes) ->
                 item(key = "top_${wp.id}") {
                     val isFav = wp.id in favoriteIds
@@ -682,11 +692,7 @@ private fun WallpaperGrid(
             }
         }
 
-        val topVotedIds = if (isDiscoverTab) topVoted.map { it.first.id }.toSet() else emptySet()
-        val visibleWallpapers = wallpapers
-            .filter { it.id !in hiddenIds && it.id !in topVotedIds }
-            .sortedByDescending { voteCounts[it.id] ?: 0 }
-        items(visibleWallpapers, key = { it.id }) { wallpaper ->
+        items(visibleWallpapers, key = { it.id }, contentType = { "wallpaper_card" }) { wallpaper ->
             val isFav = wallpaper.id in favoriteIds
             WallpaperCard(
                 wallpaper = wallpaper,
@@ -701,7 +707,7 @@ private fun WallpaperGrid(
         }
 
         if (isLoadingMore) {
-            item(span = StaggeredGridItemSpan.FullLine) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "loading_more") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

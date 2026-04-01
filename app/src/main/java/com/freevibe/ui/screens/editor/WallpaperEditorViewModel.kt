@@ -157,10 +157,16 @@ class WallpaperEditorViewModel @Inject constructor(
 
     private fun applyFilters() {
         val original = _state.value.originalBitmap ?: return
+        val s = _state.value
+        if (s.brightness == 0f && s.contrast == 1f && s.saturation == 1f &&
+            s.blurRadius == 0f && s.vignette == 0f && s.grain == 0f &&
+            s.amoledCrush == 0f && s.warmth == 0f) {
+            _state.update { it.copy(editedBitmap = original) }
+            return
+        }
         filterJob?.cancel()
         filterJob = viewModelScope.launch {
             _state.update { it.copy(isProcessing = true) }
-            val s = _state.value
             val result = withContext(Dispatchers.Default) {
                 var bmp = applyColorMatrix(original, s.brightness, s.contrast, s.saturation, s.warmth)
                 if (s.blurRadius > 0.5f) {
