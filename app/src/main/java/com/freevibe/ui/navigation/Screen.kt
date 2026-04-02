@@ -96,8 +96,20 @@ sealed class Screen(
         title = "Edit",
         icon = Icons.Filled.Edit,
         selectedIcon = Icons.Filled.Edit,
+        destinationPattern = "wallpaper_editor/{id}?source={source}&thumbnailUrl={thumbnailUrl}&fullUrl={fullUrl}&width={width}&height={height}",
     ) {
         fun createRoute(id: String) = "wallpaper_editor/${Uri.encode(id)}"
+
+        fun createRoute(wallpaper: Wallpaper): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(wallpaper.source.name)}")
+                add("thumbnailUrl=${Uri.encode(wallpaper.thumbnailUrl)}")
+                add("fullUrl=${Uri.encode(wallpaper.fullUrl)}")
+                add("width=${wallpaper.width}")
+                add("height=${wallpaper.height}")
+            }.joinToString("&")
+            return "${createRoute(wallpaper.id)}?$queryParams"
+        }
     }
 
     // ── Sound detail + editor ─────────────────────────────────────
@@ -106,17 +118,40 @@ sealed class Screen(
         title = "Sound",
         icon = Icons.Filled.MusicNote,
         selectedIcon = Icons.Filled.MusicNote,
+        destinationPattern = "sound/{id}?source={source}&name={name}&previewUrl={previewUrl}&downloadUrl={downloadUrl}",
     ) {
         fun createRoute(id: String) = "sound/${Uri.encode(id)}"
+
+        fun createRoute(sound: Sound): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(sound.source.name)}")
+                add("name=${Uri.encode(sound.name)}")
+                add("previewUrl=${Uri.encode(sound.previewUrl)}")
+                add("downloadUrl=${Uri.encode(sound.downloadUrl)}")
+            }.joinToString("&")
+            return "${createRoute(sound.id)}?$queryParams"
+        }
     }
     data object SoundEditor : Screen(
         route = "sound_editor?soundId={soundId}",
         title = "Edit Sound",
         icon = Icons.Filled.ContentCut,
         selectedIcon = Icons.Filled.ContentCut,
+        destinationPattern = "sound_editor?soundId={soundId}&source={source}&name={name}&previewUrl={previewUrl}&downloadUrl={downloadUrl}",
     ) {
         fun createRoute(soundId: String? = null) =
             soundId?.let { "sound_editor?soundId=${Uri.encode(it)}" } ?: "sound_editor"
+
+        fun createRoute(sound: Sound): String {
+            val queryParams = buildList {
+                add("soundId=${Uri.encode(sound.id)}")
+                add("source=${Uri.encode(sound.source.name)}")
+                add("name=${Uri.encode(sound.name)}")
+                add("previewUrl=${Uri.encode(sound.previewUrl)}")
+                add("downloadUrl=${Uri.encode(sound.downloadUrl)}")
+            }.joinToString("&")
+            return "sound_editor?$queryParams"
+        }
     }
 
     // ── Crop/Position ─────────────────────────────────────────────
@@ -125,8 +160,20 @@ sealed class Screen(
         title = "Crop",
         icon = Icons.Filled.Crop,
         selectedIcon = Icons.Filled.Crop,
+        destinationPattern = "wallpaper_crop/{id}?source={source}&thumbnailUrl={thumbnailUrl}&fullUrl={fullUrl}&width={width}&height={height}",
     ) {
         fun createRoute(id: String) = "wallpaper_crop/${Uri.encode(id)}"
+
+        fun createRoute(wallpaper: Wallpaper): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(wallpaper.source.name)}")
+                add("thumbnailUrl=${Uri.encode(wallpaper.thumbnailUrl)}")
+                add("fullUrl=${Uri.encode(wallpaper.fullUrl)}")
+                add("width=${wallpaper.width}")
+                add("height=${wallpaper.height}")
+            }.joinToString("&")
+            return "${createRoute(wallpaper.id)}?$queryParams"
+        }
     }
 
     // ── Contact Ringtone Picker ───────────────────────────────────

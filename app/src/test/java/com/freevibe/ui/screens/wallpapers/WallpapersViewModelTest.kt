@@ -4,6 +4,7 @@ import android.content.Context
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.FavoriteIdentity
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.SearchHistoryEntity
 import com.freevibe.data.model.Wallpaper
@@ -190,9 +191,10 @@ class WallpapersViewModelTest {
         selectedContent: SelectedContentHolder = SelectedContentHolder(),
     ): WallpapersViewModel {
         val favoritesRepo = mockk<FavoritesRepository>()
-        every { favoritesRepo.allIds() } returns flowOf(emptySet())
+        every { favoritesRepo.allIdentities() } returns flowOf(emptySet<FavoriteIdentity>())
         every { favoritesRepo.isFavorite(any()) } returns flowOf(false)
-        coEvery { favoritesRepo.getById(any()) } returns null
+        coEvery { favoritesRepo.getByIdentity(any()) } returns null
+        coEvery { favoritesRepo.getLatestById(any()) } returns null
 
         val searchHistoryRepo = mockk<SearchHistoryRepository>()
         every { searchHistoryRepo.getRecentWallpaperSearches(any()) } returns flowOf(emptyList<SearchHistoryEntity>())

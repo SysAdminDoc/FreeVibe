@@ -5,10 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
+import com.freevibe.data.model.FavoriteIdentity
 import com.freevibe.data.model.Sound
-import com.freevibe.data.remote.toFavoriteEntity
-import com.freevibe.data.remote.toSound
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.model.favoriteIdentity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.AudiusRepository
 import com.freevibe.data.repository.CcMixterRepository
 import com.freevibe.data.repository.FavoritesRepository
@@ -18,11 +19,14 @@ import com.freevibe.data.repository.SoundCloudRepository
 import com.freevibe.data.repository.UploadRepository
 import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.YouTubeRepository
+import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.remote.toSound
 import com.freevibe.service.AudioPlaybackManager
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
+import com.freevibe.service.SoundUrlResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +85,7 @@ class SoundsViewModel @Inject constructor(
     private val audioPlaybackManager: AudioPlaybackManager,
     private val soundCloudRepo: SoundCloudRepository,
     val uploadRepo: UploadRepository,
+    private val soundUrlResolver: SoundUrlResolver,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
@@ -380,46 +385,68 @@ class SoundsViewModel @Inject constructor(
 
     fun selectSound(sound: Sound) { selectedContent.selectSound(sound) }
 
-    suspend fun resolveSound(id: String): Sound? {
-        selectedContent.selectedSound.value?.takeIf { it.id == id }?.let { return it }
+    suspend fun resolveSound(
+        id: String,
+        source: ContentSource? = null,
+        previewUrl: String? = null,
+        downloadUrl: String? = null,
+    ): Sound? {
+        selectedContent.selectedSound.value
+            ?.takeIf { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }
+            ?.let { return it }
 
-        _state.value.sounds.firstOrNull { it.id == id }?.let { return it }
+        _state.value.sounds.firstOrNull { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }?.let { return it }
 
-        _communityUploads.value.firstOrNull { it.id == id }?.let { return it }
+        _communityUploads.value.firstOrNull { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }?.let { return it }
 
-        _topHits.value.firstOrNull { it.id == id }?.let { return it }
+        _topHits.value.firstOrNull { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }?.let { return it }
 
         listOf(
             bundledContent.getRingtones(),
             bundledContent.getNotifications(),
             bundledContent.getAlarms(),
-        ).flatten().firstOrNull { it.id == id }?.let { return it }
+        ).flatten().firstOrNull { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }?.let { return it }
 
-        favoritesRepo.getById(id)
+        (source?.let {
+            favoritesRepo.getByIdentity(
+                FavoriteIdentity(
+                    id = id,
+                    source = it.name,
+                    type = "SOUND",
+                )
+            )
+        } ?: favoritesRepo.getLatestById(id))
             ?.takeIf { it.type == "SOUND" }
             ?.toSound()
+            ?.takeIf { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }
             ?.let { return it }
 
         return null
     }
 
-    suspend fun ensureSelectedSound(id: String): Boolean {
-        val resolved = resolveSound(id) ?: return false
+    suspend fun ensureSelectedSound(
+        id: String,
+        source: ContentSource? = null,
+        previewUrl: String? = null,
+        downloadUrl: String? = null,
+    ): Boolean {
+        val resolved = resolveSound(id, source, previewUrl, downloadUrl) ?: return false
         selectedContent.selectSound(resolved)
         return true
     }
 
     fun togglePlayback(sound: Sound) {
-        if (_state.value.playingId == sound.id) {
+        val soundKey = sound.stableKey()
+        if (_state.value.playingId == soundKey) {
             stopPlayback()
-        } else if (sound.id == _state.value.resolvingId) {
+        } else if (soundKey == _state.value.resolvingId) {
             _state.update { it.copy(resolvingId = null) }
         } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
             viewModelScope.launch {
-                _state.update { it.copy(resolvingId = sound.id) }
+                _state.update { it.copy(resolvingId = soundKey) }
                 val videoId = sound.id.removePrefix("yt_")
                 val url = youtubeRepo.getAudioPreviewUrl(videoId)
-                if (_state.value.resolvingId != sound.id) return@launch // user cancelled
+                if (_state.value.resolvingId != soundKey) return@launch // user cancelled
                 if (url != null) {
                     val updatedSound = cacheResolvedPreview(sound, url)
                     _state.update { it.copy(resolvingId = null) }
@@ -436,10 +463,11 @@ class SoundsViewModel @Inject constructor(
     private fun cacheResolvedPreview(sound: Sound, previewUrl: String): Sound {
         if (previewUrl.isBlank()) return sound
         val updatedSound = sound.copy(previewUrl = previewUrl)
+        val targetKey = updatedSound.stableKey()
 
         _state.update { st ->
             val refreshed = st.sounds.map { existing ->
-                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                if (existing.stableKey() == targetKey && existing.previewUrl != previewUrl) {
                     existing.copy(previewUrl = previewUrl)
                 } else {
                     existing
@@ -449,7 +477,7 @@ class SoundsViewModel @Inject constructor(
         }
         _topHits.update { hits ->
             hits.map { existing ->
-                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                if (existing.stableKey() == targetKey && existing.previewUrl != previewUrl) {
                     existing.copy(previewUrl = previewUrl)
                 } else {
                     existing
@@ -458,7 +486,7 @@ class SoundsViewModel @Inject constructor(
         }
         _communityUploads.update { uploads ->
             uploads.map { existing ->
-                if (existing.id == updatedSound.id && existing.previewUrl != previewUrl) {
+                if (existing.stableKey() == targetKey && existing.previewUrl != previewUrl) {
                     existing.copy(previewUrl = previewUrl)
                 } else {
                     existing
@@ -467,11 +495,11 @@ class SoundsViewModel @Inject constructor(
         }
 
         val currentSelected = selectedContent.selectedSound.value
-        if (currentSelected?.id == updatedSound.id && currentSelected.previewUrl != previewUrl) {
+        if (currentSelected?.stableKey() == targetKey && currentSelected.previewUrl != previewUrl) {
             selectedContent.selectSound(currentSelected.copy(previewUrl = previewUrl))
         }
 
-        return selectedContent.selectedSound.value?.takeIf { it.id == updatedSound.id } ?: updatedSound
+        return selectedContent.selectedSound.value?.takeIf { it.stableKey() == targetKey } ?: updatedSound
     }
 
     private fun startPlayback(sound: Sound) {
@@ -479,7 +507,8 @@ class SoundsViewModel @Inject constructor(
         audioPlaybackManager.play(sound, sound.previewUrl, previewVolume.value)
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
-            while (audioPlaybackManager.currentSoundId.value == sound.id) {
+            val soundKey = sound.stableKey()
+            while (audioPlaybackManager.currentSoundId.value == soundKey) {
                 audioPlaybackManager.pollProgress()
                 val dur = audioPlaybackManager.duration.value
                 val pos = audioPlaybackManager.currentPosition.value
@@ -494,8 +523,8 @@ class SoundsViewModel @Inject constructor(
         if (dur > 0) audioPlaybackManager.seekTo((fraction * dur).toLong())
     }
 
-    fun stopIfPlaying(soundId: String) {
-        if (_state.value.playingId == soundId) stopPlayback()
+    fun stopIfPlaying(sound: Sound) {
+        if (_state.value.playingId == sound.stableKey()) stopPlayback()
     }
 
     private fun stopPlayback() {
@@ -512,7 +541,13 @@ class SoundsViewModel @Inject constructor(
             val url = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
                 youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_"))
                     ?: run { _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }; return@launch }
-            } else sound.downloadUrl
+            } else {
+                soundUrlResolver.resolve(sound)
+                    ?: run {
+                        _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }
+                        return@launch
+                    }
+            }
             soundApplier.downloadAndApply(url, sound.name, type)
                 .onSuccess {
                     val label = when (type) {
@@ -534,7 +569,12 @@ class SoundsViewModel @Inject constructor(
                     _state.update { it.copy(error = "Could not resolve audio stream URL") }
                     return@launch
                 }
-            } else sound.downloadUrl
+            } else {
+                soundUrlResolver.resolve(sound) ?: run {
+                    _state.update { it.copy(error = "Could not resolve audio stream URL") }
+                    return@launch
+                }
+            }
             val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3").lowercase()
             downloadManager.downloadSound(
                 id = sound.id, url = dlUrl,
@@ -551,16 +591,15 @@ class SoundsViewModel @Inject constructor(
     fun toggleFavorite(sound: Sound) {
         viewModelScope.launch {
             val entity = sound.toFavoriteEntity()
-            val isFav = favoritesRepo.isFavorite(sound.id).first()
+            val isFav = favoritesRepo.isFavorite(sound.favoriteIdentity()).first()
             favoritesRepo.toggle(entity, isFav)
             _state.update { it.copy(applySuccess = if (isFav) "Removed from favorites" else "Added to favorites") }
         }
     }
 
-    fun isFavorite(id: String): Flow<Boolean> = favoritesRepo.isFavorite(id)
+    fun isFavorite(sound: Sound): Flow<Boolean> = favoritesRepo.isFavorite(sound.favoriteIdentity())
 
-    suspend fun loadSimilar(soundId: String): List<Sound> {
-        val sound = resolveSound(soundId) ?: return emptyList()
+    suspend fun loadSimilar(sound: Sound): List<Sound> {
         val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
             .filter { it.length > 2 }.take(4).joinToString(" ")
         if (keywords.isBlank()) return emptyList()
@@ -569,10 +608,10 @@ class SoundsViewModel @Inject constructor(
                 query = keywords,
                 minDuration = 1.0,
                 maxDuration = 60.0,
-            ).items.filter { it.id != soundId }
+            ).items.filter { it.stableKey() != sound.stableKey() }
             val fallbackResults = if (richerResults.isEmpty()) {
                 freesoundRepo.search(query = keywords, minDuration = 1.0, maxDuration = 60.0).items
-                    .filter { it.id != soundId }
+                    .filter { it.stableKey() != sound.stableKey() }
             } else {
                 emptyList()
             }
@@ -581,13 +620,13 @@ class SoundsViewModel @Inject constructor(
                 minDuration = 1,
                 maxDuration = 60,
                 limit = 8,
-            ).items.filter { it.id != soundId }
+            ).items.filter { it.stableKey() != sound.stableKey() }
             val ccMixterResults = ccMixterRepo.search(
                 query = keywords,
                 minDuration = 1.0,
                 maxDuration = 60.0,
                 limit = 8,
-            ).items.filter { it.id != soundId }
+            ).items.filter { it.stableKey() != sound.stableKey() }
             rankSounds(
                 sounds = richerResults + fallbackResults + audiusResults + ccMixterResults,
                 tab = SoundTab.SEARCH,
@@ -657,7 +696,7 @@ class SoundsViewModel @Inject constructor(
 
             val allResults = mutableListOf<Sound>()
             val resultLock = Any()
-            val seenIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+            val seenKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
             val seenFingerprints = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
             val pagedSourcesHaveMore = AtomicBoolean(false)
             val firstFailure = AtomicReference<Exception?>(null)
@@ -665,7 +704,7 @@ class SoundsViewModel @Inject constructor(
 
             if (loadMore) {
                 s.sounds.forEach { sound ->
-                    seenIds.add(sound.id)
+                    seenKeys.add(sound.stableKey())
                     seenFingerprints.add(soundFingerprint(sound))
                 }
             }
@@ -680,7 +719,7 @@ class SoundsViewModel @Inject constructor(
                 }
                 if (bundled.isNotEmpty()) {
                     bundled.forEach {
-                        seenIds.add(it.id)
+                        seenKeys.add(it.stableKey())
                         seenFingerprints.add(soundFingerprint(it))
                     }
                     synchronized(resultLock) { allResults.addAll(bundled) }
@@ -696,7 +735,7 @@ class SoundsViewModel @Inject constructor(
             fun addUnique(sound: Sound): Boolean {
                 if (titleBlocklist.containsMatchIn(sound.name)) return false
                 val fingerprint = soundFingerprint(sound)
-                return if (seenIds.add(sound.id) && seenFingerprints.add(fingerprint)) {
+                return if (seenKeys.add(sound.stableKey()) && seenFingerprints.add(fingerprint)) {
                     synchronized(resultLock) { allResults.add(sound) }
                     true
                 } else {
@@ -711,8 +750,13 @@ class SoundsViewModel @Inject constructor(
                         tab = loadTab,
                         filter = st.qualityFilter,
                     )
+                    val existingKeys = st.sounds.mapTo(mutableSetOf()) { it.stableKey() }
                     st.copy(
-                        sounds = if (loadMore) st.sounds + snapshot.filter { snd -> st.sounds.none { it.id == snd.id } } else snapshot,
+                        sounds = if (loadMore) {
+                            st.sounds + snapshot.filter { snd -> existingKeys.add(snd.stableKey()) }
+                        } else {
+                            snapshot
+                        },
                     )
                 }
             }
@@ -885,7 +929,10 @@ class SoundsViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         sounds = when {
-                            loadMore -> it.sounds + combined.filter { snd -> it.sounds.none { e -> e.id == snd.id } }
+                            loadMore -> {
+                                val existingKeys = it.sounds.mapTo(mutableSetOf()) { sound -> sound.stableKey() }
+                                it.sounds + combined.filter { snd -> existingKeys.add(snd.stableKey()) }
+                            }
                             preserveCurrentFeed -> it.sounds
                             else -> combined
                         },
@@ -1097,4 +1144,18 @@ class SoundsViewModel @Inject constructor(
             }
         }
     }
+}
+
+internal fun matchesSoundIdentity(
+    sound: Sound,
+    id: String,
+    source: ContentSource? = null,
+    previewUrl: String? = null,
+    downloadUrl: String? = null,
+): Boolean {
+    if (sound.id != id) return false
+    if (source != null && sound.source != source) return false
+    if (!previewUrl.isNullOrBlank() && sound.previewUrl != previewUrl) return false
+    if (!downloadUrl.isNullOrBlank() && sound.downloadUrl != downloadUrl) return false
+    return true
 }

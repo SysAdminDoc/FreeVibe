@@ -27,12 +27,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpaperCropScreen(
     wallpaperId: String,
+    fallbackWallpaper: Wallpaper? = null,
     onBack: () -> Unit,
     recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = hiltViewModel(),
     viewModel: WallpaperCropViewModel = hiltViewModel(),
@@ -40,7 +42,14 @@ fun WallpaperCropScreen(
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    var selectionResolved by remember(wallpaperId) { mutableStateOf<Boolean?>(null) }
+    val cropIdentityKey = remember(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
+        listOf(
+            wallpaperId,
+            fallbackWallpaper?.source?.name.orEmpty(),
+            fallbackWallpaper?.fullUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var selectionResolved by remember(cropIdentityKey) { mutableStateOf<Boolean?>(null) }
 
     // Gesture state — survives configuration changes
     var scale by rememberSaveable { mutableFloatStateOf(1f) }
@@ -53,11 +62,17 @@ fun WallpaperCropScreen(
     LaunchedEffect(state.error) {
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearMessages() }
     }
-    LaunchedEffect(wallpaperId) {
+    LaunchedEffect(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
-        val wallpaper = recoveryViewModel.resolveWallpaper(wallpaperId)
+        val wallpaper = fallbackWallpaper?.let {
+            recoveryViewModel.resolveWallpaper(
+                id = wallpaperId,
+                source = it.source,
+                fullUrl = it.fullUrl,
+            ) ?: it
+        } ?: recoveryViewModel.resolveWallpaper(wallpaperId)
         selectionResolved = wallpaper?.let { viewModel.loadWallpaper(it) } ?: false
     }
 

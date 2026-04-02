@@ -37,6 +37,7 @@ import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.ContactInfo
 import com.freevibe.service.ContactRingtoneService
 import com.freevibe.service.SoundApplier
+import com.freevibe.service.SoundUrlResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -63,6 +64,7 @@ class ContactPickerViewModel @Inject constructor(
     private val soundApplier: SoundApplier,
     private val favoritesRepo: FavoritesRepository,
     private val bundledContent: BundledContentProvider,
+    private val soundUrlResolver: SoundUrlResolver,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactPickerState())
@@ -75,7 +77,13 @@ class ContactPickerViewModel @Inject constructor(
     }
 
     suspend fun ensureSelectedSound(soundId: String, fallbackSound: Sound?): Boolean {
-        val sound = resolveSound(soundId) ?: fallbackSound ?: run {
+        val resolved = resolveSound(soundId)
+        val sound = when {
+            fallbackSound == null -> resolved
+            resolved == null -> fallbackSound
+            matchesFallbackIdentity(resolved, fallbackSound) -> resolved
+            else -> fallbackSound
+        } ?: run {
             _state.update { it.copy(selectedSound = null) }
             return false
         }
@@ -110,13 +118,13 @@ class ContactPickerViewModel @Inject constructor(
             _state.update { it.copy(error = "No sound selected") }
             return
         }
-        val dlUrl = sound.downloadUrl.ifEmpty { sound.previewUrl }
-        if (dlUrl.isBlank()) {
-            _state.update { it.copy(error = "No download URL available for this sound") }
-            return
-        }
         _state.update { it.copy(isApplying = true) }
         viewModelScope.launch {
+            val dlUrl = soundUrlResolver.resolve(sound)
+            if (dlUrl.isNullOrBlank()) {
+                _state.update { it.copy(isApplying = false, error = "No download URL available for this sound") }
+                return@launch
+            }
             soundApplier.downloadOnly(dlUrl, sound.name, ContentType.RINGTONE)
                 .onSuccess { uri ->
                     contactService.setContactRingtone(contactId, uri)
@@ -136,7 +144,7 @@ class ContactPickerViewModel @Inject constructor(
     fun clearMessages() = _state.update { it.copy(success = null, error = null) }
 
     private suspend fun resolveSound(soundId: String): Sound? {
-        favoritesRepo.getById(soundId)
+        favoritesRepo.getLatestById(soundId)
             ?.takeIf { it.type == "SOUND" }
             ?.toSound()
             ?.let { return it }
@@ -146,6 +154,14 @@ class ContactPickerViewModel @Inject constructor(
             bundledContent.getNotifications(),
             bundledContent.getAlarms(),
         ).flatten().firstOrNull { it.id == soundId }
+    }
+
+    private fun matchesFallbackIdentity(sound: Sound, fallbackSound: Sound): Boolean {
+        if (sound.id != fallbackSound.id) return false
+        if (sound.source != fallbackSound.source) return false
+        if (fallbackSound.previewUrl.isNotBlank() && sound.previewUrl != fallbackSound.previewUrl) return false
+        if (fallbackSound.downloadUrl.isNotBlank() && sound.downloadUrl != fallbackSound.downloadUrl) return false
+        return true
     }
 }
 
@@ -162,7 +178,15 @@ fun ContactPickerScreen(
     val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var permissionPermanentlyDenied by remember { mutableStateOf(false) }
-    var soundResolved by remember(soundId) { mutableStateOf<Boolean?>(null) }
+    val soundIdentityKey = remember(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl) {
+        listOf(
+            soundId,
+            fallbackSound?.source?.name.orEmpty(),
+            fallbackSound?.previewUrl.orEmpty(),
+            fallbackSound?.downloadUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var soundResolved by remember(soundIdentityKey) { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(soundId, fallbackSound?.id, fallbackSound?.downloadUrl, fallbackSound?.previewUrl) {
         soundResolved = viewModel.ensureSelectedSound(soundId, fallbackSound)

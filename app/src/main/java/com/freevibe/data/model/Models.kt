@@ -3,6 +3,7 @@ package com.freevibe.data.model
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.Locale
 
 // -- Unified content types --
 
@@ -49,11 +50,23 @@ data class Sound(
     val sourcePageUrl: String = "",
 )
 
+data class FavoriteIdentity(
+    val id: String,
+    val source: String,
+    val type: String,
+) {
+    fun stableKey(): String = "$type::$source::$id"
+}
+
 // -- Favorites (Room entity) --
 
-@Entity(tableName = "favorites", indices = [Index("type"), Index("addedAt"), Index("type", "addedAt")])
+@Entity(
+    tableName = "favorites",
+    primaryKeys = ["id", "source", "type"],
+    indices = [Index("type"), Index("addedAt"), Index("type", "addedAt")],
+)
 data class FavoriteEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     val source: String,
     val type: String,           // WALLPAPER or SOUND
     val thumbnailUrl: String,
@@ -74,6 +87,30 @@ data class FavoriteEntity(
     val views: Long? = null,
     val favoritesCount: Long? = null,
 )
+
+fun Wallpaper.favoriteIdentity() = FavoriteIdentity(
+    id = id,
+    source = source.name,
+    type = "WALLPAPER",
+)
+
+fun Sound.favoriteIdentity() = FavoriteIdentity(
+    id = id,
+    source = source.name,
+    type = "SOUND",
+)
+
+fun FavoriteEntity.favoriteIdentity() = FavoriteIdentity(
+    id = id,
+    source = source.uppercase(Locale.ROOT),
+    type = type.uppercase(Locale.ROOT),
+)
+
+fun Wallpaper.stableKey(): String = favoriteIdentity().stableKey()
+
+fun Sound.stableKey(): String = favoriteIdentity().stableKey()
+
+fun FavoriteEntity.stableKey(): String = favoriteIdentity().stableKey()
 
 // -- Download history (Room entity) --
 
@@ -161,7 +198,7 @@ data class WallpaperCollectionEntity(
 
 @Entity(
     tableName = "wallpaper_collection_items",
-    primaryKeys = ["collectionId", "wallpaperId"],
+    primaryKeys = ["collectionId", "wallpaperId", "source"],
     foreignKeys = [
         androidx.room.ForeignKey(
             entity = WallpaperCollectionEntity::class,
@@ -182,6 +219,9 @@ data class WallpaperCollectionItemEntity(
     val height: Int = 0,
     val addedAt: Long = System.currentTimeMillis(),
 )
+
+fun WallpaperCollectionItemEntity.stableKey(): String =
+    "$collectionId::${source.uppercase(Locale.ROOT)}::$wallpaperId"
 
 // -- Dual wallpaper pair --
 

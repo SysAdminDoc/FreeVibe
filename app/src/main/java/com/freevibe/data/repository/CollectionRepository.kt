@@ -39,8 +39,8 @@ class CollectionRepository @Inject constructor(
         )
     }
 
-    suspend fun removeWallpaper(collectionId: Long, wallpaperId: String) =
-        dao.removeItem(collectionId, wallpaperId)
+    suspend fun removeWallpaper(collectionId: Long, wallpaper: Wallpaper) =
+        dao.removeItem(collectionId, wallpaper.id, wallpaper.source.name)
 
     suspend fun delete(collectionId: Long) {
         dao.deleteCollectionItems(collectionId) // Explicit delete (PRAGMA foreign_keys is per-connection)
@@ -50,6 +50,6 @@ class CollectionRepository @Inject constructor(
     suspend fun rename(collectionId: Long, name: String) =
         dao.renameCollection(collectionId, name)
 
-    suspend fun isInCollection(collectionId: Long, wallpaperId: String): Boolean =
-        dao.isInCollection(collectionId, wallpaperId)
+    suspend fun isInCollection(collectionId: Long, wallpaper: Wallpaper): Boolean =
+        dao.isInCollection(collectionId, wallpaper.id, wallpaper.source.name)
 }

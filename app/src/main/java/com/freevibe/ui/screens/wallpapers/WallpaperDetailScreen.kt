@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.data.model.stableKey
 import com.freevibe.service.ParallaxWallpaperService
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.launchLiveWallpaperPicker
@@ -41,8 +42,8 @@ fun WallpaperDetailScreen(
     wallpaperId: String,
     fallbackWallpaper: com.freevibe.data.model.Wallpaper? = null,
     onBack: () -> Unit,
-    onEdit: (String) -> Unit = {},
-    onCrop: (String) -> Unit = {},
+    onEdit: (com.freevibe.data.model.Wallpaper) -> Unit = {},
+    onCrop: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     onSearchColor: (String) -> Unit = {},
     onFindSimilar: (String) -> Unit = {},
@@ -50,6 +51,7 @@ fun WallpaperDetailScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val sharedList by viewModel.sharedWallpaperList.collectAsState()
+    val sharedListAnchorKey by viewModel.sharedWallpaperListAnchorKey.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
     var restoreResolved by remember(wallpaperId) { mutableStateOf(false) }
     var resolvedWallpaper by remember(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
@@ -57,7 +59,11 @@ fun WallpaperDetailScreen(
     }
 
     LaunchedEffect(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
-        resolvedWallpaper = viewModel.resolveWallpaper(wallpaperId) ?: fallbackWallpaper
+        resolvedWallpaper = viewModel.resolveWallpaper(
+            id = wallpaperId,
+            source = fallbackWallpaper?.source,
+            fullUrl = fallbackWallpaper?.fullUrl,
+        ) ?: fallbackWallpaper
         restoreResolved = true
     }
 
@@ -84,14 +90,15 @@ fun WallpaperDetailScreen(
         return
     }
 
-    val wallpapers = remember(initialWp, sharedList, hiddenIds) {
-        buildList {
-            add(initialWp)
-            addAll(sharedList)
-        }
-            .distinctBy { it.id }
-            .filter { it.id !in hiddenIds }
+    val pagerItems = remember(initialWp, sharedList, sharedListAnchorKey, hiddenIds) {
+        computeWallpaperPagerItems(
+            currentWallpaper = initialWp,
+            sharedWallpapers = sharedList,
+            hiddenIds = hiddenIds,
+            sharedListAnchorKey = sharedListAnchorKey,
+        )
     }
+    val wallpapers = pagerItems.wallpapers
 
     if (wallpapers.isEmpty()) {
         LaunchedEffect(Unit) { onBack() }
@@ -99,7 +106,14 @@ fun WallpaperDetailScreen(
     }
 
     // Track which wallpaper the pager is currently showing
-    val pagerState = rememberPagerState(initialPage = 0) { wallpapers.size }
+    val initialPage = pagerItems.initialPage
+    val pagerState = rememberPagerState(initialPage = initialPage) { wallpapers.size }
+
+    LaunchedEffect(initialPage, wallpapers.size) {
+        if (wallpapers.isNotEmpty()) {
+            pagerState.scrollToPage(initialPage.coerceIn(0, wallpapers.lastIndex))
+        }
+    }
 
     // Clamp page when list shrinks (e.g. downvote hides item near end)
     LaunchedEffect(wallpapers.size) {
@@ -120,7 +134,7 @@ fun WallpaperDetailScreen(
     // Use pager's current wallpaper for UI (not the reactive wp which causes reorder)
     val wp = currentWp
 
-    val isFavorite by viewModel.isFavorite(wp.id).collectAsState(initial = false)
+    val isFavorite by viewModel.isFavorite(wp).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
     val voteCount by viewModel.getVoteCount(wp.id).collectAsState(initial = 0)
 
@@ -384,8 +398,8 @@ fun WallpaperDetailScreen(
             if (showMoreMenu) {
                 MoreActionsSheet(
                     onDismiss = { showMoreMenu = false },
-                    onEdit = { showMoreMenu = false; onEdit(wp.id) },
-                    onCrop = { showMoreMenu = false; onCrop(wp.id) },
+                    onEdit = { showMoreMenu = false; onEdit(wp) },
+                    onCrop = { showMoreMenu = false; onCrop(wp) },
                     onCollection = { showMoreMenu = false; showCollectionPicker = true },
                     onFindSimilar = {
                         showMoreMenu = false

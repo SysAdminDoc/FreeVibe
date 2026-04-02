@@ -2,6 +2,8 @@ package com.freevibe.service
 
 import android.content.Context
 import com.freevibe.data.local.FavoriteDao
+import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.model.stableKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -30,21 +32,28 @@ class OfflineFavoritesManager @Inject constructor(
     private val offlineDir = File(context.filesDir, "offline_favorites").apply { mkdirs() }
 
     /** Cache a favorite's content locally. Returns local file path or null. */
-    suspend fun cacheOffline(id: String, url: String, type: String): String? =
+    suspend fun cacheOffline(favorite: FavoriteEntity, url: String): String? =
         withContext(Dispatchers.IO) {
             try {
                 val ext = when {
-                    type == "SOUND" -> url.substringBefore("?").substringAfterLast(".", "mp3")
+                    favorite.type == "SOUND" -> url.substringBefore("?").substringAfterLast(".", "mp3")
                     url.contains(".png", true) -> "png"
                     url.contains(".webp", true) -> "webp"
                     else -> "jpg"
                 }
-                val safeId = id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                val file = File(offlineDir, "$safeId.$ext")
+                val safeKey = favorite.stableKey().replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                val legacySafeId = favorite.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                val file = File(offlineDir, "$safeKey.$ext")
+                val legacyFile = offlineDir.listFiles()
+                    ?.firstOrNull { it.name.startsWith("$legacySafeId.") && it.length() > 0 }
                 if (file.exists() && file.length() > 0) {
                     // Already cached
-                    favoriteDao.updateOfflinePath(id, file.absolutePath)
+                    favoriteDao.updateOfflinePath(favorite.id, favorite.source, favorite.type, file.absolutePath)
                     return@withContext file.absolutePath
+                }
+                if (legacyFile != null) {
+                    favoriteDao.updateOfflinePath(favorite.id, favorite.source, favorite.type, legacyFile.absolutePath)
+                    return@withContext legacyFile.absolutePath
                 }
 
                 val request = Request.Builder().url(url).build()
@@ -70,22 +79,25 @@ class OfflineFavoritesManager @Inject constructor(
                 }
 
                 if (file.exists() && file.length() > 0) {
-                    favoriteDao.updateOfflinePath(id, file.absolutePath)
+                    favoriteDao.updateOfflinePath(favorite.id, favorite.source, favorite.type, file.absolutePath)
                     enforceStorageBudget(protectedPaths = setOf(file.absolutePath))
                     file.absolutePath
                 } else null
             } catch (e: Exception) {
-                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.w("OfflineFavMgr", "cacheOffline failed for $id: ${e.message}")
+                if (com.freevibe.BuildConfig.DEBUG) android.util.Log.w("OfflineFavMgr", "cacheOffline failed for ${favorite.id}: ${e.message}")
                 null
             }
         }
 
     /** Remove offline cache for an item */
-    suspend fun removeOffline(id: String) = withContext(Dispatchers.IO) {
-        val safeId = id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        offlineDir.listFiles()?.filter { it.name.startsWith("$safeId.") }
+    suspend fun removeOffline(favorite: FavoriteEntity) = withContext(Dispatchers.IO) {
+        val safeKey = favorite.stableKey().replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val legacySafeId = favorite.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        offlineDir.listFiles()?.filter {
+            it.name.startsWith("$safeKey.") || it.name.startsWith("$legacySafeId.")
+        }
             ?.forEach { it.delete() }
-        favoriteDao.updateOfflinePath(id, "")
+        favoriteDao.updateOfflinePath(favorite.id, favorite.source, favorite.type, "")
     }
 
     /** Get total cache size in bytes */
@@ -103,7 +115,7 @@ class OfflineFavoritesManager @Inject constructor(
 
         favorites
             .filter { it.offlinePath.isNotBlank() && !File(it.offlinePath).exists() }
-            .forEach { favoriteDao.updateOfflinePath(it.id, "") }
+            .forEach { favoriteDao.updateOfflinePath(it.id, it.source, it.type, "") }
 
         enforceStorageBudget()
     }
@@ -124,7 +136,9 @@ class OfflineFavoritesManager @Inject constructor(
             if (totalBytes <= MAX_CACHE_BYTES || file.absolutePath in protectedPaths) continue
             val fileSize = file.length()
             if (file.delete()) {
-                favoritesByPath[file.absolutePath]?.let { favoriteDao.updateOfflinePath(it.id, "") }
+                favoritesByPath[file.absolutePath]?.let {
+                    favoriteDao.updateOfflinePath(it.id, it.source, it.type, "")
+                }
                 totalBytes -= fileSize
             }
         }
@@ -136,7 +150,7 @@ class OfflineFavoritesManager @Inject constructor(
         // Clear stale offlinePath values in DB so favorites don't reference deleted files
         val allFavs = favoriteDao.getAll().first()
         allFavs.filter { it.offlinePath.isNotEmpty() }.forEach { fav ->
-            favoriteDao.updateOfflinePath(fav.id, "")
+            favoriteDao.updateOfflinePath(fav.id, fav.source, fav.type, "")
         }
     }
 }

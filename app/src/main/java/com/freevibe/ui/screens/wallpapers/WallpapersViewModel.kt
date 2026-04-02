@@ -4,17 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.FavoriteIdentity
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
-import com.freevibe.data.remote.toFavoriteEntity
-import com.freevibe.data.remote.toWallpaper
-import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.favoriteIdentity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.WallpaperRepository
+import com.freevibe.data.remote.toFavoriteEntity
+import com.freevibe.data.remote.toWallpaper
 import com.freevibe.service.ColorExtractor
 import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.DownloadManager
@@ -84,6 +87,7 @@ class WallpapersViewModel @Inject constructor(
 
     val selectedWallpaper = selectedContent.selectedWallpaper
     val sharedWallpaperList = selectedContent.wallpaperList
+    val sharedWallpaperListAnchorKey = selectedContent.wallpaperListAnchorKey
 
     val activeDownloads = downloadManager.activeDownloads
 
@@ -94,7 +98,7 @@ class WallpapersViewModel @Inject constructor(
         .map { list -> list.map { it.query } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val favoriteIds = favoritesRepo.allIds()
+    val favoriteIdentities = favoritesRepo.allIdentities()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     /** Reddit's most upvoted wallpaper today — crowd-sourced quality metric */
@@ -120,7 +124,7 @@ class WallpapersViewModel @Inject constructor(
                 // Firebase stores sanitized keys — try both original and sanitized IDs
                 val allIds = topIds.flatMap { (id, _) -> listOf(id, id.replace("_", "."), id.replace("_", "/")) }.distinct()
                 val cachedWallpapers = cacheManager.getByIds(allIds)
-                val wallpapers = (seedWallpapers + cachedWallpapers).distinctBy { it.id }
+                val wallpapers = (seedWallpapers + cachedWallpapers).distinctBy { it.stableKey() }
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Resolved ${wallpapers.size} wallpapers from seed/cache for ${allIds.size} ID variants")
 
                 val voteMap = topIds.toMap()
@@ -130,7 +134,7 @@ class WallpapersViewModel @Inject constructor(
                         voteMap[wp.id]?.let { wp to it }
                             ?: voteMap[sanitized]?.let { wp to it }
                     }
-                    .distinctBy { it.first.id }
+                    .distinctBy { it.first.stableKey() }
                     .sortedByDescending { it.second }
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Final top voted: ${sorted.size} wallpapers, top=${sorted.firstOrNull()?.let { "${it.first.id}=${it.second}" }}")
                 _topVoted.value = sorted
@@ -316,15 +320,22 @@ class WallpapersViewModel @Inject constructor(
         loadWallpapers(loadMore = true)
     }
 
-    fun selectWallpaper(wallpaper: Wallpaper) {
-        selectedContent.selectWallpaper(wallpaper, _state.value.wallpapers)
+    fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper> = _state.value.wallpapers) {
+        selectedContent.selectWallpaper(wallpaper, wallpapers)
     }
 
-    suspend fun resolveWallpaper(id: String): Wallpaper? =
-        resolveWallpaperSelection(id)?.first
+    suspend fun resolveWallpaper(
+        id: String,
+        source: ContentSource? = null,
+        fullUrl: String? = null,
+    ): Wallpaper? = resolveWallpaperSelection(id, source, fullUrl)?.first
 
-    suspend fun ensureSelectedWallpaper(id: String): Boolean {
-        val resolved = resolveWallpaperSelection(id) ?: return false
+    suspend fun ensureSelectedWallpaper(
+        id: String,
+        source: ContentSource? = null,
+        fullUrl: String? = null,
+    ): Boolean {
+        val resolved = resolveWallpaperSelection(id, source, fullUrl) ?: return false
         selectedContent.selectWallpaper(resolved.first, resolved.second.ifEmpty { listOf(resolved.first) })
         return true
     }
@@ -422,19 +433,19 @@ class WallpapersViewModel @Inject constructor(
     fun toggleFavorite(wallpaper: Wallpaper) {
         viewModelScope.launch {
             val entity = wallpaper.toFavoriteEntity()
-            val isFav = favoritesRepo.isFavorite(wallpaper.id).first()
+            val isFav = favoritesRepo.isFavorite(wallpaper.favoriteIdentity()).first()
             favoritesRepo.toggle(entity, isFav)
             // #3: Cache offline when favoriting
             if (!isFav) {
-                offlineFavorites.cacheOffline(wallpaper.id, wallpaper.fullUrl, "WALLPAPER")
+                offlineFavorites.cacheOffline(entity, wallpaper.fullUrl)
             } else {
-                offlineFavorites.removeOffline(wallpaper.id)
+                offlineFavorites.removeOffline(entity)
             }
             _state.update { it.copy(applySuccess = if (isFav) "Removed from favorites" else "Added to favorites") }
         }
     }
 
-    fun isFavorite(id: String): Flow<Boolean> = favoritesRepo.isFavorite(id)
+    fun isFavorite(wallpaper: Wallpaper): Flow<Boolean> = favoritesRepo.isFavorite(wallpaper.favoriteIdentity())
 
     fun clearError() = _state.update { it.copy(error = null, errorSource = null) }
     fun clearSuccess() = _state.update { it.copy(applySuccess = null) }
@@ -621,9 +632,9 @@ class WallpapersViewModel @Inject constructor(
                 }
                 // Color-similar via dominant color
                 if (wallpaper.colors.isNotEmpty()) {
-                    val existingIds = results.map { it.id }.toSet()
+                    val existingIds = results.map { it.stableKey() }.toSet()
                     val colorResult = wallpaperRepo.searchByColor(wallpaper.colors.first().removePrefix("#"))
-                    results.addAll(colorResult.items.filter { it.id !in existingIds })
+                    results.addAll(colorResult.items.filter { it.stableKey() !in existingIds })
                 }
                 _state.update { it.copy(wallpapers = results, isLoading = false, hasMore = false) }
             } catch (e: Exception) {
@@ -687,39 +698,64 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
-    private suspend fun resolveWallpaperSelection(id: String): Pair<Wallpaper, List<Wallpaper>>? {
-        selectedContent.selectedWallpaper.value?.takeIf { it.id == id }?.let {
-            val shared = selectedContent.wallpaperList.value
-            return it to shared.ifEmpty { listOf(it) }
-        }
-
+    private suspend fun resolveWallpaperSelection(
+        id: String,
+        source: ContentSource? = null,
+        fullUrl: String? = null,
+    ): Pair<Wallpaper, List<Wallpaper>>? {
         val shared = selectedContent.wallpaperList.value
-        shared.firstOrNull { it.id == id }?.let {
-            return it to shared
+        val sharedAnchorKey = selectedContent.wallpaperListAnchorKey.value
+        selectedContent.selectedWallpaper.value
+            ?.takeIf { matchesWallpaperIdentity(it, id, source, fullUrl) }
+            ?.let {
+                return it to if (shared.isNotEmpty() && sharedAnchorKey == it.stableKey()) {
+                    shared
+                } else {
+                    listOf(it)
+                }
+            }
+
+        shared.firstOrNull { matchesWallpaperIdentity(it, id, source, fullUrl) }?.let {
+            return it to if (shared.isNotEmpty() && sharedAnchorKey == it.stableKey()) {
+                shared
+            } else {
+                listOf(it)
+            }
         }
 
         val current = _state.value.wallpapers
-        current.firstOrNull { it.id == id }?.let {
+        current.firstOrNull { matchesWallpaperIdentity(it, id, source, fullUrl) }?.let {
             return it to current
         }
 
         val topVotedWallpapers = _topVoted.value.map { pair -> pair.first }
-        topVotedWallpapers.firstOrNull { it.id == id }?.let {
+        topVotedWallpapers.firstOrNull { matchesWallpaperIdentity(it, id, source, fullUrl) }?.let {
             return it to topVotedWallpapers
         }
 
-        _dailyPick.value?.takeIf { it.id == id }?.let {
+        _dailyPick.value?.takeIf { matchesWallpaperIdentity(it, id, source, fullUrl) }?.let {
             return it to listOf(it)
         }
 
-        favoritesRepo.getById(id)
+        (source?.let {
+            favoritesRepo.getByIdentity(
+                FavoriteIdentity(
+                    id = id,
+                    source = it.name,
+                    type = "WALLPAPER",
+                )
+            )
+        } ?: favoritesRepo.getLatestById(id))
             ?.takeIf { it.type == "WALLPAPER" }
             ?.toWallpaper()
+            ?.takeIf { matchesWallpaperIdentity(it, id, source, fullUrl) }
             ?.let {
                 return it to listOf(it)
             }
 
-        cacheManager.getByIds(listOf(id)).firstOrNull()?.let {
+        cacheManager.getByIds(listOf(id)).firstOrNull {
+            matchesWallpaperIdentity(it, id, source, fullUrl)
+        }?.let {
             return it to listOf(it)
         }
 
@@ -739,4 +775,15 @@ class WallpapersViewModel @Inject constructor(
         }
         else -> e.message ?: "Failed to load wallpapers"
     }
+}
+
+internal fun matchesWallpaperIdentity(
+    wallpaper: Wallpaper,
+    id: String,
+    source: ContentSource? = null,
+    fullUrl: String? = null,
+): Boolean {
+    if (wallpaper.id != id) return false
+    if (source != null && wallpaper.source != source) return false
+    return fullUrl.isNullOrBlank() || wallpaper.fullUrl == fullUrl
 }
