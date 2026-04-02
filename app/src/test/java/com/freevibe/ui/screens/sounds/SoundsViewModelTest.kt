@@ -6,6 +6,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.SearchHistoryEntity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.AudiusRepository
 import com.freevibe.data.repository.CcMixterRepository
 import com.freevibe.data.repository.FavoritesRepository
@@ -21,11 +22,13 @@ import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
+import com.freevibe.service.SoundUrlResolver
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -431,6 +434,51 @@ class SoundsViewModelTest {
         assertEquals("No internet connection. Showing your last good results.", state.error)
     }
 
+    @Test
+    fun `stopIfPlaying stops matching stable-key playback`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+        val currentSoundId = MutableStateFlow<String?>(null)
+        val audioPlaybackManager = mockk<AudioPlaybackManager>(relaxed = true)
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+        every { audioPlaybackManager.currentSoundId } returns currentSoundId
+        every { audioPlaybackManager.currentPosition } returns MutableStateFlow(0L)
+        every { audioPlaybackManager.duration } returns MutableStateFlow(1_000L)
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+            audioPlaybackManagerOverride = audioPlaybackManager,
+        )
+
+        advanceUntilIdle()
+
+        val sound = testSound("dup_sound", ContentSource.BUNDLED, "Aura Bell")
+        viewModel.selectSound(sound)
+        currentSoundId.value = sound.stableKey()
+        advanceUntilIdle()
+
+        viewModel.stopIfPlaying(sound)
+
+        verify(exactly = 1) { audioPlaybackManager.stop() }
+    }
+
     private fun createViewModel(
         youtubeRepo: YouTubeRepository,
         freesoundRepo: FreesoundRepository,
@@ -441,6 +489,7 @@ class SoundsViewModelTest {
         bundledRingtones: List<Sound> = emptyList(),
         bundledNotifications: List<Sound> = emptyList(),
         bundledAlarms: List<Sound> = emptyList(),
+        audioPlaybackManagerOverride: AudioPlaybackManager? = null,
     ): SoundsViewModel {
         val prefs = mockk<PreferencesManager>()
         every { prefs.autoPreviewSounds } returns flowOf(true)
@@ -461,10 +510,14 @@ class SoundsViewModelTest {
         every { bundledContent.getNotifications() } returns bundledNotifications
         every { bundledContent.getAlarms() } returns bundledAlarms
 
-        val audioPlaybackManager = mockk<AudioPlaybackManager>(relaxed = true)
-        every { audioPlaybackManager.currentSoundId } returns MutableStateFlow(null)
-        every { audioPlaybackManager.currentPosition } returns MutableStateFlow(0L)
-        every { audioPlaybackManager.duration } returns MutableStateFlow(0L)
+        val audioPlaybackManager = audioPlaybackManagerOverride ?: mockk<AudioPlaybackManager>(relaxed = true).also {
+            every { it.currentSoundId } returns MutableStateFlow(null)
+            every { it.currentPosition } returns MutableStateFlow(0L)
+            every { it.duration } returns MutableStateFlow(0L)
+        }
+
+        val soundUrlResolver = mockk<SoundUrlResolver>()
+        coEvery { soundUrlResolver.resolve(any()) } answers { firstArg<Sound>().downloadUrl }
 
         return SoundsViewModel(
             context = mockk<Context>(relaxed = true),
@@ -485,6 +538,7 @@ class SoundsViewModelTest {
             audioPlaybackManager = audioPlaybackManager,
             soundCloudRepo = soundCloudRepo,
             uploadRepo = mockk<UploadRepository>(relaxed = true),
+            soundUrlResolver = soundUrlResolver,
         )
     }
 

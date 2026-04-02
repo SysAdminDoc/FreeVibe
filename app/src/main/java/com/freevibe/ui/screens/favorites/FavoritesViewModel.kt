@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.model.favoriteIdentity
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.repository.FavoritesRepository
@@ -32,7 +33,7 @@ class FavoritesViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
 
-    fun removeFavorite(id: String) = viewModelScope.launch { favoritesRepo.remove(id) }
+    fun removeFavorite(entity: FavoriteEntity) = viewModelScope.launch { favoritesRepo.remove(entity.favoriteIdentity()) }
     fun restoreFavorite(entity: FavoriteEntity) = viewModelScope.launch { favoritesRepo.add(entity) }
 
     /** Convert FavoriteEntity to domain Wallpaper and populate shared holder with the visible list */

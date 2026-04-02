@@ -23,7 +23,10 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.Sound
 import com.freevibe.data.model.Wallpaper
+import com.freevibe.data.remote.toSound
+import com.freevibe.data.remote.toWallpaper
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.screens.categories.CategoriesScreen
 import com.freevibe.ui.screens.collections.CollectionsScreen
@@ -149,15 +152,20 @@ fun FreeVibeRoot(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                            .windowInsetsPadding(
+                                androidx.compose.foundation.layout.WindowInsets.navigationBars.only(
+                                    androidx.compose.foundation.layout.WindowInsetsSides.Bottom,
+                                ),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(30.dp),
+                            shape = RoundedCornerShape(24.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             tonalElevation = 0.dp,
-                            shadowElevation = 18.dp,
+                            shadowElevation = 10.dp,
                             border = BorderStroke(
                                 1.dp,
                                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
@@ -167,7 +175,10 @@ fun FreeVibeRoot(
                                 containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.onSurface,
                                 tonalElevation = 0.dp,
-                                modifier = Modifier.padding(horizontal = 4.dp),
+                                windowInsets = WindowInsets(0, 0, 0, 0),
+                                modifier = Modifier
+                                    .height(60.dp)
+                                    .padding(horizontal = 2.dp),
                             ) {
                                 Screen.bottomNavItems.forEach { screen ->
                                     val selected = currentDestination?.hierarchy?.any {
@@ -299,7 +310,7 @@ fun FreeVibeRoot(
             ) { backStackEntry ->
                 SoundsScreen(
                     onSoundClick = { sound ->
-                        navController.navigate(Screen.SoundDetail.createRoute(sound.id)) { launchSingleTop = true }
+                        navController.navigate(Screen.SoundDetail.createRoute(sound)) { launchSingleTop = true }
                     },
                     onCreateRingtone = {
                         navController.navigate(Screen.SoundEditor.createRoute()) { launchSingleTop = true }
@@ -310,10 +321,10 @@ fun FreeVibeRoot(
             composable(Screen.Favorites.route) {
                 FavoritesScreen(
                     onWallpaperClick = { fav ->
-                        navController.navigate(Screen.WallpaperDetail.createRoute(fav.id)) { launchSingleTop = true }
+                        navController.navigate(Screen.WallpaperDetail.createRoute(fav.toWallpaper())) { launchSingleTop = true }
                     },
                     onSoundClick = { fav ->
-                        navController.navigate(Screen.SoundDetail.createRoute(fav.id)) { launchSingleTop = true }
+                        navController.navigate(Screen.SoundDetail.createRoute(fav.toSound())) { launchSingleTop = true }
                     },
                 )
             }
@@ -375,8 +386,8 @@ fun FreeVibeRoot(
                     wallpaperId = wallpaperId,
                     fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
-                    onEdit = { id -> navController.navigate(Screen.WallpaperEditor.createRoute(id)) { launchSingleTop = true } },
-                    onCrop = { id -> navController.navigate(Screen.WallpaperCrop.createRoute(id)) { launchSingleTop = true } },
+                    onEdit = { wallpaper -> navController.navigate(Screen.WallpaperEditor.createRoute(wallpaper)) { launchSingleTop = true } },
+                    onCrop = { wallpaper -> navController.navigate(Screen.WallpaperCrop.createRoute(wallpaper)) { launchSingleTop = true } },
                     onSearchTag = { tag ->
                         navController.navigate(Screen.Wallpapers.createRoute(query = tag)) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -407,19 +418,58 @@ fun FreeVibeRoot(
                 )
             }
             composable(
-                Screen.SoundDetail.route,
-                arguments = listOf(navArgument("id") { type = NavType.StringType })
+                Screen.SoundDetail.destinationPattern,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("source") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("name") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("previewUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("downloadUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                )
             ) { backStackEntry ->
                 val soundId = backStackEntry.arguments?.getString("id").orEmpty()
+                val fallbackSound = backStackEntry.arguments?.getString("name")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { name ->
+                        Sound(
+                            id = soundId,
+                            source = backStackEntry.arguments?.getString("source")
+                                ?.let { sourceName ->
+                                    runCatching { ContentSource.valueOf(sourceName) }
+                                        .getOrDefault(ContentSource.LOCAL)
+                                }
+                                ?: ContentSource.LOCAL,
+                            name = name,
+                            previewUrl = backStackEntry.arguments?.getString("previewUrl").orEmpty(),
+                            downloadUrl = backStackEntry.arguments?.getString("downloadUrl").orEmpty(),
+                        )
+                    }
                 SoundDetailScreen(
                     soundId = soundId,
+                    fallbackSound = fallbackSound,
                     onBack = { navController.popBackStack() },
-                    onEdit = { id -> navController.navigate(Screen.SoundEditor.createRoute(id)) { launchSingleTop = true } },
+                    onEdit = { sound -> navController.navigate(Screen.SoundEditor.createRoute(sound)) { launchSingleTop = true } },
                     onContactPicker = { sound ->
                         navController.navigate(Screen.ContactPicker.createRoute(sound)) { launchSingleTop = true }
                     },
-                    onOpenSound = { id ->
-                        navController.navigate(Screen.SoundDetail.createRoute(id)) { launchSingleTop = true }
+                    onOpenSound = { sound ->
+                        navController.navigate(Screen.SoundDetail.createRoute(sound)) { launchSingleTop = true }
                     },
                     onSearchTag = { tag ->
                         navController.navigate(Screen.Sounds.createRoute(query = tag)) {
@@ -435,35 +485,155 @@ fun FreeVibeRoot(
 
             // ── Editors ───────────────────────────────────────────
             composable(
-                Screen.WallpaperEditor.route,
-                arguments = listOf(navArgument("id") { type = NavType.StringType })
+                Screen.WallpaperEditor.destinationPattern,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("source") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("thumbnailUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("fullUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("width") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                    navArgument("height") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                )
             ) { backStackEntry ->
+                val wallpaperId = backStackEntry.arguments?.getString("id").orEmpty()
+                val fullUrl = backStackEntry.arguments?.getString("fullUrl").orEmpty()
+                val fallbackWallpaper = fullUrl.takeIf { it.isNotBlank() }?.let {
+                    Wallpaper(
+                        id = wallpaperId,
+                        source = backStackEntry.arguments?.getString("source")
+                            ?.let { sourceName -> runCatching { ContentSource.valueOf(sourceName) }.getOrDefault(ContentSource.WALLHAVEN) }
+                            ?: ContentSource.WALLHAVEN,
+                        thumbnailUrl = backStackEntry.arguments?.getString("thumbnailUrl").orEmpty().ifBlank { fullUrl },
+                        fullUrl = fullUrl,
+                        width = backStackEntry.arguments?.getInt("width") ?: 0,
+                        height = backStackEntry.arguments?.getInt("height") ?: 0,
+                    )
+                }
                 WallpaperEditorScreen(
-                    wallpaperId = backStackEntry.arguments?.getString("id").orEmpty(),
+                    wallpaperId = wallpaperId,
+                    fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
                 )
             }
             composable(
-                Screen.WallpaperCrop.route,
-                arguments = listOf(navArgument("id") { type = NavType.StringType })
+                Screen.WallpaperCrop.destinationPattern,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("source") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("thumbnailUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("fullUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("width") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                    navArgument("height") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                )
             ) { backStackEntry ->
+                val wallpaperId = backStackEntry.arguments?.getString("id").orEmpty()
+                val fullUrl = backStackEntry.arguments?.getString("fullUrl").orEmpty()
+                val fallbackWallpaper = fullUrl.takeIf { it.isNotBlank() }?.let {
+                    Wallpaper(
+                        id = wallpaperId,
+                        source = backStackEntry.arguments?.getString("source")
+                            ?.let { sourceName -> runCatching { ContentSource.valueOf(sourceName) }.getOrDefault(ContentSource.WALLHAVEN) }
+                            ?: ContentSource.WALLHAVEN,
+                        thumbnailUrl = backStackEntry.arguments?.getString("thumbnailUrl").orEmpty().ifBlank { fullUrl },
+                        fullUrl = fullUrl,
+                        width = backStackEntry.arguments?.getInt("width") ?: 0,
+                        height = backStackEntry.arguments?.getInt("height") ?: 0,
+                    )
+                }
                 WallpaperCropScreen(
-                    wallpaperId = backStackEntry.arguments?.getString("id").orEmpty(),
+                    wallpaperId = wallpaperId,
+                    fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
                 )
             }
             composable(
-                Screen.SoundEditor.route,
+                Screen.SoundEditor.destinationPattern,
                 arguments = listOf(
                     navArgument("soundId") {
                         type = NavType.StringType
                         nullable = true
                         defaultValue = ""
+                    },
+                    navArgument("source") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("name") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("previewUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("downloadUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
+                val soundId = backStackEntry.arguments?.getString("soundId").orEmpty().ifBlank { null }
+                val fallbackSound = soundId?.let { id ->
+                    backStackEntry.arguments?.getString("name")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { name ->
+                            Sound(
+                                id = id,
+                                source = backStackEntry.arguments?.getString("source")
+                                    ?.let { sourceName ->
+                                        runCatching { ContentSource.valueOf(sourceName) }
+                                            .getOrDefault(ContentSource.LOCAL)
+                                    }
+                                    ?: ContentSource.LOCAL,
+                                name = name,
+                                previewUrl = backStackEntry.arguments?.getString("previewUrl").orEmpty(),
+                                downloadUrl = backStackEntry.arguments?.getString("downloadUrl").orEmpty(),
+                            )
+                        }
+                }
                 SoundEditorScreen(
-                    soundId = backStackEntry.arguments?.getString("soundId").orEmpty().ifBlank { null },
+                    soundId = soundId,
+                    fallbackSound = fallbackSound,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -549,8 +719,8 @@ fun FreeVibeRoot(
             composable(Screen.Collections.route) {
                 CollectionsScreen(
                     onBack = { navController.popBackStack() },
-                    onWallpaperClick = { wallpaperId ->
-                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaperId)) { launchSingleTop = true }
+                    onWallpaperClick = { wallpaper ->
+                        navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
                 )
             }

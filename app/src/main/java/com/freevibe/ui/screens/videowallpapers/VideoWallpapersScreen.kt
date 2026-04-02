@@ -7,12 +7,14 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,6 +37,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.ui.components.CompactSearchField
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.launchLiveWallpaperPicker
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +172,43 @@ fun VideoWallpapersScreen(
     val visibleItems = remember(state.items, hiddenIds) {
         state.items.filter { it.id !in hiddenIds }
     }
+    var showOrientationMenu by remember { mutableStateOf(false) }
+    var showFiltersSheet by remember { mutableStateOf(false) }
+    val videoFilterCount = remember(state.focusFilter) {
+        if (state.focusFilter != VideoFocusFilter.BEST) 1 else 0
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val cacheFile = try {
+                val input = context.contentResolver.openInputStream(it)
+                val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
+                input?.use { inp -> cacheFile.outputStream().use { out -> inp.copyTo(out) } }
+                cacheFile
+            } catch (_: Exception) { null }
+            if (cacheFile != null) {
+                persistSelectedVideoWallpaper(context, cacheFile)
+                when (
+                    launchLiveWallpaperPicker(
+                        context = context,
+                        serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
+                        tag = "VideoWallpaperGallery",
+                    )
+                ) {
+                    LiveWallpaperLaunchMode.DIRECT -> {
+                        Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+                    }
+                    LiveWallpaperLaunchMode.CHOOSER -> {
+                        Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                    }
+                    null -> {
+                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
 
     // Video crop editor
     cropItem?.let { (item, streamUrl) ->
@@ -195,159 +235,105 @@ fun VideoWallpapersScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { scaffoldPadding ->
     Column(Modifier.fillMaxSize().padding(scaffoldPadding)) {
         // Search bar
-        OutlinedTextField(
+        CompactSearchField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text("Search video wallpapers...") },
-            leadingIcon = { Icon(Icons.Default.Search, "Search") },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = ""; viewModel.search(""); focusManager.clearFocus() }) {
-                        Icon(Icons.Default.Clear, "Clear")
-                    }
-                }
+            placeholder = "Search live wallpapers",
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 3.dp),
+            onClear = {
+                searchQuery = ""
+                viewModel.search("")
+                focusManager.clearFocus()
             },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
                 viewModel.search(searchQuery); focusManager.clearFocus()
             }),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = Color.Transparent,
-            ),
         )
 
-        // Orientation filter + gallery picker
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OrientationFilter.entries.forEach { filter ->
-                FilterChip(
-                    selected = state.orientation == filter,
-                    onClick = { viewModel.setOrientation(filter) },
-                    label = {
-                        Text(when (filter) {
-                            OrientationFilter.PORTRAIT -> "Portrait"
-                            OrientationFilter.LANDSCAPE -> "Landscape"
-                            OrientationFilter.ALL -> "All"
-                        })
-                    },
-                    leadingIcon = if (state.orientation == filter) {
-                        { Icon(Icons.Default.Check, "Selected orientation", Modifier.size(16.dp)) }
-                    } else null,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            // Gallery video picker
-            val galleryLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.GetContent()
-            ) { uri: Uri? ->
-                uri?.let {
-                    // Copy to app storage and set as live wallpaper
-                    val cacheFile = try {
-                        val input = context.contentResolver.openInputStream(it)
-                        val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
-                        input?.use { inp -> cacheFile.outputStream().use { out -> inp.copyTo(out) } }
-                        cacheFile
-                    } catch (_: Exception) { null }
-                    if (cacheFile != null) {
-                        persistSelectedVideoWallpaper(context, cacheFile)
-                        when (
-                            launchLiveWallpaperPicker(
-                                context = context,
-                                serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
-                                tag = "VideoWallpaperGallery",
-                            )
-                        ) {
-                            LiveWallpaperLaunchMode.DIRECT -> {
-                                Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
-                            }
-                            LiveWallpaperLaunchMode.CHOOSER -> {
-                                Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
-                            }
-                            null -> {
-                                Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
-                            }
-                        }
+            Box {
+                FilledTonalButton(
+                    onClick = { showOrientationMenu = true },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.heightIn(min = 34.dp),
+                ) {
+                    Icon(Icons.Default.CropPortrait, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(orientationLabel(state.orientation))
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                DropdownMenu(
+                    expanded = showOrientationMenu,
+                    onDismissRequest = { showOrientationMenu = false },
+                ) {
+                    OrientationFilter.entries.forEach { filter ->
+                        DropdownMenuItem(
+                            text = { Text(orientationLabel(filter)) },
+                            onClick = {
+                                showOrientationMenu = false
+                                viewModel.setOrientation(filter)
+                            },
+                            leadingIcon = {
+                                if (state.orientation == filter) {
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            },
+                        )
                     }
                 }
             }
+
+            OutlinedButton(
+                onClick = { showFiltersSheet = true },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier.heightIn(min = 34.dp),
+            ) {
+                BadgedBox(
+                    badge = {
+                        if (videoFilterCount > 0) {
+                            Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$videoFilterCount") }
+                        }
+                    },
+                ) {
+                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(if (videoFilterCount > 0) videoFocusLabel(state.focusFilter) else "Filters")
+            }
+
             FilledTonalIconButton(
                 onClick = { galleryLauncher.launch("video/*") },
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(34.dp),
             ) {
-                Icon(Icons.Default.FolderOpen, "From gallery", modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.FolderOpen, "From gallery", modifier = Modifier.size(16.dp))
             }
-        }
 
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(VideoFocusFilter.entries) { filter ->
-                AssistChip(
-                    onClick = { viewModel.setFocusFilter(filter) },
-                    label = { Text(videoFocusLabel(filter)) },
-                    leadingIcon = if (state.focusFilter == filter) {
-                        { Icon(Icons.Default.Tune, null, Modifier.size(16.dp)) }
-                    } else null,
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (state.focusFilter == filter) {
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
-                        } else {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.24f)
-                        },
-                    ),
-                )
-            }
         }
 
         if (state.degradedSources.isNotEmpty()) {
             Text(
                 text = videoSourceHealthSummary(state.degradedSources),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-
-        // Video category quick-search chips
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val categories = listOf(
-                "Nature" to "nature calm loop",
-                "Abstract" to "abstract particles loop",
-                "Space" to "space galaxy stars loop",
-                "Neon" to "neon lights glow loop",
-                "Ocean" to "ocean waves water loop",
-                "Fire" to "fire flames embers loop",
-                "Cinemagraph" to "cinemagraph subtle motion",
-                "Sci-Fi" to "sci-fi futuristic loop",
-                "Rain" to "rain drops window loop",
-                "Clouds" to "clouds sky timelapse loop",
-            )
-            categories.forEach { (label, query) ->
-                item {
-                    AssistChip(
-                        onClick = { viewModel.search(query) },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                    )
-                }
-            }
         }
 
         Box(Modifier.fillMaxSize()) {
@@ -452,7 +438,7 @@ fun VideoWallpapersScreen(
                         } else {
                             LazyColumn(
                                 state = listState,
-                                contentPadding = PaddingValues(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 items(visibleItems, key = { it.id }) { item ->
@@ -561,6 +547,28 @@ fun VideoWallpapersScreen(
         )
     }
     } // end Scaffold
+
+    if (showFiltersSheet) {
+        ModalBottomSheet(onDismissRequest = { showFiltersSheet = false }) {
+            VideoFiltersSheet(
+                focusFilter = state.focusFilter,
+                onSelectFocus = { filter ->
+                    viewModel.setFocusFilter(filter)
+                    showFiltersSheet = false
+                },
+                onQuickSearch = { query ->
+                    viewModel.search(query)
+                    showFiltersSheet = false
+                },
+                onReset = if (videoFilterCount > 0) {
+                    {
+                        viewModel.setFocusFilter(VideoFocusFilter.BEST)
+                        showFiltersSheet = false
+                    }
+                } else null,
+            )
+        }
+    }
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -789,11 +797,92 @@ private fun OrientationFilter.label(): String = when (this) {
     OrientationFilter.LANDSCAPE -> "Landscape"
 }
 
+private fun orientationLabel(filter: OrientationFilter): String = filter.label()
+
 private fun videoFocusLabel(filter: VideoFocusFilter): String = when (filter) {
     VideoFocusFilter.BEST -> "Best"
     VideoFocusFilter.LOOP_SAFE -> "Loop-safe"
     VideoFocusFilter.LOW_BATTERY -> "Low battery"
     VideoFocusFilter.PHONE_FIT -> "Phone fit"
+}
+
+@Composable
+private fun VideoFiltersSheet(
+    focusFilter: VideoFocusFilter,
+    onSelectFocus: (VideoFocusFilter) -> Unit,
+    onQuickSearch: (String) -> Unit,
+    onReset: (() -> Unit)?,
+) {
+    val categories = listOf(
+        "Nature" to "nature calm loop",
+        "Abstract" to "abstract particles loop",
+        "Space" to "space galaxy stars loop",
+        "Neon" to "neon lights glow loop",
+        "Ocean" to "ocean waves water loop",
+        "Fire" to "fire flames embers loop",
+        "Cinemagraph" to "cinemagraph subtle motion",
+        "Sci-Fi" to "sci-fi futuristic loop",
+        "Rain" to "rain drops window loop",
+        "Clouds" to "clouds sky timelapse loop",
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("Refine videos", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Focus",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            VideoFocusFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = focusFilter == filter,
+                    onClick = { onSelectFocus(filter) },
+                    label = { Text(videoFocusLabel(filter)) },
+                    leadingIcon = if (focusFilter == filter) {
+                        { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }
+                    } else null,
+                )
+            }
+        }
+
+        Text(
+            "Quick searches",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            categories.forEach { (label, query) ->
+                AssistChip(
+                    onClick = { onQuickSearch(query) },
+                    label = { Text(label) },
+                )
+            }
+        }
+
+        onReset?.let {
+            TextButton(onClick = it) {
+                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Reset filters")
+            }
+        }
+    }
 }
 
 private fun videoSourceHealthSummary(degradedSources: List<String>): String {

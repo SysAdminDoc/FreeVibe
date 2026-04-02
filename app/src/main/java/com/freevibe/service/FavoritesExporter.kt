@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.freevibe.data.local.FavoriteDao
 import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.model.favoriteIdentity
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -61,7 +62,7 @@ class FavoritesExporter @Inject constructor(
 
             val entities = items
                 .mapNotNull { it.toValidatedEntity() }
-                .distinctBy { it.id }
+                .distinctBy { it.favoriteIdentity() }
             if (entities.isEmpty()) {
                 throw IllegalStateException("No valid favorites found in file")
             }

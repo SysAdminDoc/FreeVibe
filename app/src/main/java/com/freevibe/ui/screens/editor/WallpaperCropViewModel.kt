@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.data.model.stableKey
 import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -37,14 +38,15 @@ class WallpaperCropViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(CropState())
     val state = _state.asStateFlow()
-    private var loadedWallpaperId: String? = null
+    private var loadedWallpaperKey: String? = null
 
     fun loadWallpaper(wallpaper: Wallpaper): Boolean {
         val currentState = _state.value
-        if (loadedWallpaperId == wallpaper.id && (currentState.bitmap != null || currentState.isLoading)) {
+        val wallpaperKey = wallpaper.stableKey()
+        if (loadedWallpaperKey == wallpaperKey && (currentState.bitmap != null || currentState.isLoading)) {
             return true
         }
-        loadedWallpaperId = wallpaper.id
+        loadedWallpaperKey = wallpaperKey
         loadFromUrl(wallpaper.fullUrl)
         return true
     }

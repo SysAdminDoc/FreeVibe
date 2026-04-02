@@ -8,7 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
+import com.freevibe.data.model.stableKey
 import com.freevibe.service.AudioTrimmer
+import com.freevibe.service.SoundUrlResolver
 import com.freevibe.service.SoundApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -87,6 +89,7 @@ class SoundEditorViewModel @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val soundApplier: SoundApplier,
     private val audioTrimmer: AudioTrimmer,
+    private val soundUrlResolver: SoundUrlResolver,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundEditorState())
@@ -96,7 +99,7 @@ class SoundEditorViewModel @Inject constructor(
     private var playbackJob: kotlinx.coroutines.Job? = null
     private var loadJob: kotlinx.coroutines.Job? = null
     private var undoState: UndoSnapshot? = null
-    private var loadedSoundId: String? = null
+    private var loadedSoundKey: String? = null
 
     private data class UndoSnapshot(
         val trimStart: Float, val trimEnd: Float,
@@ -105,17 +108,25 @@ class SoundEditorViewModel @Inject constructor(
 
     fun loadSound(sound: Sound): Boolean {
         val currentState = _state.value
-        if (loadedSoundId == sound.id && (currentState.localFilePath != null || currentState.isLoading)) {
+        val soundKey = sound.stableKey()
+        if (loadedSoundKey == soundKey && (currentState.localFilePath != null || currentState.isLoading)) {
             return true
         }
-        loadedSoundId = sound.id
-        val sourceUrl = sound.downloadUrl.ifBlank { sound.previewUrl }
-        if (sourceUrl.isBlank()) return false
-        loadFromUrl(sourceUrl, sound.name)
+        loadedSoundKey = soundKey
+        if (sound.downloadUrl.isBlank() && sound.previewUrl.isBlank() && sound.sourcePageUrl.isBlank()) return false
+        loadRemoteSound(sound.name) {
+            val resolvedUrl = soundUrlResolver.resolve(sound)
+                ?: throw IllegalStateException("No audio URL available")
+            downloadToCache(resolvedUrl, sound.name)
+        }
         return true
     }
 
     fun loadFromUrl(url: String, name: String) {
+        loadRemoteSound(name) { downloadToCache(url, name) }
+    }
+
+    private fun loadRemoteSound(name: String, loader: suspend () -> File) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             stopPlayback()
@@ -139,7 +150,7 @@ class SoundEditorViewModel @Inject constructor(
                 )
             }
             try {
-                val file = withContext(Dispatchers.IO) { downloadToCache(url, name) }
+                val file = withContext(Dispatchers.IO) { loader() }
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
                 val duration = withContext(Dispatchers.IO) { getAudioDuration(file.absolutePath) }
                 _state.update {

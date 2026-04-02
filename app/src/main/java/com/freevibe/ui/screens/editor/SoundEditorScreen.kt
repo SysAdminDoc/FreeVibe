@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.freevibe.data.model.ContentType
+import com.freevibe.data.model.Sound
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -32,6 +33,7 @@ import kotlin.math.max
 @Composable
 fun SoundEditorScreen(
     soundId: String? = null,
+    fallbackSound: Sound? = null,
     onBack: () -> Unit,
     recoveryViewModel: com.freevibe.ui.screens.sounds.SoundsViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: SoundEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
@@ -39,7 +41,15 @@ fun SoundEditorScreen(
     val state by viewModel.state.collectAsState()
     val currentSelectedSound by recoveryViewModel.selectedSound.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectionResolved by remember(soundId) {
+    val editorIdentityKey = remember(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl) {
+        listOf(
+            soundId.orEmpty(),
+            fallbackSound?.source?.name.orEmpty(),
+            fallbackSound?.previewUrl.orEmpty(),
+            fallbackSound?.downloadUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var selectionResolved by remember(editorIdentityKey) {
         mutableStateOf<Boolean?>(if (soundId == null) true else null)
     }
 
@@ -56,11 +66,18 @@ fun SoundEditorScreen(
     LaunchedEffect(state.error) {
         state.error?.let { snackbarHostState.showSnackbar("Error: $it"); viewModel.clearMessages() }
     }
-    LaunchedEffect(soundId) {
+    LaunchedEffect(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl) {
         if (soundId == null) {
             selectionResolved = true
         } else {
-            val sound = recoveryViewModel.resolveSound(soundId)
+            val sound = fallbackSound?.let {
+                recoveryViewModel.resolveSound(
+                    id = soundId,
+                    source = it.source,
+                    previewUrl = it.previewUrl.takeIf { url -> url.isNotBlank() },
+                    downloadUrl = it.downloadUrl.takeIf { url -> url.isNotBlank() },
+                ) ?: it
+            } ?: recoveryViewModel.resolveSound(soundId)
             selectionResolved = sound?.let { viewModel.loadSound(it) } ?: false
         }
     }

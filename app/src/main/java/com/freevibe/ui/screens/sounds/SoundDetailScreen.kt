@@ -34,32 +34,52 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
+import com.freevibe.data.model.stableKey
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SoundDetailScreen(
     soundId: String,
+    fallbackSound: Sound? = null,
     onBack: () -> Unit,
-    onEdit: (String) -> Unit = {},
+    onEdit: (Sound) -> Unit = {},
     onContactPicker: (Sound) -> Unit = {},
-    onOpenSound: (String) -> Unit = {},
+    onOpenSound: (Sound) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val selectedSound by viewModel.selectedSound.collectAsState()
     val topHits by viewModel.topHits.collectAsState()
-    var restoreResolved by remember(soundId) { mutableStateOf(false) }
-    var resolvedSound by remember(soundId) { mutableStateOf<Sound?>(null) }
+    val targetSource = fallbackSound?.source
+    val targetPreviewUrl = fallbackSound?.previewUrl?.takeIf { it.isNotBlank() }
+    val targetDownloadUrl = fallbackSound?.downloadUrl?.takeIf { it.isNotBlank() }
+    val detailIdentityKey = remember(soundId, targetSource, targetPreviewUrl, targetDownloadUrl) {
+        listOf(
+            soundId,
+            targetSource?.name.orEmpty(),
+            targetPreviewUrl.orEmpty(),
+            targetDownloadUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var restoreResolved by remember(detailIdentityKey) { mutableStateOf(false) }
+    var resolvedSound by remember(detailIdentityKey) { mutableStateOf<Sound?>(null) }
 
-    LaunchedEffect(soundId) {
-        resolvedSound = viewModel.resolveSound(soundId)
+    LaunchedEffect(soundId, targetSource, targetPreviewUrl, targetDownloadUrl) {
+        resolvedSound = fallbackSound?.let {
+            viewModel.resolveSound(
+                id = soundId,
+                source = targetSource,
+                previewUrl = targetPreviewUrl,
+                downloadUrl = targetDownloadUrl,
+            ) ?: it
+        } ?: viewModel.resolveSound(soundId)
         restoreResolved = true
     }
 
-    val s = selectedSound?.takeIf { it.id == soundId }
-        ?: state.sounds.firstOrNull { it.id == soundId }
-        ?: topHits.firstOrNull { it.id == soundId }
+    val s = selectedSound?.takeIf { matchesSoundIdentity(it, soundId, targetSource, targetPreviewUrl, targetDownloadUrl) }
+        ?: state.sounds.firstOrNull { matchesSoundIdentity(it, soundId, targetSource, targetPreviewUrl, targetDownloadUrl) }
+        ?: topHits.firstOrNull { matchesSoundIdentity(it, soundId, targetSource, targetPreviewUrl, targetDownloadUrl) }
         ?: resolvedSound
     if (s == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -82,26 +102,26 @@ fun SoundDetailScreen(
         }
         return
     }
-    val isFavorite by viewModel.isFavorite(s.id).collectAsState(initial = false)
+    val isFavorite by viewModel.isFavorite(s).collectAsState(initial = false)
     val context = LocalContext.current
     val autoPreview by viewModel.autoPreview.collectAsState()
     val playbackProgress by viewModel.playbackProgress.collectAsState()
-    val isPlaying = state.playingId == s.id
+    val isPlaying = state.playingId == s.stableKey()
     val showUploader = s.uploaderName.isNotEmpty() &&
         s.uploaderName != "Unknown" &&
         !(s.source == ContentSource.BUNDLED && s.uploaderName == "Aura Picks")
     val detailBadges = remember(s, state.selectedTab) { soundBadges(s, state.selectedTab) }
     val (sourceLabel, sourceColor) = soundSourceTone(s.source)
 
-    val similarSounds = remember(s.id) { mutableStateOf<List<Sound>>(emptyList()) }
-    val similarLoading = remember(s.id) { mutableStateOf(false) }
+    val currentSoundKey = s.stableKey()
+    val similarSounds = remember(currentSoundKey) { mutableStateOf<List<Sound>>(emptyList()) }
+    val similarLoading = remember(currentSoundKey) { mutableStateOf(false) }
 
-    DisposableEffect(s.id) {
-        val soundId = s.id
-        onDispose { viewModel.stopIfPlaying(soundId) }
+    DisposableEffect(currentSoundKey) {
+        onDispose { viewModel.stopIfPlaying(s) }
     }
-    LaunchedEffect(s.id) {
-        if (autoPreview && state.playingId != s.id) viewModel.togglePlayback(s)
+    LaunchedEffect(currentSoundKey, autoPreview) {
+        if (autoPreview && state.playingId != s.stableKey()) viewModel.togglePlayback(s)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -238,7 +258,7 @@ fun SoundDetailScreen(
 
             // Secondary actions as icon row
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                IconButton(onClick = { onEdit(s.id) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, "Trim sound", Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
+                IconButton(onClick = { onEdit(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, "Trim sound", Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = { onContactPicker(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, "Assign to contact", Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, "Save sound", Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = {
@@ -249,9 +269,9 @@ fun SoundDetailScreen(
 
             // More Like This
             Spacer(Modifier.height(4.dp))
-            SimilarSoundsSection(s.id, similarSounds, similarLoading, viewModel) { similar ->
+            SimilarSoundsSection(s, similarSounds, similarLoading, viewModel) { similar ->
                 viewModel.selectSound(similar)
-                onOpenSound(similar.id)
+                onOpenSound(similar)
             }
 
             Spacer(Modifier.height(80.dp)) // bottom padding for nav bar
@@ -273,14 +293,16 @@ private fun ApplyButton(text: String, icon: androidx.compose.ui.graphics.vector.
 
 @Composable
 private fun SimilarSoundsSection(
-    soundId: String, similarSounds: MutableState<List<Sound>>, isLoading: MutableState<Boolean>,
+    sound: Sound,
+    similarSounds: MutableState<List<Sound>>,
+    isLoading: MutableState<Boolean>,
     viewModel: SoundsViewModel, onSoundClick: (Sound) -> Unit,
 ) {
-    var loaded by remember(soundId) { mutableStateOf(false) }
-    LaunchedEffect(soundId) {
+    var loaded by remember(sound.stableKey()) { mutableStateOf(false) }
+    LaunchedEffect(sound.stableKey()) {
         if (!loaded && !isLoading.value) {
             isLoading.value = true; similarSounds.value = emptyList()
-            try { similarSounds.value = viewModel.loadSimilar(soundId) } catch (_: Exception) {}
+            try { similarSounds.value = viewModel.loadSimilar(sound) } catch (_: Exception) {}
             isLoading.value = false; loaded = true
         }
     }
@@ -292,7 +314,7 @@ private fun SimilarSoundsSection(
         } else if (similarSounds.value.isNotEmpty()) {
             val currentPlayingId = viewModel.state.collectAsState().value.playingId
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(similarSounds.value, key = { it.id }) { similar ->
+                items(similarSounds.value, key = { it.stableKey() }) { similar ->
                     Surface(
                         onClick = { onSoundClick(similar) }, color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shape = RoundedCornerShape(12.dp), modifier = Modifier.width(160.dp),
@@ -300,12 +322,12 @@ private fun SimilarSoundsSection(
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(
                                 onClick = { viewModel.togglePlayback(similar) },
-                                modifier = Modifier.size(34.dp).clip(CircleShape).background(if (currentPlayingId == similar.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
+                                modifier = Modifier.size(34.dp).clip(CircleShape).background(if (currentPlayingId == similar.stableKey()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
                             ) {
                                 Icon(
-                                    if (currentPlayingId == similar.id) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    if (currentPlayingId == similar.id) "Pause preview" else "Play preview",
-                                    tint = if (currentPlayingId == similar.id) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    if (currentPlayingId == similar.stableKey()) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    if (currentPlayingId == similar.stableKey()) "Pause preview" else "Play preview",
+                                    tint = if (currentPlayingId == similar.stableKey()) Color.White else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(16.dp),
                                 )
                             }

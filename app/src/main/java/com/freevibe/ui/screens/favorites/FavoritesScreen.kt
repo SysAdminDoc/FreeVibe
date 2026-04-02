@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.model.stableKey
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -152,7 +153,7 @@ fun FavoritesScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(sortedWallpapers, key = { it.id }, contentType = { "favorite_card" }) { fav ->
+                            items(sortedWallpapers, key = { it.stableKey() }, contentType = { "favorite_card" }) { fav ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -163,7 +164,7 @@ fun FavoritesScreen(
                                                 onWallpaperClick(fav)
                                             },
                                             onLongClick = {
-                                                viewModel.removeFavorite(fav.id)
+                                                viewModel.removeFavorite(fav)
                                                 scope.launch {
                                                     val result = snackbarHostState.showSnackbar(
                                                         message = "Removed from favorites",
@@ -197,11 +198,11 @@ fun FavoritesScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            items(sortedSounds, key = { it.id }, contentType = { "favorite_card" }) { fav ->
+                            items(sortedSounds, key = { it.stableKey() }, contentType = { "favorite_card" }) { fav ->
                                 val dismissState = rememberSwipeToDismissBoxState(
                                     confirmValueChange = { value ->
                                         if (value != SwipeToDismissBoxValue.Settled) {
-                                            viewModel.removeFavorite(fav.id)
+                                            viewModel.removeFavorite(fav)
                                             scope.launch {
                                                 val result = snackbarHostState.showSnackbar(
                                                     message = "Removed ${fav.name}",

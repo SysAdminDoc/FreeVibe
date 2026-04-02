@@ -27,6 +27,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperCollectionItemEntity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.SelectedContentHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -72,8 +73,8 @@ class CollectionsViewModel @Inject constructor(
         }
     }
 
-    fun removeItem(collectionId: Long, wallpaperId: String) {
-        viewModelScope.launch { collectionRepo.removeWallpaper(collectionId, wallpaperId) }
+    fun removeItem(collectionId: Long, item: WallpaperCollectionItemEntity) {
+        viewModelScope.launch { collectionRepo.removeWallpaper(collectionId, item.toWallpaper()) }
     }
 
     fun renameCollection(id: Long, name: String) {
@@ -88,7 +89,7 @@ class CollectionsViewModel @Inject constructor(
 @Composable
 fun CollectionsScreen(
     onBack: () -> Unit,
-    onWallpaperClick: (String) -> Unit,
+    onWallpaperClick: (Wallpaper) -> Unit,
     viewModel: CollectionsViewModel = hiltViewModel(),
 ) {
     val collections by viewModel.collections.collectAsState()
@@ -167,7 +168,7 @@ fun CollectionsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize().padding(padding),
                 ) {
-                    items(selectedItems.size, key = { selectedItems[it].wallpaperId }) { index ->
+                    items(selectedItems.size, key = { selectedItems[it].stableKey() }) { index ->
                         val item = selectedItems[index]
                         @OptIn(ExperimentalFoundationApi::class)
                         Card(
@@ -176,12 +177,13 @@ fun CollectionsScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .combinedClickable(
                                     onClick = {
+                                        val wallpaper = item.toWallpaper()
                                         viewModel.selectWallpaper(item, selectedItems)
-                                        onWallpaperClick(item.wallpaperId)
+                                        onWallpaperClick(wallpaper)
                                     },
                                     onLongClick = {
                                         val cid = selectedCollectionId ?: return@combinedClickable
-                                        viewModel.removeItem(cid, item.wallpaperId)
+                                        viewModel.removeItem(cid, item)
                                         scope.launch {
                                             snackbarHostState.showSnackbar("Removed from collection")
                                         }

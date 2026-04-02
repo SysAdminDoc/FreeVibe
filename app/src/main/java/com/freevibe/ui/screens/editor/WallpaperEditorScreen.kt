@@ -16,23 +16,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WallpaperEditorScreen(
     wallpaperId: String,
+    fallbackWallpaper: Wallpaper? = null,
     onBack: () -> Unit,
     recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: WallpaperEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    var selectedFilter by remember(wallpaperId) { mutableStateOf("Brightness") }
+    val editorIdentityKey = remember(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
+        listOf(
+            wallpaperId,
+            fallbackWallpaper?.source?.name.orEmpty(),
+            fallbackWallpaper?.fullUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var selectedFilter by remember(editorIdentityKey) { mutableStateOf("Brightness") }
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectionResolved by remember(wallpaperId) { mutableStateOf<Boolean?>(null) }
+    var selectionResolved by remember(editorIdentityKey) { mutableStateOf<Boolean?>(null) }
 
-    LaunchedEffect(wallpaperId) {
-        val wallpaper = recoveryViewModel.resolveWallpaper(wallpaperId)
+    LaunchedEffect(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
+        val wallpaper = fallbackWallpaper?.let {
+            recoveryViewModel.resolveWallpaper(
+                id = wallpaperId,
+                source = it.source,
+                fullUrl = it.fullUrl,
+            ) ?: it
+        } ?: recoveryViewModel.resolveWallpaper(wallpaperId)
         selectionResolved = wallpaper?.let { viewModel.loadWallpaper(it) } ?: false
     }
 

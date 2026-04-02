@@ -104,6 +104,73 @@ object DatabaseMigrations {
         }
     }
 
+    // v11→12: Composite favorites identity (id + source + type)
+    val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `favorites_new` (" +
+                    "`id` TEXT NOT NULL, " +
+                    "`source` TEXT NOT NULL, " +
+                    "`type` TEXT NOT NULL, " +
+                    "`thumbnailUrl` TEXT NOT NULL, " +
+                    "`fullUrl` TEXT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`width` INTEGER NOT NULL, " +
+                    "`height` INTEGER NOT NULL, " +
+                    "`duration` REAL NOT NULL, " +
+                    "`addedAt` INTEGER NOT NULL, " +
+                    "`offlinePath` TEXT NOT NULL, " +
+                    "`tags` TEXT, " +
+                    "`colors` TEXT, " +
+                    "`category` TEXT, " +
+                    "`uploaderName` TEXT, " +
+                    "`sourcePageUrl` TEXT, " +
+                    "`fileSize` INTEGER, " +
+                    "`fileType` TEXT, " +
+                    "`views` INTEGER, " +
+                    "`favoritesCount` INTEGER, " +
+                    "PRIMARY KEY(`id`, `source`, `type`))"
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `favorites_new` " +
+                    "SELECT `id`, `source`, `type`, `thumbnailUrl`, `fullUrl`, `name`, `width`, `height`, `duration`, `addedAt`, `offlinePath`, `tags`, `colors`, `category`, `uploaderName`, `sourcePageUrl`, `fileSize`, `fileType`, `views`, `favoritesCount` " +
+                    "FROM `favorites`"
+            )
+            db.execSQL("DROP TABLE `favorites`")
+            db.execSQL("ALTER TABLE `favorites_new` RENAME TO `favorites`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_favorites_type` ON `favorites` (`type`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_favorites_addedAt` ON `favorites` (`addedAt`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_favorites_type_addedAt` ON `favorites` (`type`, `addedAt`)")
+        }
+    }
+
+    // v12→13: Collections become source-aware so duplicate ids from different providers can coexist
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `wallpaper_collection_items_new` (" +
+                    "`collectionId` INTEGER NOT NULL, " +
+                    "`wallpaperId` TEXT NOT NULL, " +
+                    "`thumbnailUrl` TEXT NOT NULL, " +
+                    "`fullUrl` TEXT NOT NULL, " +
+                    "`source` TEXT NOT NULL, " +
+                    "`width` INTEGER NOT NULL DEFAULT 0, " +
+                    "`height` INTEGER NOT NULL DEFAULT 0, " +
+                    "`addedAt` INTEGER NOT NULL DEFAULT 0, " +
+                    "PRIMARY KEY(`collectionId`, `wallpaperId`, `source`), " +
+                    "FOREIGN KEY(`collectionId`) REFERENCES `wallpaper_collections`(`collectionId`) ON DELETE CASCADE)"
+            )
+            db.execSQL(
+                "INSERT OR IGNORE INTO `wallpaper_collection_items_new` " +
+                    "SELECT `collectionId`, `wallpaperId`, `thumbnailUrl`, `fullUrl`, `source`, `width`, `height`, `addedAt` " +
+                    "FROM `wallpaper_collection_items`"
+            )
+            db.execSQL("DROP TABLE `wallpaper_collection_items`")
+            db.execSQL("ALTER TABLE `wallpaper_collection_items_new` RENAME TO `wallpaper_collection_items`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallpaper_collection_items_collectionId` ON `wallpaper_collection_items` (`collectionId`)")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -115,5 +182,7 @@ object DatabaseMigrations {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
+        MIGRATION_11_12,
+        MIGRATION_12_13,
     )
 }

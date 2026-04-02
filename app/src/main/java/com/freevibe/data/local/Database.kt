@@ -3,6 +3,7 @@ package com.freevibe.data.local
 import androidx.room.*
 import com.freevibe.data.model.DownloadEntity
 import com.freevibe.data.model.FavoriteEntity
+import com.freevibe.data.model.FavoriteIdentity
 import com.freevibe.data.model.SearchHistoryEntity
 import com.freevibe.data.model.WallpaperCacheEntity
 import com.freevibe.data.model.WallpaperCollectionEntity
@@ -22,7 +23,7 @@ import kotlinx.coroutines.flow.Flow
         WallpaperCollectionEntity::class,
         WallpaperCollectionItemEntity::class,
     ],
-    version = 11,
+    version = 13,
     exportSchema = true,
 )
 abstract class FreeVibeDatabase : RoomDatabase() {
@@ -45,11 +46,14 @@ interface FavoriteDao {
     @Query("SELECT * FROM favorites WHERE type = :type ORDER BY addedAt DESC")
     fun getByType(type: String): Flow<List<FavoriteEntity>>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE id = :id)")
-    fun isFavorite(id: String): Flow<Boolean>
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE id = :id AND source = :source AND type = :type)")
+    fun isFavorite(id: String, source: String, type: String): Flow<Boolean>
 
-    @Query("SELECT * FROM favorites WHERE id = :id LIMIT 1")
-    suspend fun getById(id: String): FavoriteEntity?
+    @Query("SELECT * FROM favorites WHERE id = :id AND source = :source AND type = :type LIMIT 1")
+    suspend fun getByIdentity(id: String, source: String, type: String): FavoriteEntity?
+
+    @Query("SELECT * FROM favorites WHERE id = :id ORDER BY addedAt DESC LIMIT 1")
+    suspend fun getLatestById(id: String): FavoriteEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
@@ -61,14 +65,14 @@ interface FavoriteDao {
     @Delete
     suspend fun delete(favorite: FavoriteEntity)
 
-    @Query("DELETE FROM favorites WHERE id = :id")
-    suspend fun deleteById(id: String)
+    @Query("DELETE FROM favorites WHERE id = :id AND source = :source AND type = :type")
+    suspend fun deleteByIdentity(id: String, source: String, type: String)
 
-    @Query("UPDATE favorites SET offlinePath = :path WHERE id = :id")
-    suspend fun updateOfflinePath(id: String, path: String)
+    @Query("UPDATE favorites SET offlinePath = :path WHERE id = :id AND source = :source AND type = :type")
+    suspend fun updateOfflinePath(id: String, source: String, type: String, path: String)
 
-    @Query("SELECT id FROM favorites")
-    fun allIds(): Flow<List<String>>
+    @Query("SELECT id, source, type FROM favorites")
+    fun allIdentities(): Flow<List<FavoriteIdentity>>
 
     @Query("SELECT COUNT(*) FROM favorites")
     fun count(): Flow<Int>
@@ -196,8 +200,8 @@ interface CollectionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addItem(item: WallpaperCollectionItemEntity)
 
-    @Query("DELETE FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId")
-    suspend fun removeItem(collectionId: Long, wallpaperId: String)
+    @Query("DELETE FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId AND source = :source")
+    suspend fun removeItem(collectionId: Long, wallpaperId: String, source: String)
 
     @Query("DELETE FROM wallpaper_collections WHERE collectionId = :collectionId")
     suspend fun deleteCollection(collectionId: Long)
@@ -205,8 +209,8 @@ interface CollectionDao {
     @Query("DELETE FROM wallpaper_collection_items WHERE collectionId = :collectionId")
     suspend fun deleteCollectionItems(collectionId: Long)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId)")
-    suspend fun isInCollection(collectionId: Long, wallpaperId: String): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM wallpaper_collection_items WHERE collectionId = :collectionId AND wallpaperId = :wallpaperId AND source = :source)")
+    suspend fun isInCollection(collectionId: Long, wallpaperId: String, source: String): Boolean
 
     @Query("UPDATE wallpaper_collections SET name = :name WHERE collectionId = :collectionId")
     suspend fun renameCollection(collectionId: Long, name: String)

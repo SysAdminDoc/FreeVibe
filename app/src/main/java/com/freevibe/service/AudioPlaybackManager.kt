@@ -8,6 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.freevibe.data.model.Sound
+import com.freevibe.data.model.stableKey
 import com.google.common.util.concurrent.ListenableFuture
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -92,7 +93,7 @@ class AudioPlaybackManager @Inject constructor(
         ensureConnected { mc ->
             val mediaItem = MediaItem.Builder()
                 .setUri(url)
-                .setMediaId(sound.id)
+                .setMediaId(sound.stableKey())
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(sound.name)
@@ -106,7 +107,7 @@ class AudioPlaybackManager @Inject constructor(
             mc.prepare()
             mc.volume = volume
             mc.play()
-            _currentSoundId.value = sound.id
+            _currentSoundId.value = sound.stableKey()
             _duration.value = 0L
             _currentPosition.value = 0L
         }
