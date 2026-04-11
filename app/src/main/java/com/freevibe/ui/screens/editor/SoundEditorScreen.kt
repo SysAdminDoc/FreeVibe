@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
+import com.freevibe.data.model.stableKey
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -81,7 +82,7 @@ fun SoundEditorScreen(
             selectionResolved = sound?.let { viewModel.loadSound(it) } ?: false
         }
     }
-    LaunchedEffect(soundId, currentSelectedSound?.id) {
+    LaunchedEffect(soundId, currentSelectedSound?.stableKey()) {
         if (soundId == null) {
             currentSelectedSound?.let { viewModel.loadSound(it) }
         }

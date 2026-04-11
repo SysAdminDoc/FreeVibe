@@ -102,7 +102,12 @@ private fun videoQualityScore(
             BatteryTier.MEDIUM -> 8
             BatteryTier.HIGH -> -12
         }
-        VideoFocusFilter.PHONE_FIT -> if (!item.hasDimensions || item.isPortrait || orientation == OrientationFilter.LANDSCAPE) 16 else -10
+        VideoFocusFilter.PHONE_FIT -> when {
+            !item.hasDimensions -> 12
+            orientation == OrientationFilter.LANDSCAPE && item.isLandscape -> 16
+            orientation != OrientationFilter.LANDSCAPE && item.isPortrait -> 16
+            else -> -10
+        }
     }
     score += minOf(12, (item.popularity / 5_000L).toInt())
     return score
@@ -124,7 +129,11 @@ private fun VideoWallpaperItem.matchesFilter(filter: VideoFocusFilter, orientati
     VideoFocusFilter.BEST -> true
     VideoFocusFilter.LOOP_SAFE -> isLoopFriendly()
     VideoFocusFilter.LOW_BATTERY -> batteryTier() != BatteryTier.HIGH
-    VideoFocusFilter.PHONE_FIT -> !hasDimensions || orientation == OrientationFilter.ALL || isPortrait
+    VideoFocusFilter.PHONE_FIT -> when {
+        !hasDimensions -> true
+        orientation == OrientationFilter.LANDSCAPE -> isLandscape
+        else -> isPortrait
+    }
 }
 
 private fun VideoWallpaperItem.isLoopFriendly(): Boolean {

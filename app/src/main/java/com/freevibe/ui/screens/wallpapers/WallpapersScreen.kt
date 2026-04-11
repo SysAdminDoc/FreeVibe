@@ -78,6 +78,8 @@ fun WallpapersScreen(
     initialQuery: String? = null,
     initialColor: String? = null,
     initialSimilarId: String? = null,
+    initialSimilarSource: String? = null,
+    initialSimilarFullUrl: String? = null,
     onWallpaperClick: (Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
@@ -100,7 +102,7 @@ fun WallpapersScreen(
     }
 
     // Vote counts for visible wallpapers — use derivedStateOf to avoid recomputing on referential inequality
-    val wallpaperIds by remember { derivedStateOf { state.wallpapers.map { it.id } } }
+    val wallpaperIds by remember { derivedStateOf { state.wallpapers.map { it.stableKey() } } }
     val voteCountsFlow = remember(wallpaperIds) {
         if (wallpaperIds.isNotEmpty()) {
             viewModel.voteRepo.getVoteCounts(wallpaperIds)
@@ -128,8 +130,14 @@ fun WallpapersScreen(
         }.size
     }
 
-    LaunchedEffect(initialQuery, initialColor, initialSimilarId) {
-        viewModel.handleRouteFilters(initialQuery, initialColor, initialSimilarId)
+    LaunchedEffect(initialQuery, initialColor, initialSimilarId, initialSimilarSource, initialSimilarFullUrl) {
+        viewModel.handleRouteFilters(
+            query = initialQuery,
+            color = initialColor,
+            similarId = initialSimilarId,
+            similarSource = initialSimilarSource,
+            similarFullUrl = initialSimilarFullUrl,
+        )
     }
     LaunchedEffect(state.applySuccess) {
         state.applySuccess?.let {
@@ -687,7 +695,7 @@ private fun WallpaperGrid(
     val visibleWallpapers by remember(wallpapers, hiddenIds, topVotedIds) {
         derivedStateOf {
             wallpapers
-                .filter { it.id !in hiddenIds && it.stableKey() !in topVotedIds }
+                .filter { !isWallpaperHidden(it, hiddenIds) && it.stableKey() !in topVotedIds }
         }
     }
 
@@ -810,7 +818,7 @@ private fun WallpaperGrid(
 
         // Top upvoted wallpapers section (Discover only, from community votes across all tabs)
         if (isDiscoverTab && topVoted.isNotEmpty()) {
-            topVoted.filter { it.first.id !in hiddenIds }.take(10).forEach { (wp, votes) ->
+            topVoted.filter { !isWallpaperHidden(it.first, hiddenIds) }.take(10).forEach { (wp, votes) ->
                 item(key = "top_${wp.stableKey()}") {
                     val isFav = wp.favoriteIdentity() in favoriteIdentities
                     WallpaperCard(
@@ -819,8 +827,8 @@ private fun WallpaperGrid(
                         voteCount = votes,
                         onClick = { onWallpaperClick(wp) },
                         onFavoriteClick = onLongPress?.let { { it(wp) } },
-                        onLongPress = onDownvote?.let { { it(wp.id) } },
-                        onUpvote = onUpvote?.let { { it(wp.id) } },
+                        onLongPress = onDownvote?.let { { it(wp.stableKey()) } },
+                        onUpvote = onUpvote?.let { { it(wp.stableKey()) } },
                     )
                 }
             }
@@ -831,12 +839,12 @@ private fun WallpaperGrid(
             WallpaperCard(
                 wallpaper = wallpaper,
                 isFavorite = isFav,
-                voteCount = voteCounts[wallpaper.id] ?: 0,
+                voteCount = voteCounts[wallpaper.stableKey()] ?: 0,
                 onClick = { onWallpaperClick(wallpaper) },
                 onFavoriteClick = onLongPress?.let { { it(wallpaper) } },
-                onLongPress = onDownvote?.let { { it(wallpaper.id) } },
-                onUpvote = onUpvote?.let { { it(wallpaper.id) } },
-                onDownvote = onDownvote?.let { { it(wallpaper.id) } },
+                onLongPress = onDownvote?.let { { it(wallpaper.stableKey()) } },
+                onUpvote = onUpvote?.let { { it(wallpaper.stableKey()) } },
+                onDownvote = onDownvote?.let { { it(wallpaper.stableKey()) } },
             )
         }
 
@@ -1092,11 +1100,11 @@ internal fun computeVisibleWallpaperSections(
     dailyPick: Wallpaper?,
     isDiscoverTab: Boolean,
 ): VisibleWallpaperSections {
-    val visibleDailyPick = dailyPick?.takeIf { it.id !in hiddenIds && isDiscoverTab }
+    val visibleDailyPick = dailyPick?.takeIf { !isWallpaperHidden(it, hiddenIds) && isDiscoverTab }
     val dailyKey = visibleDailyPick?.stableKey()
     val visibleTopVoted = if (isDiscoverTab) {
         topVoted
-            .filter { (wallpaper, _) -> wallpaper.id !in hiddenIds }
+            .filter { (wallpaper, _) -> !isWallpaperHidden(wallpaper, hiddenIds) }
             .distinctBy { (wallpaper, _) -> wallpaper.stableKey() }
             .filterNot { (wallpaper, _) -> wallpaper.stableKey() == dailyKey }
     } else {
@@ -1107,7 +1115,7 @@ internal fun computeVisibleWallpaperSections(
         addAll(visibleTopVoted.map { (wallpaper, _) -> wallpaper.stableKey() })
     }
     val feedWallpapers = wallpapers
-        .filter { it.id !in hiddenIds }
+        .filter { !isWallpaperHidden(it, hiddenIds) }
         .distinctBy { it.stableKey() }
         .filterNot { it.stableKey() in featuredKeys }
     val pagerWallpapers = buildList {
@@ -1137,9 +1145,14 @@ internal fun computeWallpaperPagerItems(
         (sharedListAnchorKey == null || sharedListAnchorKey == currentKey)
     val wallpapers = (if (includeSharedList) sharedWallpapers else listOf(currentWallpaper))
         .distinctBy { it.stableKey() }
-        .filter { it.id !in hiddenIds }
+        .filter { !isWallpaperHidden(it, hiddenIds) }
     val initialPage = wallpapers.indexOfFirst { it.stableKey() == currentKey }
         .takeIf { it >= 0 }
         ?: 0
     return WallpaperPagerItems(wallpapers = wallpapers, initialPage = initialPage)
 }
+
+internal fun isWallpaperHidden(
+    wallpaper: Wallpaper,
+    hiddenIds: Set<String>,
+): Boolean = wallpaper.stableKey() in hiddenIds || wallpaper.id in hiddenIds

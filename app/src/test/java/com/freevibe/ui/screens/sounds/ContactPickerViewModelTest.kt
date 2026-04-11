@@ -55,6 +55,13 @@ class ContactPickerViewModelTest {
             previewUrl = "https://example.com/youtube.mp3",
             downloadUrl = "https://example.com/youtube.mp3",
         ).toFavoriteEntity()
+        coEvery { favoritesRepo.getLatestByIdAndType("dup_sound", "SOUND") } returns Sound(
+            id = "dup_sound",
+            source = ContentSource.YOUTUBE,
+            name = "Stale YouTube",
+            previewUrl = "https://example.com/youtube.mp3",
+            downloadUrl = "https://example.com/youtube.mp3",
+        ).toFavoriteEntity()
         every { bundledContent.getRingtones() } returns listOf(fallbackSound)
         every { bundledContent.getNotifications() } returns emptyList()
         every { bundledContent.getAlarms() } returns emptyList()
@@ -72,5 +79,36 @@ class ContactPickerViewModelTest {
         assertEquals(true, resolved)
         assertEquals(ContentSource.BUNDLED, viewModel.state.value.selectedSound?.source)
         assertEquals("https://example.com/bundled.mp3", viewModel.state.value.selectedSound?.previewUrl)
+    }
+
+    @Test
+    fun `ensureSelectedSound ignores newer wrong-type favorite collisions`() = runTest(dispatcher) {
+        val favoritesRepo = mockk<FavoritesRepository>()
+        val bundledContent = mockk<BundledContentProvider>()
+
+        coEvery { favoritesRepo.getLatestByIdAndType("shared_raw", "SOUND") } returns Sound(
+            id = "shared_raw",
+            source = ContentSource.YOUTUBE,
+            name = "Recovered sound",
+            previewUrl = "https://example.com/recovered.mp3",
+            downloadUrl = "https://example.com/recovered.mp3",
+        ).toFavoriteEntity()
+        every { bundledContent.getRingtones() } returns emptyList()
+        every { bundledContent.getNotifications() } returns emptyList()
+        every { bundledContent.getAlarms() } returns emptyList()
+
+        val viewModel = ContactPickerViewModel(
+            contactService = mockk<ContactRingtoneService>(relaxed = true),
+            soundApplier = mockk<SoundApplier>(relaxed = true),
+            favoritesRepo = favoritesRepo,
+            bundledContent = bundledContent,
+            soundUrlResolver = mockk<SoundUrlResolver>(relaxed = true),
+        )
+
+        val resolved = viewModel.ensureSelectedSound("shared_raw", null)
+
+        assertEquals(true, resolved)
+        assertEquals(ContentSource.YOUTUBE, viewModel.state.value.selectedSound?.source)
+        assertEquals("Recovered sound", viewModel.state.value.selectedSound?.name)
     }
 }

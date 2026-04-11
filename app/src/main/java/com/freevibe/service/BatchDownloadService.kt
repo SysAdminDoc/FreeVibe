@@ -1,10 +1,12 @@
 package com.freevibe.service
 
 import com.freevibe.data.model.Wallpaper
+import com.freevibe.data.model.stableKey
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -15,7 +17,8 @@ data class BatchDownloadState(
     val isRunning: Boolean = false,
     val currentItem: String = "",
 ) {
-    val progress: Float get() = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+    val progress: Float
+        get() = if (totalCount > 0) (completedCount + failedCount).toFloat() / totalCount else 0f
     val isComplete: Boolean get() = completedCount + failedCount >= totalCount && totalCount > 0
 }
 
@@ -43,13 +46,14 @@ class BatchDownloadService @Inject constructor(
                     async {
                         semaphore.acquire()
                         try {
-                            _state.update { s -> s.copy(currentItem = wp.id) }
+                            val batchId = buildBatchDownloadId(wp)
                             val ext = guessBatchExtension(wp.fileType)
+                            _state.update { s -> s.copy(currentItem = batchDisplayName(wp)) }
                             try {
                                 downloadManager.downloadWallpaper(
-                                    id = "batch_${wp.id}",
+                                    id = batchId,
                                     url = wp.fullUrl,
-                                    fileName = "Aura_${wp.id}.$ext",
+                                    fileName = buildBatchFileName(wp, ext),
                                 ).onSuccess {
                                     _state.update { s -> s.copy(completedCount = s.completedCount + 1) }
                                 }.onFailure {
@@ -97,3 +101,18 @@ class BatchDownloadService @Inject constructor(
         else -> "jpg"
     }
 }
+
+internal fun buildBatchDownloadId(wallpaper: Wallpaper): String = "batch_${wallpaper.stableKey()}"
+
+internal fun buildBatchFileName(wallpaper: Wallpaper, extension: String): String {
+    val sourceName = wallpaper.source.name.lowercase(Locale.ROOT)
+    return "Aura_${sourceName}_${wallpaper.id}.$extension"
+}
+
+internal fun batchDisplayName(wallpaper: Wallpaper): String =
+    wallpaper.category.takeIf { it.isNotBlank() }
+        ?: wallpaper.tags.firstOrNull { it.isNotBlank() }
+        ?: wallpaper.source.name
+            .lowercase(Locale.ROOT)
+            .replace('_', ' ')
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }

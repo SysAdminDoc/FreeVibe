@@ -4,14 +4,22 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+data class CacheUsageState(
+    val fileUsageLabel: String = "Calculating...",
+    val hasWallpaperMetadataCache: Boolean = false,
+)
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -19,6 +27,7 @@ class SettingsViewModel @Inject constructor(
     private val prefs: PreferencesManager,
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
+    private val wallpaperCacheManager: WallpaperCacheManager,
 ) : ViewModel() {
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
@@ -58,6 +67,12 @@ class SettingsViewModel @Inject constructor(
     val wallpaperHistory = historyManager.getRecent(20).stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
+    private val _cacheUsage = MutableStateFlow(CacheUsageState())
+    val cacheUsage: StateFlow<CacheUsageState> = _cacheUsage.asStateFlow()
+
+    init {
+        refreshCacheUsage()
+    }
 
     fun setAutoWallpaper(enabled: Boolean) = viewModelScope.launch {
         prefs.setAutoWallpaperEnabled(enabled)
@@ -165,24 +180,39 @@ class SettingsViewModel @Inject constructor(
             .edit().putString("video_path", path).apply()
     }
 
-    fun getCacheSize(): String {
-        val cacheDir = context.cacheDir
-        val bytes = cacheDir.walkTopDown().filter { it.isFile && it.parentFile?.name != "trimmed" }.sumOf { it.length() }
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-            bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-            else -> "%.1f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+    fun clearCache() = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            val cacheDir = context.cacheDir
+            cacheDir.listFiles()?.forEach { file ->
+                if (file.name != "trimmed") {
+                    file.deleteRecursively()
+                }
+            }
+            offlineFavorites.clearAll()
+            wallpaperCacheManager.clearAll()
+        }
+        refreshCacheUsage()
+    }
+
+    private fun refreshCacheUsage() = viewModelScope.launch {
+        _cacheUsage.value = withContext(Dispatchers.IO) {
+            val cacheBytes = context.cacheDir
+                .takeIf { it.exists() }
+                ?.walkTopDown()
+                ?.filter { it.isFile && it.parentFile?.name != "trimmed" }
+                ?.sumOf { it.length() }
+                ?: 0L
+            CacheUsageState(
+                fileUsageLabel = formatBytes(cacheBytes + offlineFavorites.getCacheSize()),
+                hasWallpaperMetadataCache = wallpaperCacheManager.countEntries() > 0,
+            )
         }
     }
 
-    fun clearCache() = viewModelScope.launch {
-        val cacheDir = context.cacheDir
-        cacheDir.listFiles()?.forEach { file ->
-            if (file.name != "trimmed") {
-                file.deleteRecursively()
-            }
-        }
-        offlineFavorites.clearAll()
+    private fun formatBytes(bytes: Long): String = when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
+        bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+        else -> "%.1f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
     }
 }

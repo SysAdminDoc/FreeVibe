@@ -9,6 +9,7 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.SearchHistoryEntity
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperCollectionEntity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.repository.RedditRepository
@@ -22,6 +23,7 @@ import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -147,7 +149,63 @@ class WallpapersViewModelTest {
     }
 
     @Test
-    fun `refresh preserves discover feed when refreshed results are empty`() = runTest(dispatcher) {
+    fun `findSimilarById uses route identity when raw ids collide across providers`() = runTest(dispatcher) {
+        val wallpaperRepo = mockk<WallpaperRepository>()
+        val redditRepo = mockk<RedditRepository>()
+        val selectedContent = SelectedContentHolder()
+        val pexelsWallpaper = wallpaper(
+            id = "shared_42",
+            color = "#112233",
+            source = ContentSource.PEXELS,
+            fullUrl = "https://example.com/pexels-shared_42.jpg",
+        )
+        val pixabayWallpaper = wallpaper(
+            id = "shared_42",
+            color = "#445566",
+            source = ContentSource.PIXABAY,
+            fullUrl = "https://example.com/pixabay-shared_42.jpg",
+        )
+        selectedContent.selectWallpaper(pexelsWallpaper, listOf(pexelsWallpaper, pixabayWallpaper))
+
+        stubCommonDependencies(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+        )
+
+        coEvery { wallpaperRepo.searchByColor("445566", 1) } returns SearchResult(
+            items = listOf(
+                wallpaper(
+                    id = "pixabay_like",
+                    color = "#445566",
+                    source = ContentSource.PIXABAY,
+                    fullUrl = "https://example.com/pixabay-like.jpg",
+                )
+            ),
+            totalCount = 1,
+            currentPage = 1,
+            hasMore = false,
+        )
+
+        val viewModel = createViewModel(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+            selectedContent = selectedContent,
+        )
+
+        viewModel.findSimilarById(
+            wallpaperId = "shared_42",
+            source = ContentSource.PIXABAY,
+            fullUrl = "https://example.com/pixabay-shared_42.jpg",
+        )
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { wallpaperRepo.searchByColor("445566", 1) }
+        coVerify(exactly = 0) { wallpaperRepo.searchByColor("112233", 1) }
+        assertEquals(listOf("pixabay_like"), viewModel.state.value.wallpapers.map { it.id })
+    }
+
+    @Test
+    fun `refresh preserves discover feed but updates pagination when refreshed results are empty`() = runTest(dispatcher) {
         val wallpaperRepo = mockk<WallpaperRepository>()
         val redditRepo = mockk<RedditRepository>()
         val seededWallpaper = wallpaper(id = "wh_seed", color = "#101820")
@@ -181,20 +239,207 @@ class WallpapersViewModelTest {
 
         val state = viewModel.state.value
         assertEquals(listOf("wh_seed"), state.wallpapers.map { it.id })
-        assertTrue(state.hasMore)
+        assertEquals(false, state.hasMore)
         assertNull(state.error)
+    }
+
+    @Test
+    fun `downloadWallpaper scopes download identity by source`() = runTest(dispatcher) {
+        val wallpaperRepo = mockk<WallpaperRepository>()
+        val redditRepo = mockk<RedditRepository>()
+        val downloadManager = mockk<DownloadManager>()
+        val wallpaper = wallpaper(
+            id = "shared_42",
+            color = "#101820",
+            source = ContentSource.PEXELS,
+            fullUrl = "https://example.com/pexels-shared_42.png",
+        )
+
+        stubCommonDependencies(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+        )
+
+        coEvery {
+            downloadManager.downloadWallpaper(
+                id = wallpaper.stableKey(),
+                url = wallpaper.fullUrl,
+                fileName = match { it == "Aura_pexels_shared_42.png" },
+            )
+        } returns Result.success(mockk(relaxed = true))
+
+        val viewModel = createViewModel(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+            downloadManagerOverride = downloadManager,
+        )
+
+        viewModel.downloadWallpaper(wallpaper)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            downloadManager.downloadWallpaper(
+                id = wallpaper.stableKey(),
+                url = wallpaper.fullUrl,
+                fileName = "Aura_pexels_shared_42.png",
+            )
+        }
+    }
+
+    @Test
+    fun `fetchTopVoted ignores ambiguous legacy vote ids when stable vote ids exist`() = runTest(dispatcher) {
+        val wallpaperRepo = mockk<WallpaperRepository>()
+        val redditRepo = mockk<RedditRepository>()
+        val voteRepo = mockk<VoteRepository>()
+        val cacheManager = mockk<WallpaperCacheManager>()
+        val pexelsWallpaper = wallpaper(
+            id = "shared_42",
+            color = "#112233",
+            source = ContentSource.PEXELS,
+            fullUrl = "https://example.com/pexels-shared_42.jpg",
+        )
+        val pixabayWallpaper = wallpaper(
+            id = "shared_42",
+            color = "#445566",
+            source = ContentSource.PIXABAY,
+            fullUrl = "https://example.com/pixabay-shared_42.jpg",
+        )
+
+        stubCommonDependencies(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+        )
+
+        every { voteRepo.hiddenIds } returns flowOf(emptySet())
+        every { voteRepo.sanitizeKey(any()) } answers {
+            firstArg<String>().replace(Regex("[.#$\\[\\]/]"), "_")
+        }
+        coEvery { voteRepo.getTopVotedIds(any()) } returns listOf(
+            pexelsWallpaper.stableKey() to 7,
+            "shared_42" to 20,
+        )
+        coEvery { cacheManager.getByIds(any()) } returns listOf(pexelsWallpaper, pixabayWallpaper)
+
+        val viewModel = createViewModel(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+            voteRepoOverride = voteRepo,
+            cacheManagerOverride = cacheManager,
+        )
+
+        advanceUntilIdle()
+
+        val topVoted = viewModel.topVoted.value
+        assertEquals(1, topVoted.size)
+        assertEquals(ContentSource.PEXELS, topVoted.first().first.source)
+        assertEquals(7, topVoted.first().second)
+    }
+
+    @Test
+    fun `resolveWallpaper uses type-scoped favorite lookup when raw ids collide across content types`() = runTest(dispatcher) {
+        val wallpaperRepo = mockk<WallpaperRepository>()
+        val redditRepo = mockk<RedditRepository>()
+        val favoritesRepo = mockk<FavoritesRepository>()
+
+        stubCommonDependencies(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+        )
+
+        coEvery { favoritesRepo.getByIdentity(any()) } returns null
+        coEvery { favoritesRepo.getLatestById(any()) } returns com.freevibe.data.model.FavoriteEntity(
+            id = "shared_raw",
+            source = ContentSource.YOUTUBE.name,
+            type = "SOUND",
+            thumbnailUrl = "",
+            fullUrl = "https://example.com/audio.mp3",
+            name = "Audio collision",
+        )
+        coEvery { favoritesRepo.getLatestByIdAndType("shared_raw", "WALLPAPER") } returns com.freevibe.data.model.FavoriteEntity(
+            id = "shared_raw",
+            source = ContentSource.PIXABAY.name,
+            type = "WALLPAPER",
+            thumbnailUrl = "https://example.com/shared-thumb.jpg",
+            fullUrl = "https://example.com/shared.jpg",
+            width = 1080,
+            height = 2400,
+            colors = "#123456",
+        )
+
+        val viewModel = createViewModel(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+            favoritesRepoOverride = favoritesRepo,
+        )
+
+        advanceUntilIdle()
+
+        val resolved = viewModel.resolveWallpaper("shared_raw")
+
+        assertEquals(ContentSource.PIXABAY, resolved?.source)
+        assertEquals("https://example.com/shared.jpg", resolved?.fullUrl)
+        coVerify(exactly = 1) { favoritesRepo.getLatestByIdAndType("shared_raw", "WALLPAPER") }
+    }
+
+    @Test
+    fun `resolveWallpaper uses cache identity when raw ids collide across providers`() = runTest(dispatcher) {
+        val wallpaperRepo = mockk<WallpaperRepository>()
+        val redditRepo = mockk<RedditRepository>()
+        val cacheManager = mockk<WallpaperCacheManager>()
+        val pexelsWallpaper = wallpaper(
+            id = "shared_raw",
+            color = "#112233",
+            source = ContentSource.PEXELS,
+            fullUrl = "https://example.com/pexels-shared.jpg",
+        )
+        val pixabayWallpaper = wallpaper(
+            id = "shared_raw",
+            color = "#445566",
+            source = ContentSource.PIXABAY,
+            fullUrl = "https://example.com/pixabay-shared.jpg",
+        )
+
+        stubCommonDependencies(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+        )
+        coEvery { cacheManager.getByIds(listOf("shared_raw")) } returns listOf(pexelsWallpaper, pixabayWallpaper)
+
+        val viewModel = createViewModel(
+            wallpaperRepo = wallpaperRepo,
+            redditRepo = redditRepo,
+            cacheManagerOverride = cacheManager,
+        )
+
+        advanceUntilIdle()
+
+        val resolved = viewModel.resolveWallpaper(
+            id = "shared_raw",
+            source = ContentSource.PIXABAY,
+            fullUrl = "https://example.com/pixabay-shared.jpg",
+        )
+
+        assertEquals(ContentSource.PIXABAY, resolved?.source)
+        assertEquals("https://example.com/pixabay-shared.jpg", resolved?.fullUrl)
     }
 
     private fun createViewModel(
         wallpaperRepo: WallpaperRepository,
         redditRepo: RedditRepository,
         selectedContent: SelectedContentHolder = SelectedContentHolder(),
+        downloadManagerOverride: DownloadManager? = null,
+        voteRepoOverride: VoteRepository? = null,
+        cacheManagerOverride: WallpaperCacheManager? = null,
+        favoritesRepoOverride: FavoritesRepository? = null,
     ): WallpapersViewModel {
-        val favoritesRepo = mockk<FavoritesRepository>()
+        val favoritesRepo = favoritesRepoOverride ?: mockk<FavoritesRepository>()
         every { favoritesRepo.allIdentities() } returns flowOf(emptySet<FavoriteIdentity>())
         every { favoritesRepo.isFavorite(any()) } returns flowOf(false)
-        coEvery { favoritesRepo.getByIdentity(any()) } returns null
-        coEvery { favoritesRepo.getLatestById(any()) } returns null
+        if (favoritesRepoOverride == null) {
+            coEvery { favoritesRepo.getByIdentity(any()) } returns null
+            coEvery { favoritesRepo.getLatestById(any()) } returns null
+            coEvery { favoritesRepo.getLatestByIdAndType(any(), any()) } returns null
+        }
 
         val searchHistoryRepo = mockk<SearchHistoryRepository>()
         every { searchHistoryRepo.getRecentWallpaperSearches(any()) } returns flowOf(emptyList<SearchHistoryEntity>())
@@ -210,15 +455,20 @@ class WallpapersViewModelTest {
         val collectionRepo = mockk<CollectionRepository>()
         every { collectionRepo.getAll() } returns flowOf(emptyList<WallpaperCollectionEntity>())
 
-        val downloadManager = mockk<DownloadManager>()
+        val downloadManager = downloadManagerOverride ?: mockk<DownloadManager>()
         every { downloadManager.activeDownloads } returns MutableStateFlow(emptyMap())
 
-        val voteRepo = mockk<VoteRepository>()
-        every { voteRepo.hiddenIds } returns flowOf(emptySet())
-        coEvery { voteRepo.getTopVotedIds(any()) } returns emptyList()
+        val voteRepo = voteRepoOverride ?: mockk<VoteRepository>().also {
+            every { it.hiddenIds } returns flowOf(emptySet())
+            every { it.sanitizeKey(any()) } answers {
+                firstArg<String>().replace(Regex("[.#$\\[\\]/]"), "_")
+            }
+            coEvery { it.getTopVotedIds(any()) } returns emptyList()
+        }
 
-        val cacheManager = mockk<WallpaperCacheManager>()
-        coEvery { cacheManager.getByIds(any()) } returns emptyList()
+        val cacheManager = cacheManagerOverride ?: mockk<WallpaperCacheManager>().also {
+            coEvery { it.getByIds(any()) } returns emptyList()
+        }
 
         return WallpapersViewModel(
             context = mockk<Context>(relaxed = true),
@@ -267,11 +517,13 @@ class WallpapersViewModelTest {
     private fun wallpaper(
         id: String,
         color: String,
+        source: ContentSource = ContentSource.WALLHAVEN,
+        fullUrl: String = "https://example.com/$id.jpg",
     ) = Wallpaper(
         id = id,
-        source = ContentSource.WALLHAVEN,
+        source = source,
         thumbnailUrl = "https://example.com/$id-thumb.jpg",
-        fullUrl = "https://example.com/$id.jpg",
+        fullUrl = fullUrl,
         width = 1440,
         height = 3200,
         tags = listOf("minimal"),

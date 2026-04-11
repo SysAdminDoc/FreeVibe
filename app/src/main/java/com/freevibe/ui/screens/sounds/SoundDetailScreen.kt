@@ -269,7 +269,13 @@ fun SoundDetailScreen(
 
             // More Like This
             Spacer(Modifier.height(4.dp))
-            SimilarSoundsSection(s, similarSounds, similarLoading, viewModel) { similar ->
+            SimilarSoundsSection(
+                sound = s,
+                similarSounds = similarSounds,
+                isLoading = similarLoading,
+                currentPlayingId = state.playingId,
+                viewModel = viewModel,
+            ) { similar ->
                 viewModel.selectSound(similar)
                 onOpenSound(similar)
             }
@@ -296,7 +302,9 @@ private fun SimilarSoundsSection(
     sound: Sound,
     similarSounds: MutableState<List<Sound>>,
     isLoading: MutableState<Boolean>,
-    viewModel: SoundsViewModel, onSoundClick: (Sound) -> Unit,
+    currentPlayingId: String?,
+    viewModel: SoundsViewModel,
+    onSoundClick: (Sound) -> Unit,
 ) {
     var loaded by remember(sound.stableKey()) { mutableStateOf(false) }
     LaunchedEffect(sound.stableKey()) {
@@ -312,7 +320,6 @@ private fun SimilarSoundsSection(
         if (isLoading.value) {
             Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
         } else if (similarSounds.value.isNotEmpty()) {
-            val currentPlayingId = viewModel.state.collectAsState().value.playingId
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(similarSounds.value, key = { it.stableKey() }) { similar ->
                     Surface(

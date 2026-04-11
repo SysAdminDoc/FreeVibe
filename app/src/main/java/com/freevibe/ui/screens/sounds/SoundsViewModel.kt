@@ -415,7 +415,7 @@ class SoundsViewModel @Inject constructor(
                     type = "SOUND",
                 )
             )
-        } ?: favoritesRepo.getLatestById(id))
+        } ?: favoritesRepo.getLatestByIdAndType(id, "SOUND"))
             ?.takeIf { it.type == "SOUND" }
             ?.toSound()
             ?.takeIf { matchesSoundIdentity(it, id, source, previewUrl, downloadUrl) }
@@ -441,10 +441,14 @@ class SoundsViewModel @Inject constructor(
             stopPlayback()
         } else if (soundKey == _state.value.resolvingId) {
             _state.update { it.copy(resolvingId = null) }
-        } else if (sound.id.startsWith("yt_") && sound.previewUrl.isEmpty()) {
+        } else if (shouldRefreshYouTubePreview(sound)) {
             viewModelScope.launch {
                 _state.update { it.copy(resolvingId = soundKey) }
-                val videoId = sound.id.removePrefix("yt_")
+                val videoId = sound.youtubeVideoId()
+                    ?: run {
+                        _state.update { it.copy(resolvingId = null, error = "Could not load audio") }
+                        return@launch
+                    }
                 val url = youtubeRepo.getAudioPreviewUrl(videoId)
                 if (_state.value.resolvingId != soundKey) return@launch // user cancelled
                 if (url != null) {
@@ -538,16 +542,11 @@ class SoundsViewModel @Inject constructor(
     fun applySound(sound: Sound, type: ContentType) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true, applySuccess = null) }
-            val url = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
-                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_"))
-                    ?: run { _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }; return@launch }
-            } else {
-                soundUrlResolver.resolve(sound)
-                    ?: run {
-                        _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }
-                        return@launch
-                    }
-            }
+            val url = resolveDownloadUrl(sound)
+                ?: run {
+                    _state.update { it.copy(isApplying = false, error = "Could not resolve audio") }
+                    return@launch
+                }
             soundApplier.downloadAndApply(url, sound.name, type)
                 .onSuccess {
                     val label = when (type) {
@@ -564,21 +563,14 @@ class SoundsViewModel @Inject constructor(
 
     fun downloadSound(sound: Sound) {
         viewModelScope.launch {
-            val dlUrl = if (sound.id.startsWith("yt_") && sound.downloadUrl.isEmpty()) {
-                youtubeRepo.getAudioStreamUrl(sound.id.removePrefix("yt_")) ?: run {
-                    _state.update { it.copy(error = "Could not resolve audio stream URL") }
-                    return@launch
-                }
-            } else {
-                soundUrlResolver.resolve(sound) ?: run {
-                    _state.update { it.copy(error = "Could not resolve audio stream URL") }
-                    return@launch
-                }
+            val dlUrl = resolveDownloadUrl(sound) ?: run {
+                _state.update { it.copy(error = "Could not resolve audio stream URL") }
+                return@launch
             }
             val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3").lowercase()
             downloadManager.downloadSound(
-                id = sound.id, url = dlUrl,
-                fileName = "Aura_${sound.name.take(40)}.$ext",
+                id = sound.stableKey(), url = dlUrl,
+                fileName = buildSoundDownloadFileName(sound, ext),
                 type = currentDownloadType(),
             )
             _state.update { it.copy(applySuccess = "Download started") }
@@ -597,7 +589,24 @@ class SoundsViewModel @Inject constructor(
         }
     }
 
+    private fun buildSoundDownloadFileName(sound: Sound, extension: String): String =
+        "Aura_${sound.source.name.lowercase()}_${sound.id}_${sound.name.take(24)}.$extension"
+
     fun isFavorite(sound: Sound): Flow<Boolean> = favoritesRepo.isFavorite(sound.favoriteIdentity())
+
+    private fun shouldRefreshYouTubePreview(sound: Sound): Boolean {
+        val videoId = sound.youtubeVideoId() ?: return false
+        return sound.previewUrl.isBlank() || !youtubeRepo.isCached(videoId)
+    }
+
+    private suspend fun resolveDownloadUrl(sound: Sound): String? {
+        val videoId = sound.youtubeVideoId()
+        return if (videoId != null) {
+            youtubeRepo.getAudioStreamUrl(videoId)
+        } else {
+            soundUrlResolver.resolve(sound)
+        }
+    }
 
     suspend fun loadSimilar(sound: Sound): List<Sound> {
         val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
@@ -939,7 +948,7 @@ class SoundsViewModel @Inject constructor(
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
-                        hasMore = if (preserveCurrentFeed) it.hasMore else pagedSourcesHaveMore.get(),
+                        hasMore = pagedSourcesHaveMore.get(),
                         error = when {
                             preserveCurrentFeed && surfacedError != null -> "$surfacedError. Showing your last good results."
                             else -> surfacedError
@@ -1145,6 +1154,12 @@ class SoundsViewModel @Inject constructor(
         }
     }
 }
+
+private fun Sound.youtubeVideoId(): String? =
+    takeIf { source == ContentSource.YOUTUBE }
+        ?.id
+        ?.removePrefix("yt_")
+        ?.takeIf { it.isNotBlank() && it != id }
 
 internal fun matchesSoundIdentity(
     sound: Sound,

@@ -75,6 +75,7 @@ fun SettingsScreen(
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsState()
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsState()
     val freesoundApiKey by viewModel.freesoundApiKey.collectAsState()
+    val cacheUsage by viewModel.cacheUsage.collectAsState()
     var dailyWp by remember {
         mutableStateOf(
             context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
@@ -678,7 +679,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Folder,
                 title = "Clear cache and offline saves",
-                subtitle = "Using ${viewModel.getCacheSize()} of temporary files and offline favorites",
+                subtitle = cacheUsageSubtitle(cacheUsage),
                 onClick = { showClearCacheConfirm = true },
             )
         }
@@ -972,7 +973,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearCacheConfirm = false },
             title = { Text("Clear cache and offline saves?") },
-            text = { Text("This will free ${viewModel.getCacheSize()} by removing cached images, temporary media, and offline favorites. Downloaded files are not affected.") },
+            text = { Text(clearCacheConfirmation(cacheUsage)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCache()
@@ -1109,6 +1110,23 @@ private fun formatInterval(minutes: Long): String = when {
     minutes == 1440L -> "1 day"
     else -> "${minutes / 1440} days"
 }
+
+private fun cacheUsageSubtitle(cacheUsage: CacheUsageState): String =
+    buildString {
+        append("Using ${cacheUsage.fileUsageLabel} of temp files and offline saves")
+        if (cacheUsage.hasWallpaperMetadataCache) {
+            append(" + wallpaper feed cache")
+        }
+    }
+
+private fun clearCacheConfirmation(cacheUsage: CacheUsageState): String =
+    buildString {
+        append("This will remove ${cacheUsage.fileUsageLabel} of temporary media and offline favorites")
+        if (cacheUsage.hasWallpaperMetadataCache) {
+            append(", and reset cached wallpaper feeds")
+        }
+        append(". Downloaded files are not affected.")
+    }
 
 @Composable
 private fun SourcePickerDialog(

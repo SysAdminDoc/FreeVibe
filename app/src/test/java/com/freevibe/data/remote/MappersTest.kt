@@ -152,6 +152,46 @@ class MappersTest {
     }
 
     @Test
+    fun `YouTube favorites store page urls and restore with fresh resolution fields`() {
+        val original = Sound(
+            id = "yt_focus12345",
+            source = ContentSource.YOUTUBE,
+            name = "Focus Loop",
+            previewUrl = "https://redirect.googlevideo.com/stale-preview",
+            downloadUrl = "https://redirect.googlevideo.com/stale-download",
+            duration = 18.0,
+            sourcePageUrl = "https://www.youtube.com/watch?v=focus12345",
+        )
+
+        val entity = original.toFavoriteEntity()
+        val restored = entity.toSound()
+
+        assertEquals(original.sourcePageUrl, entity.fullUrl)
+        assertEquals("", restored.previewUrl)
+        assertEquals("", restored.downloadUrl)
+        assertEquals(original.sourcePageUrl, restored.sourcePageUrl)
+    }
+
+    @Test
+    fun `FavoriteEntity toSound recovers YouTube page urls from legacy fullUrl`() {
+        val entity = FavoriteEntity(
+            id = "yt_focus12345",
+            source = "YOUTUBE",
+            type = "SOUND",
+            thumbnailUrl = "",
+            fullUrl = "https://youtu.be/focus12345",
+            name = "Focus Loop",
+        )
+
+        val restored = entity.toSound()
+
+        assertEquals(ContentSource.YOUTUBE, restored.source)
+        assertEquals("https://youtu.be/focus12345", restored.sourcePageUrl)
+        assertEquals("", restored.previewUrl)
+        assertEquals("", restored.downloadUrl)
+    }
+
+    @Test
     fun `FavoriteEntity toSound handles unknown source with FREESOUND fallback`() {
         val entity = FavoriteEntity(
             id = "x", source = "NONEXISTENT", type = "SOUND",

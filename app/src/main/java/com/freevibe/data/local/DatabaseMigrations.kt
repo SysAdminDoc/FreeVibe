@@ -171,6 +171,41 @@ object DatabaseMigrations {
         }
     }
 
+    // v13→14: wallpaper_cache becomes source-aware so mixed-source discover results can cache duplicate raw ids safely
+    val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `wallpaper_cache_new` (" +
+                    "`id` TEXT NOT NULL, " +
+                    "`source` TEXT NOT NULL, " +
+                    "`thumbnailUrl` TEXT NOT NULL, " +
+                    "`fullUrl` TEXT NOT NULL, " +
+                    "`width` INTEGER NOT NULL, " +
+                    "`height` INTEGER NOT NULL, " +
+                    "`category` TEXT NOT NULL DEFAULT '', " +
+                    "`tags` TEXT NOT NULL DEFAULT '', " +
+                    "`fileSize` INTEGER NOT NULL DEFAULT 0, " +
+                    "`fileType` TEXT NOT NULL DEFAULT '', " +
+                    "`uploaderName` TEXT NOT NULL DEFAULT '', " +
+                    "`colors` TEXT NOT NULL DEFAULT '', " +
+                    "`sourcePageUrl` TEXT NOT NULL DEFAULT '', " +
+                    "`views` INTEGER NOT NULL DEFAULT 0, " +
+                    "`favorites` INTEGER NOT NULL DEFAULT 0, " +
+                    "`cacheKey` TEXT NOT NULL DEFAULT '', " +
+                    "`cachedAt` INTEGER NOT NULL DEFAULT 0, " +
+                    "PRIMARY KEY(`id`, `source`, `cacheKey`))"
+            )
+            db.execSQL(
+                "INSERT OR REPLACE INTO `wallpaper_cache_new` " +
+                    "SELECT `id`, `source`, `thumbnailUrl`, `fullUrl`, `width`, `height`, `category`, `tags`, `fileSize`, `fileType`, `uploaderName`, `colors`, `sourcePageUrl`, `views`, `favorites`, `cacheKey`, `cachedAt` " +
+                    "FROM `wallpaper_cache`"
+            )
+            db.execSQL("DROP TABLE `wallpaper_cache`")
+            db.execSQL("ALTER TABLE `wallpaper_cache_new` RENAME TO `wallpaper_cache`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_wallpaper_cache_cacheKey` ON `wallpaper_cache` (`cacheKey`)")
+        }
+    }
+
     val ALL_MIGRATIONS = arrayOf(
         MIGRATION_1_2,
         MIGRATION_2_3,
@@ -184,5 +219,6 @@ object DatabaseMigrations {
         MIGRATION_10_11,
         MIGRATION_11_12,
         MIGRATION_12_13,
+        MIGRATION_13_14,
     )
 }

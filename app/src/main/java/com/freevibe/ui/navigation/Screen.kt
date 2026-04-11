@@ -24,20 +24,31 @@ sealed class Screen(
         title = "Wallpapers",
         icon = Icons.Outlined.Wallpaper,
         selectedIcon = Icons.Filled.Wallpaper,
-        destinationPattern = "wallpapers?query={query}&color={color}&similarId={similarId}",
+        destinationPattern = "wallpapers?query={query}&color={color}&similarId={similarId}&similarSource={similarSource}&similarFullUrl={similarFullUrl}",
     ) {
         fun createRoute(
             query: String? = null,
             color: String? = null,
             similarId: String? = null,
+            similarSource: String? = null,
+            similarFullUrl: String? = null,
         ): String {
             val params = buildList {
                 query?.takeIf { it.isNotBlank() }?.let { add("query=${Uri.encode(it)}") }
                 color?.takeIf { it.isNotBlank() }?.let { add("color=${Uri.encode(it)}") }
                 similarId?.takeIf { it.isNotBlank() }?.let { add("similarId=${Uri.encode(it)}") }
+                similarSource?.takeIf { it.isNotBlank() }?.let { add("similarSource=${Uri.encode(it)}") }
+                similarFullUrl?.takeIf { it.isNotBlank() }?.let { add("similarFullUrl=${Uri.encode(it)}") }
             }
             return if (params.isEmpty()) route else "$route?${params.joinToString("&")}"
         }
+
+        fun createSimilarRoute(wallpaper: Wallpaper): String =
+            createRoute(
+                similarId = wallpaper.id,
+                similarSource = wallpaper.source.name,
+                similarFullUrl = wallpaper.fullUrl,
+            )
     }
     data object VideoWallpapers : Screen(
         route = "video_wallpapers",

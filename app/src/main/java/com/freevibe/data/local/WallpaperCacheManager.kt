@@ -38,7 +38,7 @@ class WallpaperCacheManager @Inject constructor(
         return if (entries.isNotEmpty()) entries.map { it.toWallpaper() } else null
     }
 
-    /** Get cached wallpapers by their IDs (across all cache keys). Chunked to avoid SQLite bind limit. */
+    /** Get the latest cached wallpaper for each raw-id/source pair (across all cache keys). */
     suspend fun getByIds(ids: List<String>): List<Wallpaper> {
         if (ids.isEmpty()) return emptyList()
         return ids.chunked(500).flatMap { chunk ->
@@ -66,6 +66,8 @@ class WallpaperCacheManager @Inject constructor(
 
     /** Full cache clear */
     suspend fun clearAll() = cacheDao.clearAll()
+
+    suspend fun countEntries(): Int = cacheDao.countEntries()
 
     private fun getTtl(source: ContentSource): Long = when (source) {
         ContentSource.PICSUM -> TTL_PICSUM

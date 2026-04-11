@@ -109,7 +109,7 @@ class SoundEditorViewModel @Inject constructor(
     fun loadSound(sound: Sound): Boolean {
         val currentState = _state.value
         val soundKey = sound.stableKey()
-        if (loadedSoundKey == soundKey && (currentState.localFilePath != null || currentState.isLoading)) {
+        if (shouldReuseLoadedSound(loadedSoundKey, soundKey, currentState)) {
             return true
         }
         loadedSoundKey = soundKey
@@ -117,13 +117,14 @@ class SoundEditorViewModel @Inject constructor(
         loadRemoteSound(sound.name) {
             val resolvedUrl = soundUrlResolver.resolve(sound)
                 ?: throw IllegalStateException("No audio URL available")
-            downloadToCache(resolvedUrl, sound.name)
+            downloadToCache(resolvedUrl, sound.name, soundKey)
         }
         return true
     }
 
     fun loadFromUrl(url: String, name: String) {
-        loadRemoteSound(name) { downloadToCache(url, name) }
+        loadedSoundKey = buildRemoteAudioCacheIdentity(url, name)
+        loadRemoteSound(name) { downloadToCache(url, name, buildRemoteAudioCacheIdentity(url, name)) }
     }
 
     private fun loadRemoteSound(name: String, loader: suspend () -> File) {
@@ -168,6 +169,7 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     fun loadFromLocalUri(uri: Uri) {
+        loadedSoundKey = buildLocalAudioEditorIdentity(uri.toString())
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             stopPlayback()
@@ -346,16 +348,10 @@ class SoundEditorViewModel @Inject constructor(
         super.onCleared()
     }
 
-    private suspend fun downloadToCache(url: String, name: String): File = withContext(Dispatchers.IO) {
+    private suspend fun downloadToCache(url: String, name: String, cacheIdentity: String): File = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "audio_edit")
         cacheDir.mkdirs()
-        val ext = when {
-            url.contains(".ogg") -> ".ogg"
-            url.contains(".wav") -> ".wav"
-            url.contains(".flac") -> ".flac"
-            else -> ".mp3"
-        }
-        val file = File(cacheDir, name.replace(Regex("[^a-zA-Z0-9]"), "_") + ext)
+        val file = File(cacheDir, buildRemoteAudioCacheFileName(name, cacheIdentity, url))
         if (!file.exists()) {
             val tmpFile = File(cacheDir, file.name + ".tmp")
             try {
@@ -457,4 +453,29 @@ class SoundEditorViewModel @Inject constructor(
         } catch (_: Exception) { 0L }
         finally { try { mp.release() } catch (_: Exception) {} }
     }
+}
+
+internal fun buildRemoteAudioCacheIdentity(url: String, name: String): String = "$name::$url"
+
+internal fun buildLocalAudioEditorIdentity(uri: String): String = "local::$uri"
+
+internal fun shouldReuseLoadedSound(
+    loadedSoundKey: String?,
+    requestedSoundKey: String,
+    state: SoundEditorState,
+): Boolean =
+    loadedSoundKey == requestedSoundKey &&
+        !state.isLocalFile &&
+        (state.localFilePath != null || state.isLoading)
+
+internal fun buildRemoteAudioCacheFileName(name: String, cacheIdentity: String, url: String): String {
+    val ext = when {
+        url.contains(".ogg", ignoreCase = true) -> ".ogg"
+        url.contains(".wav", ignoreCase = true) -> ".wav"
+        url.contains(".flac", ignoreCase = true) -> ".flac"
+        else -> ".mp3"
+    }
+    val safeName = name.replace(Regex("[^a-zA-Z0-9]"), "_").trim('_').ifBlank { "audio" }
+    val scopedSuffix = cacheIdentity.hashCode().toUInt().toString(16)
+    return "${safeName}_$scopedSuffix$ext"
 }

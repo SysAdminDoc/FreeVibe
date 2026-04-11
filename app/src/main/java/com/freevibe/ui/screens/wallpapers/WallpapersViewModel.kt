@@ -83,6 +83,8 @@ class WallpapersViewModel @Inject constructor(
     private var lastRouteQuery: String? = null
     private var lastRouteColor: String? = null
     private var lastRouteSimilarId: String? = null
+    private var lastRouteSimilarSource: String? = null
+    private var lastRouteSimilarFullUrl: String? = null
     private var hasInitiallyLoaded = false
 
     val selectedWallpaper = selectedContent.selectedWallpaper
@@ -121,18 +123,24 @@ class WallpapersViewModel @Inject constructor(
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Top voted IDs from Firebase: ${topIds.size} entries, first=${topIds.firstOrNull()}")
                 if (topIds.isEmpty()) return@launch
 
-                // Firebase stores sanitized keys — try both original and sanitized IDs
-                val allIds = topIds.flatMap { (id, _) -> listOf(id, id.replace("_", "."), id.replace("_", "/")) }.distinct()
+                val allIds = topIds.flatMap { (voteKey, _) -> extractWallpaperLookupIds(voteKey) }.distinct()
                 val cachedWallpapers = cacheManager.getByIds(allIds)
                 val wallpapers = (seedWallpapers + cachedWallpapers).distinctBy { it.stableKey() }
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Resolved ${wallpapers.size} wallpapers from seed/cache for ${allIds.size} ID variants")
 
                 val voteMap = topIds.toMap()
+                val ambiguousLegacyIds = wallpapers
+                    .groupBy { it.id }
+                    .filterValues { matches -> matches.size > 1 }
+                    .keys
                 val sorted = wallpapers
                     .mapNotNull { wp ->
-                        val sanitized = voteRepo.sanitizeKey(wp.id)
-                        voteMap[wp.id]?.let { wp to it }
-                            ?: voteMap[sanitized]?.let { wp to it }
+                        resolveWallpaperVoteCount(
+                            wallpaper = wp,
+                            voteMap = voteMap,
+                            ambiguousLegacyIds = ambiguousLegacyIds,
+                            sanitizeKey = voteRepo::sanitizeKey,
+                        )?.let { wp to it }
                     }
                     .distinctBy { it.first.stableKey() }
                     .sortedByDescending { it.second }
@@ -152,23 +160,39 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
-    fun handleRouteFilters(query: String?, color: String?, similarId: String? = null) {
+    fun handleRouteFilters(
+        query: String?,
+        color: String?,
+        similarId: String? = null,
+        similarSource: String? = null,
+        similarFullUrl: String? = null,
+    ) {
         val normalizedQuery = query?.ifBlank { null }
         val normalizedColor = color?.ifBlank { null }
         val normalizedSimilarId = similarId?.ifBlank { null }
+        val normalizedSimilarSource = similarSource?.ifBlank { null }
+        val normalizedSimilarFullUrl = similarFullUrl?.ifBlank { null }
 
         // Skip dedup only for non-initial calls with identical filters
         if (
             hasInitiallyLoaded &&
             normalizedQuery == lastRouteQuery &&
             normalizedColor == lastRouteColor &&
-            normalizedSimilarId == lastRouteSimilarId
+            normalizedSimilarId == lastRouteSimilarId &&
+            normalizedSimilarSource == lastRouteSimilarSource &&
+            normalizedSimilarFullUrl == lastRouteSimilarFullUrl
         ) return
 
         lastRouteQuery = normalizedQuery
         lastRouteColor = normalizedColor
         lastRouteSimilarId = normalizedSimilarId
+        lastRouteSimilarSource = normalizedSimilarSource
+        lastRouteSimilarFullUrl = normalizedSimilarFullUrl
         hasInitiallyLoaded = true
+
+        val resolvedSimilarSource = normalizedSimilarSource?.let { sourceName ->
+            runCatching { ContentSource.valueOf(sourceName) }.getOrNull()
+        }
 
         when {
             normalizedQuery != null -> {
@@ -181,7 +205,11 @@ class WallpapersViewModel @Inject constructor(
                     searchByColor(normalizedColor)
                 }
             }
-            normalizedSimilarId != null -> findSimilarById(normalizedSimilarId)
+            normalizedSimilarId != null -> findSimilarById(
+                wallpaperId = normalizedSimilarId,
+                source = resolvedSimilarSource,
+                fullUrl = normalizedSimilarFullUrl,
+            )
             _state.value.wallpapers.isEmpty() && !_state.value.isLoading -> loadWallpapers()
         }
     }
@@ -342,7 +370,7 @@ class WallpapersViewModel @Inject constructor(
 
     /** Update selected wallpaper without overwriting the shared list (used by detail pager) */
     fun selectWallpaperOnly(wallpaper: Wallpaper) {
-        selectedContent.selectWallpaper(wallpaper)
+        selectedContent.updateSelectedWallpaper(wallpaper)
     }
 
     fun applyWallpaper(wallpaper: Wallpaper, target: WallpaperTarget) {
@@ -399,9 +427,9 @@ class WallpapersViewModel @Inject constructor(
         viewModelScope.launch {
             val ext = guessImageExtension(wallpaper.fileType, wallpaper.fullUrl)
             downloadManager.downloadWallpaper(
-                id = wallpaper.id,
+                id = wallpaper.stableKey(),
                 url = wallpaper.fullUrl,
-                fileName = "Aura_${wallpaper.id}.$ext",
+                fileName = buildWallpaperDownloadFileName(wallpaper, ext),
             )
         }
     }
@@ -582,7 +610,7 @@ class WallpapersViewModel @Inject constructor(
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
-                        hasMore = if (preserveExistingDiscoverFeed) it.hasMore else result.hasMore,
+                        hasMore = result.hasMore,
                         error = null,
                         errorSource = null,
                     )
@@ -643,9 +671,13 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
-    fun findSimilarById(wallpaperId: String) {
+    fun findSimilarById(
+        wallpaperId: String,
+        source: ContentSource? = null,
+        fullUrl: String? = null,
+    ) {
         viewModelScope.launch {
-            val wallpaper = resolveWallpaperSelection(wallpaperId)?.first
+            val wallpaper = resolveWallpaperSelection(wallpaperId, source, fullUrl)?.first
             if (wallpaper != null) {
                 findSimilar(wallpaper)
             } else {
@@ -745,7 +777,7 @@ class WallpapersViewModel @Inject constructor(
                     type = "WALLPAPER",
                 )
             )
-        } ?: favoritesRepo.getLatestById(id))
+        } ?: favoritesRepo.getLatestByIdAndType(id, "WALLPAPER"))
             ?.takeIf { it.type == "WALLPAPER" }
             ?.toWallpaper()
             ?.takeIf { matchesWallpaperIdentity(it, id, source, fullUrl) }
@@ -786,4 +818,35 @@ internal fun matchesWallpaperIdentity(
     if (wallpaper.id != id) return false
     if (source != null && wallpaper.source != source) return false
     return fullUrl.isNullOrBlank() || wallpaper.fullUrl == fullUrl
+}
+
+internal fun buildWallpaperDownloadFileName(
+    wallpaper: Wallpaper,
+    extension: String,
+): String = "Aura_${wallpaper.source.name.lowercase()}_${wallpaper.id}.$extension"
+
+internal fun extractWallpaperLookupIds(voteKey: String): List<String> {
+    if ("::" in voteKey && !voteKey.startsWith("WALLPAPER::")) return emptyList()
+    val rawId = parseWallpaperVoteRawId(voteKey) ?: voteKey
+    return listOf(rawId, rawId.replace("_", "."), rawId.replace("_", "/")).distinct()
+}
+
+internal fun parseWallpaperVoteRawId(voteKey: String): String? {
+    val parts = voteKey.split("::", limit = 3)
+    return if (parts.size == 3 && parts[0] == "WALLPAPER") parts[2] else null
+}
+
+internal fun resolveWallpaperVoteCount(
+    wallpaper: Wallpaper,
+    voteMap: Map<String, Int>,
+    ambiguousLegacyIds: Set<String>,
+    sanitizeKey: (String) -> String,
+): Int? {
+    val stableCandidates = listOf(wallpaper.stableKey(), sanitizeKey(wallpaper.stableKey())).distinct()
+    stableCandidates.firstNotNullOfOrNull(voteMap::get)?.let { return it }
+
+    if (wallpaper.id in ambiguousLegacyIds) return null
+
+    val legacyCandidates = listOf(wallpaper.id, sanitizeKey(wallpaper.id)).distinct()
+    return legacyCandidates.firstNotNullOfOrNull(voteMap::get)
 }

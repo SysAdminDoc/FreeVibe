@@ -149,7 +149,7 @@ data class SearchHistoryEntity(
 
 @Entity(
     tableName = "wallpaper_cache",
-    primaryKeys = ["id", "cacheKey"],
+    primaryKeys = ["id", "source", "cacheKey"],
     indices = [Index("cacheKey")],
 )
 data class WallpaperCacheEntity(

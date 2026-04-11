@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.Flow
         WallpaperCollectionEntity::class,
         WallpaperCollectionItemEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class FreeVibeDatabase : RoomDatabase() {
@@ -54,6 +54,9 @@ interface FavoriteDao {
 
     @Query("SELECT * FROM favorites WHERE id = :id ORDER BY addedAt DESC LIMIT 1")
     suspend fun getLatestById(id: String): FavoriteEntity?
+
+    @Query("SELECT * FROM favorites WHERE id = :id AND type = :type ORDER BY addedAt DESC LIMIT 1")
+    suspend fun getLatestByIdAndType(id: String, type: String): FavoriteEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(favorite: FavoriteEntity)
@@ -134,10 +137,10 @@ interface WallpaperCacheDao {
     @Query("SELECT * FROM wallpaper_cache WHERE cacheKey = :cacheKey ORDER BY rowid ASC")
     suspend fun getByCacheKey(cacheKey: String): List<WallpaperCacheEntity>
 
-    @Query("SELECT * FROM wallpaper_cache w1 WHERE id IN (:ids) AND cachedAt = (SELECT MAX(w2.cachedAt) FROM wallpaper_cache w2 WHERE w2.id = w1.id)")
+    @Query("SELECT * FROM wallpaper_cache WHERE rowid IN (SELECT MAX(rowid) FROM wallpaper_cache WHERE id IN (:ids) GROUP BY id, source)")
     suspend fun getByIds(ids: List<String>): List<WallpaperCacheEntity>
 
-    @Query("SELECT cachedAt FROM wallpaper_cache WHERE cacheKey = :cacheKey LIMIT 1")
+    @Query("SELECT MAX(cachedAt) FROM wallpaper_cache WHERE cacheKey = :cacheKey")
     suspend fun getCacheTimestamp(cacheKey: String): Long?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -157,6 +160,9 @@ interface WallpaperCacheDao {
 
     @Query("DELETE FROM wallpaper_cache")
     suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM wallpaper_cache")
+    suspend fun countEntries(): Int
 }
 
 // -- Wallpaper History DAO (#11) --

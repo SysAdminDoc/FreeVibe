@@ -2,6 +2,7 @@ package com.freevibe.service
 
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Sound
+import com.freevibe.data.repository.YouTubeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -12,12 +13,19 @@ import javax.inject.Singleton
 @Singleton
 class SoundUrlResolver @Inject constructor(
     private val okHttpClient: OkHttpClient,
+    private val youtubeRepo: YouTubeRepository,
 ) {
     suspend fun resolve(sound: Sound): String? = withContext(Dispatchers.IO) {
         val directCandidates = listOf(sound.downloadUrl, sound.previewUrl)
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
+
+        sound.youtubeVideoId()?.let { videoId ->
+            youtubeRepo.getAudioStreamUrl(videoId)?.let { return@withContext it }
+            directCandidates.firstOrNull { candidate -> canFetch(candidate) }?.let { return@withContext it }
+            return@withContext directCandidates.firstOrNull()
+        }
 
         if (!shouldValidate(sound)) {
             return@withContext directCandidates.firstOrNull()
@@ -79,3 +87,9 @@ class SoundUrlResolver @Inject constructor(
         return normalized.trim()
     }
 }
+
+private fun Sound.youtubeVideoId(): String? =
+    takeIf { source == ContentSource.YOUTUBE }
+        ?.id
+        ?.removePrefix("yt_")
+        ?.takeIf { it.isNotBlank() && it != id }

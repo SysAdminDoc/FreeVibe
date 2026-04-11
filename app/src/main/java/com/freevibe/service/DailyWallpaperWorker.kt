@@ -84,6 +84,9 @@ class DailyWallpaperWorker @AssistedInject constructor(
                     putExtra("daily_wallpaper_id", wallpaper.id)
                     putExtra("daily_wallpaper_url", wallpaper.fullUrl)
                     putExtra("daily_wallpaper_thumb", wallpaper.thumbnailUrl)
+                    putExtra("daily_wallpaper_source", wallpaper.source.name)
+                    putExtra("daily_wallpaper_width", wallpaper.width)
+                    putExtra("daily_wallpaper_height", wallpaper.height)
                 }
                 val pendingIntent = PendingIntent.getActivity(
                     applicationContext, 0, intent,

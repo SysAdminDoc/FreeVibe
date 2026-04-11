@@ -1,6 +1,7 @@
 package com.freevibe.ui.screens.videowallpapers
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,37 @@ class VideoWallpaperQualityTest {
 
         assertEquals(4, ranked.size)
         assertTrue(ranked.none { it.id == "yt_weak" })
+    }
+
+    @Test
+    fun `phone fit filter respects landscape orientation`() {
+        val portrait = video(
+            id = "portrait_one",
+            source = "Pexels",
+            title = "Portrait loop",
+            duration = 12,
+            popularity = 5_000,
+            videoWidth = 1080,
+            videoHeight = 1920,
+        )
+        val landscape = video(
+            id = "landscape_one",
+            source = "Pixabay",
+            title = "Landscape loop",
+            duration = 12,
+            popularity = 5_500,
+            videoWidth = 1920,
+            videoHeight = 1080,
+        )
+
+        val ranked = rankVideoWallpapers(
+            items = listOf(portrait, landscape),
+            filter = VideoFocusFilter.PHONE_FIT,
+            orientation = OrientationFilter.LANDSCAPE,
+        )
+
+        assertEquals(listOf("landscape_one"), ranked.map { it.id })
+        assertFalse(ranked.any { it.id == "portrait_one" })
     }
 
     private fun video(
