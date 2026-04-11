@@ -19,11 +19,102 @@ import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.theme.FreeVibeTheme
 import dagger.hilt.android.AndroidEntryPoint
 
-private data class LaunchNavigation(
+internal data class LaunchNavigation(
     val route: String? = null,
     val wallpaper: Wallpaper? = null,
     val token: Long = System.nanoTime(),
 )
+
+private const val EXTRA_DAILY_WALLPAPER_ID = "daily_wallpaper_id"
+private const val EXTRA_DAILY_WALLPAPER_URL = "daily_wallpaper_url"
+private const val EXTRA_DAILY_WALLPAPER_THUMB = "daily_wallpaper_thumb"
+private const val EXTRA_DAILY_WALLPAPER_SOURCE = "daily_wallpaper_source"
+private const val EXTRA_DAILY_WALLPAPER_WIDTH = "daily_wallpaper_width"
+private const val EXTRA_DAILY_WALLPAPER_HEIGHT = "daily_wallpaper_height"
+private const val EXTRA_NAVIGATE_TO = "navigate_to"
+
+internal fun consumeLaunchNavigation(intent: Intent?): LaunchNavigation? {
+    val navigation = parseLaunchNavigation(intent)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_ID)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_URL)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_THUMB)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_SOURCE)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_WIDTH)
+    intent?.removeExtra(EXTRA_DAILY_WALLPAPER_HEIGHT)
+    intent?.removeExtra(EXTRA_NAVIGATE_TO)
+    return navigation
+}
+
+internal fun shouldHandleInitialLaunchNavigation(savedInstanceState: Bundle?): Boolean =
+    savedInstanceState == null
+
+internal fun buildLaunchNavigation(
+    route: String? = null,
+    wallpaperId: String? = null,
+    fullUrl: String = "",
+    thumbnailUrl: String = "",
+    sourceName: String? = null,
+    width: Int = 0,
+    height: Int = 0,
+): LaunchNavigation? {
+    val wallpaper = buildLaunchWallpaper(
+        wallpaperId = wallpaperId,
+        fullUrl = fullUrl,
+        thumbnailUrl = thumbnailUrl,
+        sourceName = sourceName,
+        width = width,
+        height = height,
+    )
+
+    val resolvedRoute = wallpaper?.let { Screen.WallpaperDetail.createRoute(it) } ?: route
+    return if (resolvedRoute != null || wallpaper != null) {
+        LaunchNavigation(route = resolvedRoute, wallpaper = wallpaper)
+    } else {
+        null
+    }
+}
+
+internal fun buildLaunchWallpaper(
+    wallpaperId: String? = null,
+    fullUrl: String = "",
+    thumbnailUrl: String = "",
+    sourceName: String? = null,
+    width: Int = 0,
+    height: Int = 0,
+): Wallpaper? {
+    val normalizedThumb = thumbnailUrl.ifBlank { fullUrl }
+    return if (!wallpaperId.isNullOrBlank() && fullUrl.isNotBlank()) {
+        Wallpaper(
+            id = wallpaperId,
+            source = sourceName
+                ?.let { name ->
+                    runCatching { ContentSource.valueOf(name) }.getOrDefault(ContentSource.REDDIT)
+                }
+                ?: ContentSource.REDDIT,
+            thumbnailUrl = normalizedThumb,
+            fullUrl = fullUrl,
+            width = width,
+            height = height,
+            category = "Wallpaper of the Day",
+        )
+    } else {
+        null
+    }
+}
+
+internal fun parseLaunchNavigation(intent: Intent?): LaunchNavigation? {
+    if (intent == null) return null
+
+    return buildLaunchNavigation(
+        route = intent.getStringExtra(EXTRA_NAVIGATE_TO),
+        wallpaperId = intent.getStringExtra(EXTRA_DAILY_WALLPAPER_ID),
+        fullUrl = intent.getStringExtra(EXTRA_DAILY_WALLPAPER_URL).orEmpty(),
+        thumbnailUrl = intent.getStringExtra(EXTRA_DAILY_WALLPAPER_THUMB).orEmpty(),
+        sourceName = intent.getStringExtra(EXTRA_DAILY_WALLPAPER_SOURCE),
+        width = intent.getIntExtra(EXTRA_DAILY_WALLPAPER_WIDTH, 0),
+        height = intent.getIntExtra(EXTRA_DAILY_WALLPAPER_HEIGHT, 0),
+    )
+}
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -32,7 +123,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        launchNavigation = parseLaunchNavigation(intent)
+        launchNavigation = if (shouldHandleInitialLaunchNavigation(savedInstanceState)) {
+            consumeLaunchNavigation(intent)
+        } else {
+            null
+        }
         setContent {
             FreeVibeTheme {
                 Surface(
@@ -52,37 +147,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        launchNavigation = parseLaunchNavigation(intent)
-    }
-
-    private fun parseLaunchNavigation(intent: Intent?): LaunchNavigation? {
-        if (intent == null) return null
-
-        val wallpaperId = intent.getStringExtra("daily_wallpaper_id")
-        val fullUrl = intent.getStringExtra("daily_wallpaper_url").orEmpty()
-        val thumbnailUrl = intent.getStringExtra("daily_wallpaper_thumb").orEmpty().ifBlank { fullUrl }
-
-        val wallpaper = if (!wallpaperId.isNullOrBlank() && fullUrl.isNotBlank()) {
-            Wallpaper(
-                id = wallpaperId,
-                source = ContentSource.REDDIT,
-                thumbnailUrl = thumbnailUrl,
-                fullUrl = fullUrl,
-                width = 0,
-                height = 0,
-                category = "Wallpaper of the Day",
-            )
-        } else {
-            null
-        }
-
-        val route = wallpaper?.let { Screen.WallpaperDetail.createRoute(it) }
-            ?: intent.getStringExtra("navigate_to")
-
-        return if (route != null || wallpaper != null) {
-            LaunchNavigation(route = route, wallpaper = wallpaper)
-        } else {
-            null
-        }
+        launchNavigation = consumeLaunchNavigation(intent)
     }
 }

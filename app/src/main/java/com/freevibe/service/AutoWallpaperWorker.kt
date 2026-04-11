@@ -7,6 +7,7 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.data.repository.FavoritesRepository
@@ -65,7 +66,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
             if (hour in 6..17) daySource else nightSource
         } else {
             prefs.schedulerSource.first()
-        }
+        }.normalizeWallpaperRotationSource()
 
         val wallpapers = fetchWallpapers(source)
         if (wallpapers.isEmpty()) return Result.retry()
@@ -78,7 +79,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
             if (homeEnabled) applyAndRecord(pick, WallpaperTarget.HOME)
             if (lockEnabled) {
                 // Pick a different wallpaper for lock if available
-                val others = wallpapers.filter { it.id != pick.id }
+                val others = wallpapers.filter { it.stableKey() != pick.stableKey() }
                 val lockPick = if (others.isNotEmpty()) others.random() else pick
                 applyAndRecord(lockPick, WallpaperTarget.LOCK)
             }
@@ -88,7 +89,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
 
     /** Legacy auto-wallpaper (backward compatible) */
     private suspend fun doLegacyWork(): Result {
-        val source = prefs.autoWallpaperSource.first()
+        val source = prefs.autoWallpaperSource.first().normalizeWallpaperRotationSource()
         val targetStr = prefs.autoWallpaperTarget.first()
         val target = WallpaperTarget.entries.find { it.name == targetStr } ?: WallpaperTarget.BOTH
 
@@ -102,7 +103,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
         val collectionId = prefs.schedulerCollectionId.first()
         return when (source) {
             "collection" -> {
-                if (collectionId > 0) {
+                val collectionItems = if (collectionId > 0) {
                     collectionRepo.getItems(collectionId).first().map {
                         Wallpaper(
                             id = it.wallpaperId,
@@ -114,11 +115,13 @@ class AutoWallpaperWorker @AssistedInject constructor(
                             height = it.height,
                         )
                     }
-                } else emptyList()
+                } else {
+                    emptyList()
+                }
+                collectionItems.ifEmpty { wallpaperRepo.getDiscover(page = 1).items }
             }
             "favorites" -> favoritesRepo.getWallpapers().first().map { it.toWallpaper() }
             "wallhaven" -> wallpaperRepo.getWallhaven(page = (1..5).random()).items
-            "unsplash" -> wallpaperRepo.getDiscover(page = (1..3).random()).items
             "bing" -> wallpaperRepo.getBingDaily(page = 1).items
             "reddit" -> redditRepo.getMultiSubreddit().items
             "pixabay" -> wallpaperRepo.getPixabay(page = (1..5).random()).items
@@ -170,4 +173,9 @@ class AutoWallpaperWorker @AssistedInject constructor(
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
     }
+}
+
+internal fun String.normalizeWallpaperRotationSource(): String = when (lowercase()) {
+    "", "unsplash" -> "discover"
+    else -> this
 }

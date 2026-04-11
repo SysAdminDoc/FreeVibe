@@ -28,6 +28,42 @@ import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.File
 import javax.inject.Inject
 
+internal data class VideoLoadProgress(
+    val hasMore: Boolean,
+    val emptyLoadCount: Int,
+)
+
+internal fun resolveVideoLoadProgress(
+    previousEmptyLoadCount: Int,
+    newItemCount: Int,
+): VideoLoadProgress {
+    val emptyLoadCount = if (newItemCount == 0) previousEmptyLoadCount + 1 else 0
+    return VideoLoadProgress(
+        hasMore = emptyLoadCount < 3,
+        emptyLoadCount = emptyLoadCount,
+    )
+}
+
+internal fun resolvePexelsVideoQuery(
+    page: Int,
+    searchQuery: String?,
+    fallbackQueries: List<String>,
+): String {
+    val normalizedQuery = searchQuery?.takeIf { it.isNotBlank() }
+    if (normalizedQuery != null) return normalizedQuery
+    if (fallbackQueries.isEmpty()) return "mobile wallpaper"
+    val queryIndex = (page - 1).coerceAtLeast(0) % fallbackQueries.size
+    return fallbackQueries[queryIndex]
+}
+
+internal fun resolvePexelsOrientationParam(
+    orientation: OrientationFilter,
+): String? = when (orientation) {
+    OrientationFilter.PORTRAIT -> "portrait"
+    OrientationFilter.LANDSCAPE -> "landscape"
+    OrientationFilter.ALL -> null
+}
+
 @HiltViewModel
 class VideoWallpapersViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -270,12 +306,12 @@ class VideoWallpapersViewModel @Inject constructor(
                         val key = prefs.pexelsApiKey.first()
                         if (key.isBlank()) return@async emptyList()
                         attemptedSources += "Pexels"
-                        val query = searchQ ?: pexelsQueries[s.pexelsPage % pexelsQueries.size]
-                        val orientation = when (s.orientation) {
-                            OrientationFilter.PORTRAIT -> "portrait"
-                            OrientationFilter.LANDSCAPE -> "landscape"
-                            OrientationFilter.ALL -> "portrait"
-                        }
+                        val query = resolvePexelsVideoQuery(
+                            page = s.pexelsPage,
+                            searchQuery = searchQ,
+                            fallbackQueries = pexelsQueries,
+                        )
+                        val orientation = resolvePexelsOrientationParam(s.orientation)
                         val response = pexelsApi.searchVideos(apiKey = key, query = query, orientation = orientation, perPage = 15, page = s.pexelsPage)
                         response.videos.filter { it.duration in 5..120 }.mapNotNull { video ->
                             val file = video.videoFiles
@@ -458,7 +494,10 @@ class VideoWallpapersViewModel @Inject constructor(
                 orientation = s.orientation,
             )
 
-            val newEmptyCount = if (mixed.isEmpty()) s.emptyLoadCount + 1 else 0
+            val loadProgress = resolveVideoLoadProgress(
+                previousEmptyLoadCount = s.emptyLoadCount,
+                newItemCount = mixed.size,
+            )
             val sourceFailures = failedSources.toList().sorted()
             val sourceFailureSet = sourceFailures.toSet()
             val attemptedCount = attemptedSources.size
@@ -482,12 +521,12 @@ class VideoWallpapersViewModel @Inject constructor(
                         else -> null
                     },
                     degradedSources = sourceFailures,
-                    hasMore = if (preserveCurrentFeed) it.hasMore else newEmptyCount < 3,
+                    hasMore = loadProgress.hasMore,
                     pexelsPage = if ("Pexels" !in sourceFailureSet && "Pexels" in attemptedSources) it.pexelsPage + 1 else it.pexelsPage,
                     pixabayPage = if ("Pixabay" !in sourceFailureSet && "Pixabay" in attemptedSources) it.pixabayPage + 1 else it.pixabayPage,
                     ytQueryIndex = if ("YouTube" !in sourceFailureSet && "YouTube" in attemptedSources) it.ytQueryIndex + 1 else it.ytQueryIndex,
                     redditSubIndex = if ("Reddit" !in sourceFailureSet && "Reddit" in attemptedSources) it.redditSubIndex + 2 else it.redditSubIndex,
-                    emptyLoadCount = if (preserveCurrentFeed) it.emptyLoadCount else newEmptyCount,
+                    emptyLoadCount = loadProgress.emptyLoadCount,
                 )
             }
 

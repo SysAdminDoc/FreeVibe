@@ -85,7 +85,10 @@ fun Sound.toFavoriteEntity() = FavoriteEntity(
     source = source.name,
     type = "SOUND",
     thumbnailUrl = "",
-    fullUrl = downloadUrl,
+    fullUrl = when (source) {
+        ContentSource.YOUTUBE -> sourcePageUrl.ifBlank { downloadUrl.ifBlank { previewUrl } }
+        else -> downloadUrl.ifBlank { previewUrl }
+    },
     name = name,
     duration = duration,
     tags = tags.takeIf { it.isNotEmpty() }?.joinToString(" ||| "),
@@ -116,19 +119,36 @@ fun FavoriteEntity.toWallpaper() = Wallpaper(
     favorites = favoritesCount?.toInt() ?: 0,
 )
 
-fun FavoriteEntity.toSound() = Sound(
-    id = id,
-    source = try { ContentSource.valueOf(source) } catch (_: Exception) { ContentSource.FREESOUND },
-    name = name,
-    previewUrl = fullUrl,
-    downloadUrl = fullUrl,
-    duration = duration,
-    tags = tags?.split(" ||| ")?.filter { it.isNotEmpty() } ?: emptyList(),
-    uploaderName = uploaderName ?: "",
-    sourcePageUrl = sourcePageUrl ?: "",
-    fileSize = fileSize ?: 0L,
-    fileType = fileType ?: "",
-)
+fun FavoriteEntity.toSound(): Sound {
+    val restoredSource = try {
+        ContentSource.valueOf(source)
+    } catch (_: Exception) {
+        ContentSource.FREESOUND
+    }
+    val restoredSourcePageUrl = when {
+        !sourcePageUrl.isNullOrBlank() -> sourcePageUrl
+        restoredSource == ContentSource.YOUTUBE && fullUrl.isYouTubePageUrl() -> fullUrl
+        else -> ""
+    }
+    val restoredDirectUrl = if (restoredSource == ContentSource.YOUTUBE) "" else fullUrl
+
+    return Sound(
+        id = id,
+        source = restoredSource,
+        name = name,
+        previewUrl = restoredDirectUrl,
+        downloadUrl = restoredDirectUrl,
+        duration = duration,
+        tags = tags?.split(" ||| ")?.filter { it.isNotEmpty() } ?: emptyList(),
+        uploaderName = uploaderName ?: "",
+        sourcePageUrl = restoredSourcePageUrl ?: "",
+        fileSize = fileSize ?: 0L,
+        fileType = fileType ?: "",
+    )
+}
+
+private fun String.isYouTubePageUrl(): Boolean =
+    contains("youtube.com", ignoreCase = true) || contains("youtu.be", ignoreCase = true)
 
 // -- Reddit Post -> Wallpaper --
 

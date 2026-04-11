@@ -144,7 +144,7 @@ class ContactPickerViewModel @Inject constructor(
     fun clearMessages() = _state.update { it.copy(success = null, error = null) }
 
     private suspend fun resolveSound(soundId: String): Sound? {
-        favoritesRepo.getLatestById(soundId)
+        favoritesRepo.getLatestByIdAndType(soundId, "SOUND")
             ?.takeIf { it.type == "SOUND" }
             ?.toSound()
             ?.let { return it }
@@ -188,7 +188,7 @@ fun ContactPickerScreen(
     }
     var soundResolved by remember(soundIdentityKey) { mutableStateOf<Boolean?>(null) }
 
-    LaunchedEffect(soundId, fallbackSound?.id, fallbackSound?.downloadUrl, fallbackSound?.previewUrl) {
+    LaunchedEffect(soundIdentityKey) {
         soundResolved = viewModel.ensureSelectedSound(soundId, fallbackSound)
     }
 

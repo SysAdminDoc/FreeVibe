@@ -23,6 +23,8 @@ class FavoritesRepository @Inject constructor(
         dao.getByIdentity(identity.id, identity.source, identity.type)
 
     suspend fun getLatestById(id: String): FavoriteEntity? = dao.getLatestById(id)
+    suspend fun getLatestByIdAndType(id: String, type: String): FavoriteEntity? =
+        dao.getLatestByIdAndType(id, type)
 
     suspend fun add(favorite: FavoriteEntity) = dao.insert(favorite)
     suspend fun remove(identity: FavoriteIdentity) = dao.deleteByIdentity(identity.id, identity.source, identity.type)

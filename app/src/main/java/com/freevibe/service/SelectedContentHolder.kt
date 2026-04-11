@@ -30,12 +30,27 @@ class SelectedContentHolder @Inject constructor() {
     val selectedSound: StateFlow<Sound?> = _selectedSound.asStateFlow()
 
     @Synchronized
-    fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper> = emptyList()) {
+    fun selectWallpaper(wallpaper: Wallpaper, wallpapers: List<Wallpaper>) {
         _selectedWallpaper.value = wallpaper
         if (wallpapers.isNotEmpty()) {
             _wallpaperList.value = wallpapers
             _wallpaperListAnchorKey.value = wallpaper.stableKey()
+        } else {
+            _wallpaperList.value = emptyList()
+            _wallpaperListAnchorKey.value = null
         }
+    }
+
+    @Synchronized
+    fun selectWallpaper(wallpaper: Wallpaper) {
+        _selectedWallpaper.value = wallpaper
+        _wallpaperList.value = emptyList()
+        _wallpaperListAnchorKey.value = null
+    }
+
+    @Synchronized
+    fun updateSelectedWallpaper(wallpaper: Wallpaper) {
+        _selectedWallpaper.value = wallpaper
     }
 
     fun selectSound(sound: Sound) {

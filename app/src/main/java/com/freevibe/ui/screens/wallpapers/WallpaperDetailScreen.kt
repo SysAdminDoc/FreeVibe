@@ -46,23 +46,32 @@ fun WallpaperDetailScreen(
     onCrop: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     onSearchColor: (String) -> Unit = {},
-    onFindSimilar: (String) -> Unit = {},
+    onFindSimilar: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val sharedList by viewModel.sharedWallpaperList.collectAsState()
     val sharedListAnchorKey by viewModel.sharedWallpaperListAnchorKey.collectAsState()
     val hiddenIds by viewModel.hiddenIds.collectAsState()
-    var restoreResolved by remember(wallpaperId) { mutableStateOf(false) }
-    var resolvedWallpaper by remember(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
+    val targetSource = fallbackWallpaper?.source
+    val targetFullUrl = fallbackWallpaper?.fullUrl
+    val detailIdentityKey = remember(wallpaperId, targetSource, targetFullUrl) {
+        listOf(
+            wallpaperId,
+            targetSource?.name.orEmpty(),
+            targetFullUrl.orEmpty(),
+        ).joinToString("|")
+    }
+    var restoreResolved by remember(detailIdentityKey) { mutableStateOf(false) }
+    var resolvedWallpaper by remember(detailIdentityKey) {
         mutableStateOf(fallbackWallpaper)
     }
 
-    LaunchedEffect(wallpaperId, fallbackWallpaper?.id, fallbackWallpaper?.fullUrl) {
+    LaunchedEffect(detailIdentityKey) {
         resolvedWallpaper = viewModel.resolveWallpaper(
             id = wallpaperId,
-            source = fallbackWallpaper?.source,
-            fullUrl = fallbackWallpaper?.fullUrl,
+            source = targetSource,
+            fullUrl = targetFullUrl,
         ) ?: fallbackWallpaper
         restoreResolved = true
     }
@@ -136,7 +145,7 @@ fun WallpaperDetailScreen(
 
     val isFavorite by viewModel.isFavorite(wp).collectAsState(initial = false)
     val collections by viewModel.collections.collectAsState()
-    val voteCount by viewModel.getVoteCount(wp.id).collectAsState(initial = 0)
+    val voteCount by viewModel.getVoteCount(wp.stableKey()).collectAsState(initial = 0)
 
     var showApplyOptions by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -241,7 +250,7 @@ fun WallpaperDetailScreen(
             ) {
                 // Upvote
                 IconButton(
-                    onClick = { viewModel.upvote(wp.id) },
+                    onClick = { viewModel.upvote(wp.stableKey()) },
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
@@ -258,7 +267,7 @@ fun WallpaperDetailScreen(
                 }
                 // Downvote (hide — item removed from pager list automatically)
                 IconButton(
-                    onClick = { viewModel.downvote(wp.id) },
+                    onClick = { viewModel.downvote(wp.stableKey()) },
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
@@ -354,7 +363,7 @@ fun WallpaperDetailScreen(
                     ActionCircle(
                         icon = Icons.Default.ImageSearch,
                         contentDescription = "Find similar wallpapers",
-                        onClick = { onFindSimilar(wp.id) },
+                        onClick = { onFindSimilar(wp) },
                     )
                     ActionCircle(
                         icon = Icons.Default.Share,
@@ -403,7 +412,7 @@ fun WallpaperDetailScreen(
                     onCollection = { showMoreMenu = false; showCollectionPicker = true },
                     onFindSimilar = {
                         showMoreMenu = false
-                        onFindSimilar(wp.id)
+                        onFindSimilar(wp)
                     },
                     uploaderName = wp.uploaderName,
                 )

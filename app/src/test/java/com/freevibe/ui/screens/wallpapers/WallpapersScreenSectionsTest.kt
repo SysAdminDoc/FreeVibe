@@ -2,6 +2,7 @@ package com.freevibe.ui.screens.wallpapers
 
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
+import com.freevibe.data.model.stableKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -71,6 +72,24 @@ class WallpapersScreenSectionsTest {
     }
 
     @Test
+    fun `visible sections honor stable hidden ids without hiding other providers`() {
+        val keptWallpaper = wallpaper("shared_42", source = ContentSource.PIXABAY)
+        val hiddenWallpaper = wallpaper("shared_42", source = ContentSource.PEXELS)
+
+        val sections = computeVisibleWallpaperSections(
+            wallpapers = listOf(hiddenWallpaper, keptWallpaper),
+            hiddenIds = setOf(hiddenWallpaper.stableKey()),
+            topVoted = emptyList(),
+            dailyPick = null,
+            isDiscoverTab = true,
+        )
+
+        assertEquals(listOf(ContentSource.PIXABAY), sections.feedWallpapers.map { it.source })
+        assertEquals(listOf(ContentSource.PIXABAY), sections.pagerWallpapers.map { it.source })
+        assertTrue(sections.hasRenderableContent)
+    }
+
+    @Test
     fun `pager items preserve feed order and open on tapped wallpaper`() {
         val sharedWallpapers = listOf(
             wallpaper("first"),
@@ -100,9 +119,9 @@ class WallpapersScreenSectionsTest {
         assertEquals(0, pagerItems.initialPage)
     }
 
-    private fun wallpaper(id: String) = Wallpaper(
+    private fun wallpaper(id: String, source: ContentSource = ContentSource.WALLHAVEN) = Wallpaper(
         id = id,
-        source = ContentSource.WALLHAVEN,
+        source = source,
         thumbnailUrl = "https://example.com/$id.jpg",
         fullUrl = "https://example.com/$id.jpg",
         width = 1440,

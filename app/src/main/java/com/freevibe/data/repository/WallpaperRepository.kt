@@ -17,6 +17,38 @@ import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun mergeDiscoverResults(
+    results: List<SearchResult<Wallpaper>?>,
+    page: Int,
+): SearchResult<Wallpaper> {
+    val bySource = results.filterNotNull().map { it.items.toMutableList() }
+    val interleaved = mutableListOf<Wallpaper>()
+    var rounds = 0
+    while (bySource.any { it.isNotEmpty() }) {
+        for (source in bySource) {
+            if (source.isNotEmpty()) interleaved.add(source.removeAt(0))
+        }
+        rounds++
+        if (rounds > 200) break
+    }
+
+    val knownTotalCount = results
+        .filterNotNull()
+        .map { it.totalCount }
+        .filter { it >= 0 }
+        .sum()
+
+    return SearchResult(
+        items = interleaved,
+        totalCount = when {
+            knownTotalCount > 0 -> maxOf(knownTotalCount, interleaved.size)
+            else -> interleaved.size
+        },
+        currentPage = page,
+        hasMore = results.any { it?.hasMore == true },
+    )
+}
+
 @Singleton
 class WallpaperRepository @Inject constructor(
     private val wallhavenApi: WallhavenApi,
@@ -256,29 +288,14 @@ class WallpaperRepository @Inject constructor(
         }
 
         val results = sources.map { it.await() }
-        // Round-robin interleave sources for even distribution
-        val bySource = results.filterNotNull().map { it.items.toMutableList() }
-        val interleaved = mutableListOf<Wallpaper>()
-        var idx = 0
-        while (bySource.any { it.isNotEmpty() }) {
-            for (source in bySource) {
-                if (source.isNotEmpty()) interleaved.add(source.removeAt(0))
-            }
-            idx++
-            if (idx > 200) break
-        }
+        val merged = mergeDiscoverResults(results, page)
 
         // Cache combined discover result for instant startup next time
-        if (interleaved.isNotEmpty()) {
-            cacheManager.cache("discover_$page", interleaved)
+        if (merged.items.isNotEmpty()) {
+            cacheManager.cache("discover_$page", merged.items)
         }
 
-        SearchResult(
-            items = interleaved,
-            totalCount = interleaved.size * results.count { it != null }.coerceAtLeast(1),
-            currentPage = page,
-            hasMore = interleaved.isNotEmpty(),
-        )
+        merged
     }
 
     // -- Error handling with cache fallback --

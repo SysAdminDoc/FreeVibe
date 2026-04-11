@@ -2,7 +2,9 @@ package com.freevibe.ui.screens.sounds
 
 import android.content.Context
 import com.freevibe.data.local.PreferencesManager
+import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.FavoriteEntity
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.SearchHistoryEntity
@@ -258,6 +260,105 @@ class SoundsViewModelTest {
     }
 
     @Test
+    fun `youtube sounds refresh stale preview urls before playback`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+        every { youtubeRepo.isCached("focus12345") } returns false
+        coEvery { youtubeRepo.getAudioPreviewUrl("focus12345") } returns "https://example.com/fresh-focus.mp3"
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        advanceUntilIdle()
+        val staleFavorite = testSound("yt_focus12345", ContentSource.YOUTUBE, "Focus Loop").copy(
+            previewUrl = "https://expired.example.com/focus-preview.mp3",
+            downloadUrl = "https://expired.example.com/focus-download.mp3",
+        )
+
+        viewModel.selectSound(staleFavorite)
+        viewModel.togglePlayback(staleFavorite)
+        advanceUntilIdle()
+
+        assertEquals("https://example.com/fresh-focus.mp3", viewModel.selectedSound.value?.previewUrl)
+    }
+
+    @Test
+    fun `downloadSound refreshes youtube stream urls instead of reusing stale favorites`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+        val downloadManager = mockk<DownloadManager>()
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+        coEvery { youtubeRepo.getAudioStreamUrl("focus12345") } returns "https://example.com/fresh-focus-download.mp3"
+        coEvery {
+            downloadManager.downloadSound(
+                id = testSound("yt_focus12345", ContentSource.YOUTUBE, "Focus Loop").stableKey(),
+                url = "https://example.com/fresh-focus-download.mp3",
+                fileName = any(),
+                type = ContentType.RINGTONE,
+            )
+        } returns Result.success(mockk(relaxed = true))
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+            downloadManagerOverride = downloadManager,
+        )
+
+        advanceUntilIdle()
+        val staleFavorite = testSound("yt_focus12345", ContentSource.YOUTUBE, "Focus Loop").copy(
+            downloadUrl = "https://expired.example.com/focus-download.mp3",
+        )
+
+        viewModel.downloadSound(staleFavorite)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { youtubeRepo.getAudioStreamUrl("focus12345") }
+        coVerify(exactly = 1) {
+            downloadManager.downloadSound(
+                id = staleFavorite.stableKey(),
+                url = "https://example.com/fresh-focus-download.mp3",
+                fileName = match { it == "Aura_youtube_yt_focus12345_Focus Loop.mp3" },
+                type = ContentType.RINGTONE,
+            )
+        }
+    }
+
+    @Test
     fun `blank search state does not hit providers`() = runTest(dispatcher) {
         val youtubeRepo = mockk<YouTubeRepository>()
         val freesoundRepo = mockk<FreesoundRepository>()
@@ -389,6 +490,59 @@ class SoundsViewModelTest {
     }
 
     @Test
+    fun `refresh preserves current search results but updates pagination when providers go empty`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        coEvery { freesoundV2Repo.search(match { it.contains("focus") }, any(), any(), any(), any()) } returnsMany listOf(
+            SearchResult(
+                items = listOf(testSound("focus_keep", ContentSource.FREESOUND, "Focus Keep")),
+                totalCount = 1,
+                currentPage = 1,
+                hasMore = true,
+            ),
+            emptySoundResult(),
+        )
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        advanceUntilIdle()
+        viewModel.search("focus")
+        advanceUntilIdle()
+
+        assertEquals(listOf("focus_keep"), viewModel.state.value.sounds.map { it.id })
+        assertTrue(viewModel.state.value.hasMore)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(listOf("focus_keep"), state.sounds.map { it.id })
+        assertFalse(state.hasMore)
+        assertEquals(null, state.error)
+    }
+
+    @Test
     fun `refresh preserves bundled sounds and surfaces degraded error`() = runTest(dispatcher) {
         val youtubeRepo = mockk<YouTubeRepository>()
         val freesoundRepo = mockk<FreesoundRepository>()
@@ -479,6 +633,63 @@ class SoundsViewModelTest {
         verify(exactly = 1) { audioPlaybackManager.stop() }
     }
 
+    @Test
+    fun `resolveSound uses type-scoped favorite lookup when raw ids collide across content types`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+        val favoritesRepo = mockk<FavoritesRepository>()
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        coEvery { favoritesRepo.getByIdentity(any()) } returns null
+        coEvery { favoritesRepo.getLatestById(any()) } returns FavoriteEntity(
+            id = "shared_raw",
+            source = ContentSource.PEXELS.name,
+            type = "WALLPAPER",
+            thumbnailUrl = "thumb",
+            fullUrl = "https://example.com/wallpaper.jpg",
+        )
+        coEvery { favoritesRepo.getLatestByIdAndType("shared_raw", "SOUND") } returns FavoriteEntity(
+            id = "shared_raw",
+            source = ContentSource.YOUTUBE.name,
+            type = "SOUND",
+            thumbnailUrl = "",
+            fullUrl = "https://example.com/audio.mp3",
+            name = "Recovered tone",
+            duration = 12.0,
+            sourcePageUrl = "https://youtube.com/watch?v=abc123",
+        )
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+            favoritesRepoOverride = favoritesRepo,
+        )
+
+        advanceUntilIdle()
+
+        val resolved = viewModel.resolveSound("shared_raw")
+
+        assertEquals(ContentSource.YOUTUBE, resolved?.source)
+        assertEquals("Recovered tone", resolved?.name)
+        coVerify(exactly = 1) { favoritesRepo.getLatestByIdAndType("shared_raw", "SOUND") }
+    }
+
     private fun createViewModel(
         youtubeRepo: YouTubeRepository,
         freesoundRepo: FreesoundRepository,
@@ -490,6 +701,8 @@ class SoundsViewModelTest {
         bundledNotifications: List<Sound> = emptyList(),
         bundledAlarms: List<Sound> = emptyList(),
         audioPlaybackManagerOverride: AudioPlaybackManager? = null,
+        downloadManagerOverride: DownloadManager? = null,
+        favoritesRepoOverride: FavoritesRepository? = null,
     ): SoundsViewModel {
         val prefs = mockk<PreferencesManager>()
         every { prefs.autoPreviewSounds } returns flowOf(true)
@@ -519,6 +732,11 @@ class SoundsViewModelTest {
         val soundUrlResolver = mockk<SoundUrlResolver>()
         coEvery { soundUrlResolver.resolve(any()) } answers { firstArg<Sound>().downloadUrl }
 
+        val favoritesRepo = favoritesRepoOverride ?: mockk<FavoritesRepository>(relaxed = true).also {
+            coEvery { it.getByIdentity(any()) } returns null
+            coEvery { it.getLatestByIdAndType(any(), any()) } returns null
+        }
+
         return SoundsViewModel(
             context = mockk<Context>(relaxed = true),
             youtubeRepo = youtubeRepo,
@@ -526,9 +744,9 @@ class SoundsViewModelTest {
             freesoundV2Repo = freesoundV2Repo,
             audiusRepo = audiusRepo,
             ccMixterRepo = ccMixterRepo,
-            favoritesRepo = mockk<FavoritesRepository>(relaxed = true),
+            favoritesRepo = favoritesRepo,
             soundApplier = mockk<SoundApplier>(relaxed = true),
-            downloadManager = mockk<DownloadManager>(relaxed = true),
+            downloadManager = downloadManagerOverride ?: mockk<DownloadManager>(relaxed = true),
             selectedContent = SelectedContentHolder(),
             searchHistoryRepo = searchHistoryRepo,
             audioTrimmer = mockk<com.freevibe.service.AudioTrimmer>(relaxed = true),
@@ -550,6 +768,7 @@ class SoundsViewModelTest {
         ccMixterRepo: CcMixterRepository,
         soundCloudRepo: SoundCloudRepository,
     ) {
+        every { youtubeRepo.isCached(any()) } returns false
         coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns emptySoundResult()
         coEvery { freesoundRepo.search(any(), any(), any(), any()) } returns emptySoundResult()
         coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns emptySoundResult()

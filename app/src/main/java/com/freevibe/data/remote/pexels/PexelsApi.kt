@@ -18,7 +18,7 @@ interface PexelsApi {
     suspend fun searchVideos(
         @Header("Authorization") apiKey: String,
         @Query("query") query: String,
-        @Query("orientation") orientation: String = "portrait",
+        @Query("orientation") orientation: String? = "portrait",
         @Query("size") size: String = "medium",
         @Query("per_page") perPage: Int = 20,
         @Query("page") page: Int = 1,
