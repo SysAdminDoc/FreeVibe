@@ -22,6 +22,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.Wallpaper
@@ -70,7 +71,7 @@ fun FreeVibeRoot(
     val entryPoint = remember {
         EntryPointAccessors.fromApplication(context, FreeVibeRootEntryPoint::class.java)
     }
-    val favoritesCount by remember { entryPoint.favoritesRepository().count() }.collectAsState(initial = 0)
+    val favoritesCount by remember { entryPoint.favoritesRepository().count() }.collectAsStateWithLifecycle(initialValue = 0)
     val prefs = remember { context.getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE) }
     val onboardingDone = remember { prefs.getBoolean(ONBOARDING_DONE, false) }
 

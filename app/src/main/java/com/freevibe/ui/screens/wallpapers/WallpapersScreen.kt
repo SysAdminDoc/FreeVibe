@@ -39,6 +39,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
@@ -83,14 +84,14 @@ fun WallpapersScreen(
     onWallpaperClick: (Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val downloads by viewModel.activeDownloads.collectAsState()
-    val gridColumns by viewModel.gridColumns.collectAsState()
-    val recentSearches by viewModel.recentSearches.collectAsState()
-    val favoriteIdentities by viewModel.favoriteIdentities.collectAsState()
-    val dailyPick by viewModel.dailyPick.collectAsState()
-    val topVoted by viewModel.topVoted.collectAsState()
-    val hiddenIds by viewModel.hiddenIds.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val downloads by viewModel.activeDownloads.collectAsStateWithLifecycle()
+    val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
+    val favoriteIdentities by viewModel.favoriteIdentities.collectAsStateWithLifecycle()
+    val dailyPick by viewModel.dailyPick.collectAsStateWithLifecycle()
+    val topVoted by viewModel.topVoted.collectAsStateWithLifecycle()
+    val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle()
     val visibleSections = remember(state.wallpapers, hiddenIds, topVoted, dailyPick, state.selectedTab) {
         computeVisibleWallpaperSections(
             wallpapers = state.wallpapers,
@@ -110,7 +111,7 @@ fun WallpapersScreen(
             kotlinx.coroutines.flow.flowOf(emptyMap())
         }
     }
-    val voteCounts by voteCountsFlow.collectAsState(initial = emptyMap())
+    val voteCounts by voteCountsFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
     var searchQuery by remember { mutableStateOf(state.query) }
     LaunchedEffect(state.query) { searchQuery = state.query }
     val context = LocalContext.current

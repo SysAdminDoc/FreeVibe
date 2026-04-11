@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.service.DailyWallpaperWorker
 import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.VideoWallpaperService
@@ -47,35 +48,35 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val autoWpEnabled by viewModel.autoWpEnabled.collectAsState()
-    val autoWpInterval by viewModel.autoWpInterval.collectAsState()
-    val autoWpSource by viewModel.autoWpSource.collectAsState()
-    val autoPreview by viewModel.autoPreview.collectAsState()
-    val wallpaperHistory by viewModel.wallpaperHistory.collectAsState()
-    val gridColumns by viewModel.gridColumns.collectAsState()
-    val ytRingtonesQuery by viewModel.ytRingtonesQuery.collectAsState()
-    val ytNotificationsQuery by viewModel.ytNotificationsQuery.collectAsState()
-    val ytAlarmsQuery by viewModel.ytAlarmsQuery.collectAsState()
-    val ytBlockedWords by viewModel.ytBlockedWords.collectAsState()
-    val previewVolume by viewModel.previewVolume.collectAsState()
-    val redditSubs by viewModel.redditSubs.collectAsState()
-    val preferredRes by viewModel.preferredRes.collectAsState()
-    val userStyles by viewModel.userStyles.collectAsState()
-    val schedulerEnabled by viewModel.schedulerEnabled.collectAsState()
-    val schedulerInterval by viewModel.schedulerInterval.collectAsState()
-    val schedulerSource by viewModel.schedulerSource.collectAsState()
-    val schedulerHome by viewModel.schedulerHome.collectAsState()
-    val schedulerLock by viewModel.schedulerLock.collectAsState()
-    val schedulerShuffle by viewModel.schedulerShuffle.collectAsState()
-    val weatherEffects by viewModel.weatherEffects.collectAsState()
-    val adaptiveTint by viewModel.adaptiveTint.collectAsState()
-    val darkModeSwitch by viewModel.darkModeSwitch.collectAsState()
-    val videoFpsLimit by viewModel.videoFpsLimit.collectAsState()
-    val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsState()
-    val pexelsApiKey by viewModel.pexelsApiKey.collectAsState()
-    val pixabayApiKey by viewModel.pixabayApiKey.collectAsState()
-    val freesoundApiKey by viewModel.freesoundApiKey.collectAsState()
-    val cacheUsage by viewModel.cacheUsage.collectAsState()
+    val autoWpEnabled by viewModel.autoWpEnabled.collectAsStateWithLifecycle()
+    val autoWpInterval by viewModel.autoWpInterval.collectAsStateWithLifecycle()
+    val autoWpSource by viewModel.autoWpSource.collectAsStateWithLifecycle()
+    val autoPreview by viewModel.autoPreview.collectAsStateWithLifecycle()
+    val wallpaperHistory by viewModel.wallpaperHistory.collectAsStateWithLifecycle()
+    val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
+    val ytRingtonesQuery by viewModel.ytRingtonesQuery.collectAsStateWithLifecycle()
+    val ytNotificationsQuery by viewModel.ytNotificationsQuery.collectAsStateWithLifecycle()
+    val ytAlarmsQuery by viewModel.ytAlarmsQuery.collectAsStateWithLifecycle()
+    val ytBlockedWords by viewModel.ytBlockedWords.collectAsStateWithLifecycle()
+    val previewVolume by viewModel.previewVolume.collectAsStateWithLifecycle()
+    val redditSubs by viewModel.redditSubs.collectAsStateWithLifecycle()
+    val preferredRes by viewModel.preferredRes.collectAsStateWithLifecycle()
+    val userStyles by viewModel.userStyles.collectAsStateWithLifecycle()
+    val schedulerEnabled by viewModel.schedulerEnabled.collectAsStateWithLifecycle()
+    val schedulerInterval by viewModel.schedulerInterval.collectAsStateWithLifecycle()
+    val schedulerSource by viewModel.schedulerSource.collectAsStateWithLifecycle()
+    val schedulerHome by viewModel.schedulerHome.collectAsStateWithLifecycle()
+    val schedulerLock by viewModel.schedulerLock.collectAsStateWithLifecycle()
+    val schedulerShuffle by viewModel.schedulerShuffle.collectAsStateWithLifecycle()
+    val weatherEffects by viewModel.weatherEffects.collectAsStateWithLifecycle()
+    val adaptiveTint by viewModel.adaptiveTint.collectAsStateWithLifecycle()
+    val darkModeSwitch by viewModel.darkModeSwitch.collectAsStateWithLifecycle()
+    val videoFpsLimit by viewModel.videoFpsLimit.collectAsStateWithLifecycle()
+    val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsStateWithLifecycle()
+    val pexelsApiKey by viewModel.pexelsApiKey.collectAsStateWithLifecycle()
+    val pixabayApiKey by viewModel.pixabayApiKey.collectAsStateWithLifecycle()
+    val freesoundApiKey by viewModel.freesoundApiKey.collectAsStateWithLifecycle()
+    val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
     var dailyWp by remember {
         mutableStateOf(
             context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.stableKey
@@ -39,8 +40,8 @@ fun SoundEditorScreen(
     recoveryViewModel: com.freevibe.ui.screens.sounds.SoundsViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: SoundEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val currentSelectedSound by recoveryViewModel.selectedSound.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val currentSelectedSound by recoveryViewModel.selectedSound.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val editorIdentityKey = remember(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl) {
         listOf(

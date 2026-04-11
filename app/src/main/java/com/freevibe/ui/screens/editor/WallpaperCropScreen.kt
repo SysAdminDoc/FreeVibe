@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 
@@ -39,7 +40,7 @@ fun WallpaperCropScreen(
     recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = hiltViewModel(),
     viewModel: WallpaperCropViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     val cropIdentityKey = remember(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {

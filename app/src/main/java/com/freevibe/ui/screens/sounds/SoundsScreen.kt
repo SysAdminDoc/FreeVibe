@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
@@ -54,11 +55,11 @@ fun SoundsScreen(
     initialQuery: String? = null,
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val recentSearches by viewModel.recentSearches.collectAsState()
-    val cachedYtIds by viewModel.cachedYtIds.collectAsState()
-    val topHits by viewModel.topHits.collectAsState()
-    val playbackProgress by viewModel.playbackProgress.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
+    val cachedYtIds by viewModel.cachedYtIds.collectAsStateWithLifecycle()
+    val topHits by viewModel.topHits.collectAsStateWithLifecycle()
+    val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
     val displayTopHits = remember(topHits, state.selectedTab, state.query, state.qualityFilter) {
         if (state.selectedTab == SoundTab.RINGTONES && state.query.isBlank()) {
             rankSounds(topHits, SoundTab.RINGTONES, state.qualityFilter).take(5)

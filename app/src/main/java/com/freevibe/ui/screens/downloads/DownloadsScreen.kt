@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.DownloadEntity
 import com.freevibe.service.DownloadProgress
 import kotlinx.coroutines.launch
@@ -31,8 +32,8 @@ fun DownloadsScreen(
     onBack: () -> Unit,
     viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
-    val allDownloads by viewModel.allDownloads.collectAsState()
-    val activeDownloads by viewModel.activeDownloads.collectAsState()
+    val allDownloads by viewModel.allDownloads.collectAsStateWithLifecycle()
+    val activeDownloads by viewModel.activeDownloads.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("All", "Wallpapers", "Sounds")
     val context = LocalContext.current

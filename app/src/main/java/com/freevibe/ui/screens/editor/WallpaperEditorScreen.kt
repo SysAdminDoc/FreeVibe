@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 
@@ -28,7 +29,7 @@ fun WallpaperEditorScreen(
     recoveryViewModel: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: WallpaperEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val editorIdentityKey = remember(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
         listOf(
             wallpaperId,

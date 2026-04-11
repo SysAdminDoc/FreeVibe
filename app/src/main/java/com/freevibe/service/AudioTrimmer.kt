@@ -58,7 +58,7 @@ class AudioTrimmer @Inject constructor(
 
                 extractor.selectTrack(audioTrackIndex)
 
-                if (ext.lowercase() == "mp3") {
+                if (ext.lowercase(java.util.Locale.ROOT) == "mp3") {
                     // MediaMuxer can't handle MP3 - use FFmpeg for lossless trim
                     extractor.release()
                     val ffmpegInfo = getYtdlpFfmpeg() ?: throw Exception("FFmpeg not available for MP3 trim")
@@ -85,7 +85,7 @@ class AudioTrimmer @Inject constructor(
                         process.destroy()
                     }
                 } else {
-                    val muxerFormat = when (ext.lowercase()) {
+                    val muxerFormat = when (ext.lowercase(java.util.Locale.ROOT)) {
                         "mp4", "m4a", "aac" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
                         "webm", "ogg" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM
                         else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
@@ -182,7 +182,7 @@ class AudioTrimmer @Inject constructor(
                 "-y",
                 "-i", file.absolutePath,
                 "-af", filters.joinToString(","),
-                "-c:a", when (file.extension.lowercase()) {
+                "-c:a", when (file.extension.lowercase(java.util.Locale.ROOT)) {
                     "mp3" -> "libmp3lame"
                     "ogg" -> "libvorbis"
                     "flac" -> "flac"
@@ -272,7 +272,7 @@ class AudioTrimmer @Inject constructor(
             val outputName = input.nameWithoutExtension + "." + targetFormat
             val output = File(input.parentFile, outputName)
 
-            val codec = when (targetFormat.lowercase()) {
+            val codec = when (targetFormat.lowercase(java.util.Locale.ROOT)) {
                 "mp3" -> listOf("-c:a", "libmp3lame", "-q:a", "2")
                 "ogg" -> listOf("-c:a", "libvorbis", "-q:a", "6")
                 "wav" -> listOf("-c:a", "pcm_s16le")

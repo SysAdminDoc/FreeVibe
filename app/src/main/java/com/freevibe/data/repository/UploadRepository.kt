@@ -197,7 +197,7 @@ class UploadRepository @Inject constructor(
             ?: "audio/mpeg"
 
         val extension = originalFileName.substringAfterLast('.', "")
-            .lowercase()
+            .lowercase(java.util.Locale.ROOT)
             .takeIf { it.isNotBlank() }
             ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
             ?: defaultExtensionForMimeType(mimeType)
@@ -216,7 +216,7 @@ class UploadRepository @Inject constructor(
         )
     }
 
-    private fun defaultExtensionForMimeType(mimeType: String): String = when (mimeType.lowercase()) {
+    private fun defaultExtensionForMimeType(mimeType: String): String = when (mimeType.lowercase(java.util.Locale.ROOT)) {
         "audio/ogg" -> "ogg"
         "audio/wav", "audio/x-wav" -> "wav"
         "audio/flac" -> "flac"
