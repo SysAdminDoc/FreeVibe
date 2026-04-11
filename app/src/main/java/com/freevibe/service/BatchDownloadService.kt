@@ -29,15 +29,21 @@ class BatchDownloadService @Inject constructor(
     private val _state = MutableStateFlow(BatchDownloadState())
     val state = _state.asStateFlow()
 
+    private val lock = Any()
     private var scope: CoroutineScope? = null
 
     fun downloadBatch(wallpapers: List<Wallpaper>, concurrency: Int = 3) {
-        if (_state.value.isRunning) return
-
-        _state.value = BatchDownloadState(totalCount = wallpapers.size, isRunning = true)
-        scope?.cancel()
-        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        scope = newScope
+        val newScope = synchronized(lock) {
+            if (_state.value.isRunning) return
+            // Cancel any previous scope (e.g., from a prior cancelled run that never cleared state) and
+            // publish the fresh state + new scope atomically so a concurrent reset()/cancel() cannot
+            // see a half-initialized state.
+            scope?.cancel()
+            val fresh = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            scope = fresh
+            _state.value = BatchDownloadState(totalCount = wallpapers.size, isRunning = true)
+            fresh
+        }
         newScope.launch {
             try {
                 val semaphore = kotlinx.coroutines.sync.Semaphore(concurrency)
@@ -82,15 +88,24 @@ class BatchDownloadService @Inject constructor(
     }
 
     fun cancel() {
-        scope?.cancel()
-        scope = null
-        // The coroutine's finally block handles isRunning = false.
-        // Force it here too in case the scope had no active coroutine.
-        _state.update { it.copy(isRunning = false, currentItem = "") }
+        synchronized(lock) {
+            scope?.cancel()
+            scope = null
+            // The coroutine's finally block handles isRunning = false.
+            // Force it here too in case the scope had no active coroutine.
+            _state.update { it.copy(isRunning = false, currentItem = "") }
+        }
     }
 
     fun reset() {
-        _state.value = BatchDownloadState()
+        synchronized(lock) {
+            // Tear down any in-flight batch before wiping progress, otherwise the running
+            // coroutine keeps updating a discarded state object while the UI thinks nothing
+            // is happening.
+            scope?.cancel()
+            scope = null
+            _state.value = BatchDownloadState()
+        }
     }
 
     private fun guessBatchExtension(fileType: String): String = when {

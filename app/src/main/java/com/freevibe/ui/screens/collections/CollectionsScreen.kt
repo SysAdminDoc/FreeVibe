@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
@@ -92,9 +93,9 @@ fun CollectionsScreen(
     onWallpaperClick: (Wallpaper) -> Unit,
     viewModel: CollectionsViewModel = hiltViewModel(),
 ) {
-    val collections by viewModel.collections.collectAsState()
-    val selectedCollectionId by viewModel.selectedCollectionId.collectAsState()
-    val selectedItems by viewModel.selectedItems.collectAsState()
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val selectedCollectionId by viewModel.selectedCollectionId.collectAsStateWithLifecycle()
+    val selectedItems by viewModel.selectedItems.collectAsStateWithLifecycle()
     val selectedCollection = collections.find { it.collectionId == selectedCollectionId }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -265,8 +266,8 @@ private fun CollectionCard(
 ) {
     val countFlow = remember(collection.collectionId) { viewModel.getItemCount(collection.collectionId) }
     val coversFlow = remember(collection.collectionId) { viewModel.getCoverThumbnails(collection.collectionId) }
-    val count by countFlow.collectAsState(initial = 0)
-    val covers by coversFlow.collectAsState(initial = emptyList())
+    val count by countFlow.collectAsStateWithLifecycle(initialValue = 0)
+    val covers by coversFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
     Card(
         onClick = onClick,

@@ -200,10 +200,10 @@ private fun wallpaperKey(wallpaper: Wallpaper): String {
     val stableUrl = wallpaper.fullUrl.ifBlank { wallpaper.thumbnailUrl }
         .substringBefore("?")
         .substringBefore("#")
-        .lowercase()
+        .lowercase(java.util.Locale.ROOT)
     if (stableUrl.isNotBlank()) return stableUrl
     return listOf(
-        wallpaper.id.lowercase(),
+        wallpaper.id.lowercase(java.util.Locale.ROOT),
         wallpaper.width.toString(),
         wallpaper.height.toString(),
     ).joinToString("|")

@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.service.VideoWallpaperService
 import com.freevibe.ui.components.CompactSearchField
 import com.freevibe.ui.LiveWallpaperLaunchMode
@@ -156,14 +157,14 @@ internal suspend fun launchOrExportVideoWallpaper(context: Context, file: File, 
 fun VideoWallpapersScreen(
     viewModel: VideoWallpapersViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val resolvedIds by viewModel.resolvedIds.collectAsState()
-    val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsState(initial = emptySet())
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val resolvedIds by viewModel.resolvedIds.collectAsStateWithLifecycle()
+    val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsStateWithLifecycle(initialValue = emptySet())
     val itemIds = remember(state.items) { state.items.map { it.id } }
     val voteCounts by remember(itemIds) {
         if (itemIds.isNotEmpty()) viewModel.voteRepo.getVoteCounts(itemIds)
         else kotlinx.coroutines.flow.flowOf(emptyMap())
-    }.collectAsState(initial = emptyMap())
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
     val context = LocalContext.current
     var confirmItem by remember { mutableStateOf<VideoWallpaperItem?>(null) }
     var cropItem by remember { mutableStateOf<Pair<VideoWallpaperItem, String>?>(null) }

@@ -567,7 +567,7 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(error = "Could not resolve audio stream URL") }
                 return@launch
             }
-            val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3").lowercase()
+            val ext = sound.fileType.substringAfterLast("/", "mp3").substringAfterLast(".", "mp3").lowercase(java.util.Locale.ROOT)
             downloadManager.downloadSound(
                 id = sound.stableKey(), url = dlUrl,
                 fileName = buildSoundDownloadFileName(sound, ext),
@@ -590,7 +590,7 @@ class SoundsViewModel @Inject constructor(
     }
 
     private fun buildSoundDownloadFileName(sound: Sound, extension: String): String =
-        "Aura_${sound.source.name.lowercase()}_${sound.id}_${sound.name.take(24)}.$extension"
+        "Aura_${sound.source.name.lowercase(java.util.Locale.ROOT)}_${sound.id}_${sound.name.take(24)}.$extension"
 
     fun isFavorite(sound: Sound): Flow<Boolean> = favoritesRepo.isFavorite(sound.favoriteIdentity())
 
@@ -1061,9 +1061,14 @@ class SoundsViewModel @Inject constructor(
                         )
                     }
                 }
+                // Flow completed without emitting (empty community tab). Clear loading and
+                // kill the timeout so structured concurrency doesn't block the parent launch
+                // waiting for the 10 s delay to fire a spurious "timed out" error.
+                _state.update { it.copy(isLoading = false, isRefreshing = false) }
             } catch (e: Exception) {
-                timeoutJob.cancel()
                 _state.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) }
+            } finally {
+                timeoutJob.cancel()
             }
         }
     }

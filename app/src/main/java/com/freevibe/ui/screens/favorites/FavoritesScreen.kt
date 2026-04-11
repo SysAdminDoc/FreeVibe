@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.freevibe.data.model.FavoriteEntity
 import com.freevibe.data.model.stableKey
@@ -35,9 +36,9 @@ fun FavoritesScreen(
     onSoundClick: (FavoriteEntity) -> Unit,
     viewModel: FavoritesViewModel = hiltViewModel(),
 ) {
-    val wallpapers by viewModel.wallpapers.collectAsState()
-    val sounds by viewModel.sounds.collectAsState()
-    val message by viewModel.message.collectAsState()
+    val wallpapers by viewModel.wallpapers.collectAsStateWithLifecycle()
+    val sounds by viewModel.sounds.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     var sortBy by rememberSaveable { mutableStateOf("recent") } // recent, name, oldest

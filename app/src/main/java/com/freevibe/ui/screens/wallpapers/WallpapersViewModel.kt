@@ -445,7 +445,7 @@ class WallpapersViewModel @Inject constructor(
             }
         }
         // Fallback to URL extension
-        val path = url.substringBefore("?").substringBefore("#").lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase(java.util.Locale.ROOT)
         return when {
             path.endsWith(".png") -> "png"
             path.endsWith(".webp") -> "webp"
@@ -516,11 +516,16 @@ class WallpapersViewModel @Inject constructor(
 
     private val _colorPalette = MutableStateFlow<ColorExtractor.WallpaperPalette?>(null)
     val colorPalette = _colorPalette.asStateFlow()
+    private var colorExtractionJob: Job? = null
 
     fun extractColors(wallpaperUrl: String) {
-        viewModelScope.launch {
-            _colorPalette.value = null
-            _colorPalette.value = colorExtractor.extractFromUrl(wallpaperUrl)
+        // Cancel any stale extraction so back-to-back swipes don't leak results
+        // and don't race with a later call's reset-to-null.
+        colorExtractionJob?.cancel()
+        _colorPalette.value = null
+        colorExtractionJob = viewModelScope.launch {
+            val palette = colorExtractor.extractFromUrl(wallpaperUrl)
+            _colorPalette.value = palette
         }
     }
 
@@ -823,7 +828,7 @@ internal fun matchesWallpaperIdentity(
 internal fun buildWallpaperDownloadFileName(
     wallpaper: Wallpaper,
     extension: String,
-): String = "Aura_${wallpaper.source.name.lowercase()}_${wallpaper.id}.$extension"
+): String = "Aura_${wallpaper.source.name.lowercase(java.util.Locale.ROOT)}_${wallpaper.id}.$extension"
 
 internal fun extractWallpaperLookupIds(voteKey: String): List<String> {
     if ("::" in voteKey && !voteKey.startsWith("WALLPAPER::")) return emptyList()

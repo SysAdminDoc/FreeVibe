@@ -53,6 +53,7 @@ class SelectedContentHolder @Inject constructor() {
         _selectedWallpaper.value = wallpaper
     }
 
+    @Synchronized
     fun selectSound(sound: Sound) {
         _selectedSound.value = sound
     }

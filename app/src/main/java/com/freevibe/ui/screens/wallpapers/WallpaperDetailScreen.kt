@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.model.stableKey
@@ -49,10 +50,10 @@ fun WallpaperDetailScreen(
     onFindSimilar: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val sharedList by viewModel.sharedWallpaperList.collectAsState()
-    val sharedListAnchorKey by viewModel.sharedWallpaperListAnchorKey.collectAsState()
-    val hiddenIds by viewModel.hiddenIds.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val sharedList by viewModel.sharedWallpaperList.collectAsStateWithLifecycle()
+    val sharedListAnchorKey by viewModel.sharedWallpaperListAnchorKey.collectAsStateWithLifecycle()
+    val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle()
     val targetSource = fallbackWallpaper?.source
     val targetFullUrl = fallbackWallpaper?.fullUrl
     val detailIdentityKey = remember(wallpaperId, targetSource, targetFullUrl) {
@@ -143,9 +144,9 @@ fun WallpaperDetailScreen(
     // Use pager's current wallpaper for UI (not the reactive wp which causes reorder)
     val wp = currentWp
 
-    val isFavorite by viewModel.isFavorite(wp).collectAsState(initial = false)
-    val collections by viewModel.collections.collectAsState()
-    val voteCount by viewModel.getVoteCount(wp.stableKey()).collectAsState(initial = 0)
+    val isFavorite by viewModel.isFavorite(wp).collectAsStateWithLifecycle(initialValue = false)
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val voteCount by viewModel.getVoteCount(wp.stableKey()).collectAsStateWithLifecycle(initialValue = 0)
 
     var showApplyOptions by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }

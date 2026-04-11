@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
@@ -48,9 +49,9 @@ fun SoundDetailScreen(
     onSearchTag: (String) -> Unit = {},
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsState()
-    val selectedSound by viewModel.selectedSound.collectAsState()
-    val topHits by viewModel.topHits.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val selectedSound by viewModel.selectedSound.collectAsStateWithLifecycle()
+    val topHits by viewModel.topHits.collectAsStateWithLifecycle()
     val targetSource = fallbackSound?.source
     val targetPreviewUrl = fallbackSound?.previewUrl?.takeIf { it.isNotBlank() }
     val targetDownloadUrl = fallbackSound?.downloadUrl?.takeIf { it.isNotBlank() }
@@ -102,10 +103,10 @@ fun SoundDetailScreen(
         }
         return
     }
-    val isFavorite by viewModel.isFavorite(s).collectAsState(initial = false)
+    val isFavorite by viewModel.isFavorite(s).collectAsStateWithLifecycle(initialValue = false)
     val context = LocalContext.current
-    val autoPreview by viewModel.autoPreview.collectAsState()
-    val playbackProgress by viewModel.playbackProgress.collectAsState()
+    val autoPreview by viewModel.autoPreview.collectAsStateWithLifecycle()
+    val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
     val isPlaying = state.playingId == s.stableKey()
     val showUploader = s.uploaderName.isNotEmpty() &&
         s.uploaderName != "Unknown" &&

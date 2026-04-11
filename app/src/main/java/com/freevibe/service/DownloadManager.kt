@@ -245,10 +245,10 @@ class DownloadManager @Inject constructor(
 
     private fun sanitize(name: String) = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
 
-    private fun buildHistoryId(type: String, id: String): String = "${type.lowercase()}:$id"
+    private fun buildHistoryId(type: String, id: String): String = "${type.lowercase(java.util.Locale.ROOT)}:$id"
 
     private fun guessMimeType(url: String): String {
-        val path = url.substringBefore("?").substringBefore("#").lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase(java.util.Locale.ROOT)
         return when {
             path.endsWith(".png") -> "image/png"
             path.endsWith(".webp") -> "image/webp"
