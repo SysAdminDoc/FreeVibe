@@ -699,6 +699,14 @@ private fun WallpaperGrid(
                 .filter { !isWallpaperHidden(it, hiddenIds) && it.stableKey() !in topVotedIds }
         }
     }
+    // Hoisted to derivedStateOf so the filter+take doesn't reallocate the list on every grid
+    // body recomposition (the grid body runs every time any parent state flips).
+    val visibleTopVoted by remember(topVoted, hiddenIds, isDiscoverTab) {
+        derivedStateOf {
+            if (!isDiscoverTab) emptyList()
+            else topVoted.filter { !isWallpaperHidden(it.first, hiddenIds) }.take(10)
+        }
+    }
 
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(columns.coerceIn(1, 4)),
@@ -818,8 +826,8 @@ private fun WallpaperGrid(
         }
 
         // Top upvoted wallpapers section (Discover only, from community votes across all tabs)
-        if (isDiscoverTab && topVoted.isNotEmpty()) {
-            topVoted.filter { !isWallpaperHidden(it.first, hiddenIds) }.take(10).forEach { (wp, votes) ->
+        if (isDiscoverTab && visibleTopVoted.isNotEmpty()) {
+            visibleTopVoted.forEach { (wp, votes) ->
                 item(key = "top_${wp.stableKey()}") {
                     val isFav = wp.favoriteIdentity() in favoriteIdentities
                     WallpaperCard(
