@@ -79,9 +79,24 @@ class WallpaperApplier @Inject constructor(
                 val dir = java.io.File(context.filesDir, "parallax")
                 dir.mkdirs()
                 val file = java.io.File(dir, fileName)
+                // Atomic temp-then-rename: if copy is interrupted mid-stream, the
+                // ParallaxWallpaperService used to read a truncated file on the next surface
+                // creation. Write to a sibling .tmp, rename on success, and clean up the .tmp
+                // on any failure so orphaned partial writes never accumulate.
+                val tempFile = java.io.File(dir, "$fileName.tmp")
                 val body = resp.body ?: throw java.io.IOException("Empty response body")
-                body.byteStream().use { input ->
-                    file.outputStream().use { output -> input.copyTo(output) }
+                try {
+                    body.byteStream().use { input ->
+                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    if (!tempFile.renameTo(file)) {
+                        // renameTo can fail across filesystems; fall back to copy+delete.
+                        tempFile.copyTo(file, overwrite = true)
+                        tempFile.delete()
+                    }
+                } catch (e: Exception) {
+                    try { tempFile.delete() } catch (_: Exception) {}
+                    throw e
                 }
                 // Store path for ParallaxWallpaperService
                 context.getSharedPreferences("freevibe_parallax", Context.MODE_PRIVATE)
@@ -111,10 +126,17 @@ class WallpaperApplier @Inject constructor(
             if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
             val body = resp.body ?: throw java.io.IOException("Empty response body")
             val bytes = body.bytes()
+            if (bytes.isEmpty()) throw java.io.IOException("Empty response body")
 
             // First pass: get image dimensions without allocating pixels
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            // Guard against a corrupt first-pass decode. Without this, a zero-width result
+            // skips the sub-sampling math and the second decode either crashes or produces
+            // a full-resolution bitmap that can OOM on large wallpapers.
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                throw java.io.IOException("Invalid image: could not decode bounds")
+            }
 
             // Calculate inSampleSize to keep bitmap within 2x screen width
             val screenWidth = context.resources.displayMetrics.widthPixels

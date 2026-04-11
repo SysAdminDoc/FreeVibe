@@ -163,7 +163,7 @@ class WallpaperRepository @Inject constructor(
 
     /** Map an arbitrary hex color to the nearest Wallhaven-supported color */
     private fun nearestWallhavenColor(hex: String): String {
-        val rgb = hex.removePrefix("#").lowercase().let {
+        val rgb = hex.removePrefix("#").lowercase(java.util.Locale.ROOT).let {
             runCatching { it.toInt(16) }.getOrDefault(0)
         }
         val r1 = (rgb shr 16) and 0xFF
