@@ -202,7 +202,7 @@ class SoundApplier @Inject constructor(
     }
 
     private fun guessMimeType(url: String): String {
-        val path = url.substringBefore("?").substringBefore("#").lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase(java.util.Locale.ROOT)
         return when {
             path.endsWith(".mp3") -> "audio/mpeg"
             path.endsWith(".ogg") -> "audio/ogg"
@@ -216,7 +216,7 @@ class SoundApplier @Inject constructor(
 
     private fun ensureFileNameExtension(fileName: String, mimeType: String): String {
         if (fileName.substringAfterLast('.', "").isNotBlank()) return fileName
-        val extension = when (mimeType.lowercase()) {
+        val extension = when (mimeType.lowercase(java.util.Locale.ROOT)) {
             "audio/ogg" -> "ogg"
             "audio/wav", "audio/x-wav" -> "wav"
             "audio/flac" -> "flac"

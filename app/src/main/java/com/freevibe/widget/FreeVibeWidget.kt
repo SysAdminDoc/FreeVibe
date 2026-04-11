@@ -291,6 +291,10 @@ class OpenAppAction : ActionCallback {
 }
 
 private suspend fun applyFromSource(context: Context, source: String, target: WallpaperTarget) {
+    // Immediate feedback — a widget tap that kicks off a 3–10 s network call with no visible
+    // response used to feel unresponsive. Show the toast before the IO hop so the user knows
+    // the tap was registered.
+    withContext(Dispatchers.Main) { Toast.makeText(context, "Shuffling…", Toast.LENGTH_SHORT).show() }
     withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
@@ -313,6 +317,7 @@ private suspend fun applyFromSource(context: Context, source: String, target: Wa
 }
 
 private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
+    withContext(Dispatchers.Main) { Toast.makeText(context, "Shuffling…", Toast.LENGTH_SHORT).show() }
     withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
