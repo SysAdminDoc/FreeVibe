@@ -13,6 +13,8 @@ import java.nio.ByteBuffer
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val FFMPEG_TIMEOUT_SECONDS = 120L
+
 @Singleton
 class AudioTrimmer @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -77,12 +79,16 @@ class AudioTrimmer @Inject constructor(
                     val process = pb.start()
                     try {
                         process.inputStream.bufferedReader().use { it.readText() }
-                        val exitCode = process.waitFor()
+                        val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                        val exitCode = if (completed) process.exitValue() else {
+                            process.destroyForcibly()
+                            throw Exception("FFmpeg MP3 trim timed out after ${FFMPEG_TIMEOUT_SECONDS}s")
+                        }
                         if (exitCode != 0 || !outputFile.exists() || outputFile.length() <= 0) {
                             throw Exception("FFmpeg MP3 trim failed (exit $exitCode)")
                         }
                     } finally {
-                        process.destroy()
+                        try { process.destroy() } catch (_: Exception) {}
                     }
                 } else {
                     val muxerFormat = when (ext.lowercase(java.util.Locale.ROOT)) {
@@ -199,12 +205,17 @@ class AudioTrimmer @Inject constructor(
             val process = pb.start()
             try {
                 process.inputStream.bufferedReader().use { it.readText() }
-                val exitCode = process.waitFor()
+                val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    throw Exception("FFmpeg fade timed out after ${FFMPEG_TIMEOUT_SECONDS}s")
+                }
+                val exitCode = process.exitValue()
                 if (exitCode == 0 && tempOut.exists() && tempOut.length() > 1024) {
                     tempOut.copyTo(file, overwrite = true)
                 }
             } finally {
-                process.destroy()
+                try { process.destroy() } catch (_: Exception) {}
             }
         } catch (e: Exception) {
             if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("AudioTrimmer", "FFmpeg fade failed: ${e.message}")
@@ -247,9 +258,14 @@ class AudioTrimmer @Inject constructor(
             val process = pb.start()
             val exitCode = try {
                 process.inputStream.bufferedReader().use { it.readText() }
-                process.waitFor()
+                val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    throw Exception("Normalization timed out after ${FFMPEG_TIMEOUT_SECONDS}s")
+                }
+                process.exitValue()
             } finally {
-                process.destroy()
+                try { process.destroy() } catch (_: Exception) {}
             }
 
             if (exitCode == 0 && output.exists() && output.length() > 1024) {
@@ -287,9 +303,14 @@ class AudioTrimmer @Inject constructor(
             val process = pb.start()
             val exitCode = try {
                 process.inputStream.bufferedReader().use { it.readText() }
-                process.waitFor()
+                val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    throw Exception("Conversion timed out after ${FFMPEG_TIMEOUT_SECONDS}s")
+                }
+                process.exitValue()
             } finally {
-                process.destroy()
+                try { process.destroy() } catch (_: Exception) {}
             }
 
             if (exitCode == 0 && output.exists() && output.length() > 100) {

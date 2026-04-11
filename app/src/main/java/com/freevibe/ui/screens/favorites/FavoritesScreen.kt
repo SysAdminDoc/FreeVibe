@@ -39,6 +39,7 @@ fun FavoritesScreen(
     val wallpapers by viewModel.wallpapers.collectAsStateWithLifecycle()
     val sounds by viewModel.sounds.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val batchState by viewModel.batchState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     var sortBy by rememberSaveable { mutableStateOf("recent") } // recent, name, oldest
@@ -140,6 +141,42 @@ fun FavoritesScreen(
                         onClick = { selectedTab = index },
                         text = { Text(title, style = MaterialTheme.typography.labelLarge) },
                     )
+                }
+            }
+
+            // Batch-download progress banner: previously the "Download all" action started work
+            // but surfaced no progress. Now we render a compact linear indicator + counts whenever
+            // BatchDownloadService is running.
+            if (batchState.isRunning || (batchState.totalCount > 0 && !batchState.isComplete)) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Downloading ${batchState.completedCount + batchState.failedCount}/${batchState.totalCount}" +
+                                    if (batchState.failedCount > 0) " (${batchState.failedCount} failed)" else "",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (batchState.currentItem.isNotBlank()) {
+                                Text(
+                                    text = batchState.currentItem,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 180.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { batchState.progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
 
