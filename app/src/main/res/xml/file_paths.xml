@@ -6,4 +6,5 @@
     <cache-path name="cache_sounds" path="sounds/" />
     <cache-path name="cache_trimmed" path="trimmed/" />
     <cache-path name="cache_audio_edit" path="audio_edit/" />
+    <cache-path name="cache_share_out" path="share_out/" />
 </paths>

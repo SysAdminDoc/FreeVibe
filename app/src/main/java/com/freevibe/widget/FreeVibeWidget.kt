@@ -76,12 +76,22 @@ class FreeVibeWidget : GlanceAppWidget() {
         // gradient in that case.
         val bgBitmap = loadCurrentWallpaperThumbnail(context)
 
+        // Adaptive tinting — palette cached by WallpaperHistoryManager on every apply.
+        // Falls back to the static brand palette when a component would otherwise be black
+        // (= no palette cached yet).
+        val tintVibrant = prefs.getInt("tint_vibrant", 0)
+            .takeIf { it != 0 }?.let { ColorProvider(Color(it)) } ?: Primary
+        val tintAccent = prefs.getInt("tint_vibrant_light", 0)
+            .takeIf { it != 0 }?.let { ColorProvider(Color(it)) } ?: Secondary
+
         provideContent {
             WidgetContent(
                 size = LocalSize.current,
                 lastShuffleTime = lastShuffle,
                 shuffleCount = shuffleCount,
                 backgroundBitmap = bgBitmap,
+                primaryTint = tintVibrant,
+                accentTint = tintAccent,
             )
         }
     }
@@ -114,6 +124,8 @@ private fun WidgetContent(
     lastShuffleTime: Long,
     shuffleCount: Int,
     backgroundBitmap: Bitmap? = null,
+    primaryTint: ColorProvider = Primary,
+    accentTint: ColorProvider = Secondary,
 ) {
     Box(
         modifier = GlanceModifier
@@ -156,7 +168,7 @@ private fun WidgetContent(
                 Text(
                     text = "Aura",
                     style = TextStyle(
-                        color = Primary,
+                        color = accentTint,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                     ),
@@ -187,7 +199,7 @@ private fun WidgetContent(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .height(40.dp)
-                    .background(Primary)
+                    .background(primaryTint)
                     .cornerRadius(12.dp)
                     .clickable(actionRunCallback<ShuffleWallpaperAction>()),
                 contentAlignment = Alignment.Center,

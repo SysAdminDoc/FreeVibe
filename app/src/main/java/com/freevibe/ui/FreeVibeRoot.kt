@@ -362,7 +362,13 @@ fun FreeVibeRoot(
                 )
             }
             composable(Screen.VideoWallpapers.route) {
-                VideoWallpapersScreen()
+                VideoWallpapersScreen(
+                    onPreview = { streamUrl, title ->
+                        navController.navigate(
+                            Screen.VideoWallpaperPreview.createRoute(streamUrl, title)
+                        ) { launchSingleTop = true }
+                    },
+                )
             }
             composable(
                 route = Screen.Sounds.destinationPattern,
@@ -598,6 +604,32 @@ fun FreeVibeRoot(
                     wallpaperId = wallpaperId,
                     fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(
+                Screen.VideoWallpaperPreview.destinationPattern,
+                arguments = listOf(
+                    navArgument("streamUrl") { type = NavType.StringType },
+                    navArgument("title") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = ""
+                    },
+                ),
+            ) { backStackEntry ->
+                val streamUrl = backStackEntry.arguments?.getString("streamUrl").orEmpty()
+                val title = backStackEntry.arguments?.getString("title").orEmpty()
+                com.freevibe.ui.screens.videowallpapers.VideoWallpaperPreviewScreen(
+                    streamUrl = streamUrl,
+                    title = title,
+                    onBack = { navController.popBackStack() },
+                    onApply = {
+                        // Pop back to the source (video wallpapers list / detail) so the
+                        // Apply flow that lives there fires. User already had the stream
+                        // context before entering preview.
+                        navController.popBackStack()
+                    },
+                    onCrop = { navController.popBackStack() },
                 )
             }
             composable(

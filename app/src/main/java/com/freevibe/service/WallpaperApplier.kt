@@ -108,6 +108,39 @@ class WallpaperApplier @Inject constructor(
         }
     }
 
+    /**
+     * Parallax variant for a user-supplied local URI (gallery / share intent). Same output
+     * path + atomic write as prepareParallaxWallpaper(url), so ParallaxWallpaperService
+     * reads from the same SharedPreferences key.
+     */
+    suspend fun prepareParallaxFromUri(uri: android.net.Uri, fileName: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = java.io.File(context.filesDir, "parallax")
+            dir.mkdirs()
+            val file = java.io.File(dir, fileName)
+            val tempFile = java.io.File(dir, "$fileName.tmp")
+            try {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw java.io.IOException("Could not open photo")
+                input.use { inStream ->
+                    tempFile.outputStream().use { output -> inStream.copyTo(output) }
+                }
+                if (!tempFile.renameTo(file)) {
+                    tempFile.copyTo(file, overwrite = true)
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                try { tempFile.delete() } catch (_: Exception) {}
+                throw e
+            }
+            context.getSharedPreferences("freevibe_parallax", Context.MODE_PRIVATE)
+                .edit()
+                .putString("image_path", file.absolutePath)
+                .apply()
+            file.absolutePath
+        }
+    }
+
     /** Check if wallpaper operations are supported */
     fun isSupported(): Boolean {
         return wallpaperManager.isWallpaperSupported && wallpaperManager.isSetWallpaperAllowed
