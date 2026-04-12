@@ -81,7 +81,7 @@ internal fun soundQualityScore(
     if (normalizedTags.any { it in LOW_SIGNAL_SOUND_TERMS }) score -= 12
     if (sound.name.length in 5..48) score += 4
     if (sound.name.contains("_") && !sound.name.contains(" ")) score -= 12
-    if (sound.name.matches(Regex("^\\d+.*"))) score -= 10
+    if (sound.name.matches(LEADING_DIGITS_REGEX)) score -= 10
     score += when (filter) {
         SoundQualityFilter.BEST -> 0
         SoundQualityFilter.CLEAN -> if (soundLooksClean(sound)) 18 else -10
@@ -190,9 +190,12 @@ private fun soundFeelsPunchy(sound: Sound): Boolean {
     return terms.any { it in PUNCHY_SOUND_TERMS }
 }
 
+private val LEADING_DIGITS_REGEX = Regex("^\\d+.*")
+private val NON_ALNUM_REGEX = Regex("[^a-z0-9]+")
+
 private fun normalizedSoundTerms(raw: String): List<String> =
     raw.lowercase()
-        .split(Regex("[^a-z0-9]+"))
+        .split(NON_ALNUM_REGEX)
         .filter { it.isNotBlank() }
 
 private val GOOD_SOUND_TERMS = setOf(

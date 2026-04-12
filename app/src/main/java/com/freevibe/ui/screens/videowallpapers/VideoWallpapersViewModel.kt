@@ -353,23 +353,17 @@ class VideoWallpapersViewModel @Inject constructor(
                             redditReached = true
 
                             // Per-subreddit after token
-                            val afterToken = Regex(""""after"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.get(1)
+                            val afterToken = REDDIT_AFTER_REGEX.find(body)?.groupValues?.get(1)
                             _state.update { it.copy(redditAfters = it.redditAfters + (sub to afterToken)) }
 
-                            // Extract video posts with dimensions
-                            val videoRegex = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
-                            val titleRegex = Regex(""""title"\s*:\s*"([^"]{2,200})"""")
-                            val upsRegex = Regex(""""ups"\s*:\s*(\d+)""")
-                            val thumbRegex = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
-                            val widthRegex = Regex(""""reddit_video"\s*:\s*\{[^}]*"width"\s*:\s*(\d+)""")
-                            val heightRegex = Regex(""""reddit_video"\s*:\s*\{[^}]*"height"\s*:\s*(\d+)""")
+                            // Extract video posts with dimensions (regexes hoisted to companion)
 
-                            val videos = videoRegex.findAll(body).toList()
-                            val titles = titleRegex.findAll(body).toList()
-                            val upsList = upsRegex.findAll(body).toList()
-                            val thumbList = thumbRegex.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
-                            val widths = widthRegex.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
-                            val heights = heightRegex.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
+                            val videos = REDDIT_VIDEO_REGEX.findAll(body).toList()
+                            val titles = REDDIT_TITLE_REGEX.findAll(body).toList()
+                            val upsList = REDDIT_UPS_REGEX.findAll(body).toList()
+                            val thumbList = REDDIT_THUMB_REGEX.findAll(body).map { it.groupValues[1].replace("&amp;", "&") }.toList()
+                            val widths = REDDIT_WIDTH_REGEX.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
+                            val heights = REDDIT_HEIGHT_REGEX.findAll(body).map { it.groupValues[1].toIntOrNull() ?: 0 }.toList()
 
                             for (i in videos.indices) {
                                 val videoUrl = videos[i].groupValues[1]
@@ -544,5 +538,16 @@ class VideoWallpapersViewModel @Inject constructor(
                 _state.update { it.copy(isLoading = false, isLoadingMore = false, isRefreshing = false) }
             }
         }
+    }
+
+    companion object {
+        // Precompiled Reddit JSON parsing regexes — previously allocated per subreddit per fetch.
+        private val REDDIT_AFTER_REGEX = Regex(""""after"\s*:\s*"([^"]+)"""")
+        private val REDDIT_VIDEO_REGEX = Regex(""""fallback_url"\s*:\s*"(https://v\.redd\.it/[^"]+)"""")
+        private val REDDIT_TITLE_REGEX = Regex(""""title"\s*:\s*"([^"]{2,200})"""")
+        private val REDDIT_UPS_REGEX = Regex(""""ups"\s*:\s*(\d+)""")
+        private val REDDIT_THUMB_REGEX = Regex(""""thumbnail"\s*:\s*"(https://[^"]+)"""")
+        private val REDDIT_WIDTH_REGEX = Regex(""""reddit_video"\s*:\s*\{[^}]*"width"\s*:\s*(\d+)""")
+        private val REDDIT_HEIGHT_REGEX = Regex(""""reddit_video"\s*:\s*\{[^}]*"height"\s*:\s*(\d+)""")
     }
 }

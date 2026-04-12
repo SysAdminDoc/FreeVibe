@@ -28,6 +28,8 @@ fun WallhavenWallpaper.toWallpaper() = Wallpaper(
 
 // -- Bing Daily -> Wallpaper --
 
+private val BING_COPYRIGHT_REGEX = Regex("""\(([^)]+)\)""")
+
 fun BingImage.toWallpaper() = Wallpaper(
     id = "bing_${startDate}_${urlbase.hashCode().toUInt()}",
     source = ContentSource.BING,
@@ -38,7 +40,7 @@ fun BingImage.toWallpaper() = Wallpaper(
     category = "daily",
     tags = listOf("bing", "daily", "curated"),
     sourcePageUrl = copyrightLink,
-    uploaderName = Regex("""\(([^)]+)\)""").find(copyright)?.groupValues?.get(1)
+    uploaderName = BING_COPYRIGHT_REGEX.find(copyright)?.groupValues?.get(1)
         ?: copyright.take(80),
 )
 

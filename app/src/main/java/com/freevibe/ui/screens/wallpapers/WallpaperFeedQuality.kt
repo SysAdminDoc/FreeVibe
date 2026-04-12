@@ -189,11 +189,13 @@ private fun Wallpaper.isIconSafe(): Boolean {
     return colors.size in 1..3 || category.contains("minimal", ignoreCase = true)
 }
 
+private val WORD_SPLIT_REGEX = Regex("[^a-zA-Z0-9]+")
+
 private fun Wallpaper.searchableTerms(): List<String> =
     buildList {
         addAll(tags.map { it.normalizeFeedTerm() })
-        addAll(category.split(Regex("[^a-zA-Z0-9]+")).map { it.normalizeFeedTerm() })
-        addAll(uploaderName.split(Regex("[^a-zA-Z0-9]+")).map { it.normalizeFeedTerm() })
+        addAll(category.split(WORD_SPLIT_REGEX).map { it.normalizeFeedTerm() })
+        addAll(uploaderName.split(WORD_SPLIT_REGEX).map { it.normalizeFeedTerm() })
     }.filter { it.isNotBlank() }
 
 private fun wallpaperKey(wallpaper: Wallpaper): String {
@@ -209,8 +211,10 @@ private fun wallpaperKey(wallpaper: Wallpaper): String {
     ).joinToString("|")
 }
 
+private val PIXEL_HINT_REGEX = Regex("""(\d{3,5})\s*[xX]\s*(\d{3,5})""")
+
 private fun String.toPixelHint(): Long {
-    val match = Regex("""(\d{3,5})\s*[xX]\s*(\d{3,5})""").find(this) ?: return 0L
+    val match = PIXEL_HINT_REGEX.find(this) ?: return 0L
     val first = match.groupValues[1].toLongOrNull() ?: return 0L
     val second = match.groupValues[2].toLongOrNull() ?: return 0L
     return first * second
