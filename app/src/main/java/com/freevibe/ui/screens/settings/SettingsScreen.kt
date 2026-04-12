@@ -130,6 +130,38 @@ fun SettingsScreen(
             }
         }
     }
+    // Gallery picker for parallax-from-user-photo (v6.1.0)
+    val parallaxGalleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.applyParallaxFromGallery(it) }
+    }
+    val parallaxGalleryResult by viewModel.parallaxGalleryResult.collectAsStateWithLifecycle()
+    LaunchedEffect(parallaxGalleryResult) {
+        val result = parallaxGalleryResult
+        when (result) {
+            com.freevibe.ui.screens.settings.ParallaxGalleryResult.Ready -> {
+                when (
+                    launchLiveWallpaperPicker(
+                        context = context,
+                        serviceComponent = ComponentName(context, com.freevibe.service.ParallaxWallpaperService::class.java),
+                        tag = "SettingsParallaxGallery",
+                    )
+                ) {
+                    LiveWallpaperLaunchMode.DIRECT -> Toast.makeText(context, "Aura Parallax opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+                    LiveWallpaperLaunchMode.CHOOSER -> Toast.makeText(context, "Choose 'Aura Parallax' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                    null -> Toast.makeText(context, "Photo ready. Open Settings > Wallpaper > Live Wallpapers to finish.", Toast.LENGTH_LONG).show()
+                }
+                viewModel.clearParallaxGalleryResult()
+            }
+            is com.freevibe.ui.screens.settings.ParallaxGalleryResult.Failure -> {
+                Toast.makeText(context, "Couldn't use that photo: ${result.message}", Toast.LENGTH_LONG).show()
+                viewModel.clearParallaxGalleryResult()
+            }
+            else -> Unit
+        }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -213,6 +245,19 @@ fun SettingsScreen(
                 title = "GIF wallpaper",
                 subtitle = "Set an animated GIF as live wallpaper",
                 onClick = { videoPickerLauncher.launch("image/gif") },
+            )
+            // v6.1.0 — parallax from user photo
+            SettingsItem(
+                icon = Icons.Default.PhotoLibrary,
+                title = "Parallax from my photo",
+                subtitle = "Turn one of your photos into a depth-tilt live wallpaper",
+                onClick = {
+                    parallaxGalleryLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
             )
             SettingsItem(
                 icon = Icons.Default.PhotoSizeSelectLarge,

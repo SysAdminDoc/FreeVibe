@@ -19,6 +19,7 @@ import javax.inject.Singleton
 class WallpaperHistoryManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: WallpaperHistoryDao,
+    private val colorExtractor: ColorExtractor,
 ) {
     /** Get recent wallpaper history as a Flow */
     fun getRecent(limit: Int = 50): Flow<List<WallpaperHistoryEntity>> =
@@ -49,6 +50,24 @@ class WallpaperHistoryManager @Inject constructor(
             )
         )
         dao.pruneOld() // Keep only 100 most recent
+
+        // Adaptive widget tinting (v6.1.0) — extract palette once and cache in the widget's
+        // SharedPreferences so the widget can tint its buttons / wordmark to match the
+        // currently-applied wallpaper without re-downloading on every render.
+        try {
+            val palette = colorExtractor.extractFromUrl(wallpaper.thumbnailUrl.ifBlank { wallpaper.fullUrl })
+            if (palette != null) {
+                context.getSharedPreferences("freevibe_widget", Context.MODE_PRIVATE)
+                    .edit()
+                    .putInt("tint_vibrant", palette.vibrantColor)
+                    .putInt("tint_vibrant_dark", palette.vibrantDark)
+                    .putInt("tint_vibrant_light", palette.vibrantLight)
+                    .putInt("tint_dominant", palette.dominantColor)
+                    .putInt("tint_muted", palette.mutedColor)
+                    .apply()
+            }
+        } catch (_: Throwable) { /* tinting is optional */ }
+
         // Refresh the home-screen widget so its background thumbnail reflects the new
         // "current" wallpaper. Swallow errors — the widget is a nice-to-have, a failure
         // here shouldn't surface to the apply path.

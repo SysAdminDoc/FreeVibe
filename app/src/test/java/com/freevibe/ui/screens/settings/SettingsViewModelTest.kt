@@ -131,6 +131,7 @@ class SettingsViewModelTest {
         val collectionRepo = mockk<com.freevibe.data.repository.CollectionRepository>().also {
             every { it.getAll() } returns flowOf(emptyList())
         }
+        val wallpaperApplier = mockk<com.freevibe.service.WallpaperApplier>(relaxed = true)
         return SettingsViewModel(
             context = context,
             prefs = prefs,
@@ -138,6 +139,7 @@ class SettingsViewModelTest {
             offlineFavorites = offlineFavorites,
             wallpaperCacheManager = wallpaperCacheManager,
             collectionRepo = collectionRepo,
+            wallpaperApplier = wallpaperApplier,
         )
     }
 

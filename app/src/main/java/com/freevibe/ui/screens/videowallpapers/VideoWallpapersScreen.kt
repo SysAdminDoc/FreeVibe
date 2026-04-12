@@ -157,6 +157,7 @@ internal suspend fun launchOrExportVideoWallpaper(context: Context, file: File, 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoWallpapersScreen(
+    onPreview: ((streamUrl: String, title: String) -> Unit)? = null,
     viewModel: VideoWallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -446,14 +447,18 @@ fun VideoWallpapersScreen(
                             ) {
                                 items(visibleItems, key = { it.id }) { item ->
                                     val isResolved = item.id in resolvedIds
+                                    val resolvedUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null
                                     VideoCard(
                                         item = item,
                                         orientation = state.orientation,
-                                        streamUrl = if (isResolved) viewModel.getStreamUrl(item.id) else null,
+                                        streamUrl = resolvedUrl,
                                         shouldPreview = item.id == activePreviewId,
                                         isApplying = state.isApplying == item.id,
                                         voteCount = voteCounts[item.id] ?: 0,
                                         onApply = { confirmItem = item },
+                                        onPreview = if (onPreview != null && !resolvedUrl.isNullOrBlank()) {
+                                            { onPreview(resolvedUrl, item.title) }
+                                        } else null,
                                         onUpvote = { viewModel.upvote(item.id) },
                                         onDownvote = { viewModel.downvote(item.id) },
                                     )
@@ -585,6 +590,7 @@ private fun VideoCard(
     isApplying: Boolean,
     voteCount: Int = 0,
     onApply: () -> Unit,
+    onPreview: (() -> Unit)? = null,
     onUpvote: () -> Unit = {},
     onDownvote: () -> Unit = {},
 ) {
@@ -753,6 +759,19 @@ private fun VideoCard(
             }
             IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.VisibilityOff, "Hide video", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (onPreview != null) {
+                IconButton(
+                    onClick = onPreview,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Visibility,
+                        contentDescription = "Preview video wallpaper",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Spacer(Modifier.width(4.dp))
             Button(

@@ -9,6 +9,7 @@ import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,6 +24,12 @@ data class CacheUsageState(
     val hasWallpaperMetadataCache: Boolean = false,
 )
 
+sealed interface ParallaxGalleryResult {
+    data object Preparing : ParallaxGalleryResult
+    data object Ready : ParallaxGalleryResult
+    data class Failure(val message: String) : ParallaxGalleryResult
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: android.content.Context,
@@ -31,7 +38,29 @@ class SettingsViewModel @Inject constructor(
     private val offlineFavorites: OfflineFavoritesManager,
     private val wallpaperCacheManager: WallpaperCacheManager,
     private val collectionRepo: CollectionRepository,
+    private val wallpaperApplier: WallpaperApplier,
 ) : ViewModel() {
+
+    private val _parallaxGalleryResult = MutableStateFlow<ParallaxGalleryResult?>(null)
+    val parallaxGalleryResult: StateFlow<ParallaxGalleryResult?> = _parallaxGalleryResult.asStateFlow()
+
+    fun clearParallaxGalleryResult() { _parallaxGalleryResult.value = null }
+
+    /**
+     * Turn the user's gallery photo into a parallax live wallpaper. The caller (Settings
+     * screen) is expected to launch the system's live-wallpaper picker once success is
+     * observed — we can't safely call it from a ViewModel without an Activity.
+     */
+    fun applyParallaxFromGallery(uri: android.net.Uri) = viewModelScope.launch {
+        _parallaxGalleryResult.value = ParallaxGalleryResult.Preparing
+        val fileName = "parallax_user_photo.jpg"
+        val result = wallpaperApplier.prepareParallaxFromUri(uri, fileName)
+        _parallaxGalleryResult.value = result.fold(
+            onSuccess = { ParallaxGalleryResult.Ready },
+            onFailure = { ParallaxGalleryResult.Failure(it.message ?: "Could not prepare photo") },
+        )
+    }
+
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
     val autoWpSource = prefs.autoWallpaperSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallhaven")

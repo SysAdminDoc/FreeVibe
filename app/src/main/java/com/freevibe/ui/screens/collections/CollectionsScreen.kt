@@ -30,6 +30,7 @@ import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperCollectionItemEntity
 import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
+import com.freevibe.service.CollectionExporter
 import com.freevibe.service.SelectedContentHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,12 +38,37 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+sealed interface ShareCollectionEvent {
+    data class Ready(val uri: android.net.Uri, val collectionName: String) : ShareCollectionEvent
+    data class Failure(val message: String) : ShareCollectionEvent
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class CollectionsViewModel @Inject constructor(
     private val collectionRepo: CollectionRepository,
     private val selectedContent: SelectedContentHolder,
+    private val collectionExporter: CollectionExporter,
 ) : ViewModel() {
+
+    private val _shareEvent = MutableStateFlow<ShareCollectionEvent?>(null)
+    val shareEvent: StateFlow<ShareCollectionEvent?> = _shareEvent.asStateFlow()
+    fun consumeShareEvent() { _shareEvent.value = null }
+
+    fun shareCollection(collection: WallpaperCollectionEntity) {
+        viewModelScope.launch {
+            collectionExporter.prepareShareUri(collection.collectionId, collection.name)
+                .onSuccess { uri ->
+                    _shareEvent.value = ShareCollectionEvent.Ready(uri, collection.name)
+                }
+                .onFailure { e ->
+                    _shareEvent.value = ShareCollectionEvent.Failure(
+                        e.message ?: "Couldn't prepare this collection for sharing."
+                    )
+                }
+        }
+    }
+
 
     val collections = collectionRepo.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -100,6 +126,43 @@ fun CollectionsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Collection share (v6.1.0) — observe prepared Uri and launch the Android share sheet.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val shareEvent by viewModel.shareEvent.collectAsStateWithLifecycle()
+    LaunchedEffect(shareEvent) {
+        val event = shareEvent
+        when (event) {
+            is ShareCollectionEvent.Ready -> {
+                val intent = android.content.Intent.createChooser(
+                    com.freevibe.service.CollectionExporter.run {
+                        // Reuse the exporter instance that built the URI — we need the
+                        // typed Intent it builds (with correct MIME + grant flags).
+                        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(android.content.Intent.EXTRA_STREAM, event.uri)
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Aura collection: ${event.collectionName}")
+                            putExtra(
+                                android.content.Intent.EXTRA_TEXT,
+                                "Collection from the Aura wallpaper app — ${selectedItems.size} wallpapers."
+                            )
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                    },
+                    "Share \"${event.collectionName}\"",
+                ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                try { context.startActivity(intent) } catch (_: Exception) {
+                    scope.launch { snackbarHostState.showSnackbar("No app to share to") }
+                }
+                viewModel.consumeShareEvent()
+            }
+            is ShareCollectionEvent.Failure -> {
+                snackbarHostState.showSnackbar(event.message)
+                viewModel.consumeShareEvent()
+            }
+            null -> Unit
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -122,6 +185,14 @@ fun CollectionsScreen(
                                 Icon(Icons.Default.MoreVert, "More")
                             }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Share collection") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.shareCollection(selectedCollection)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Share, null) },
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Delete collection") },
                                     onClick = {
