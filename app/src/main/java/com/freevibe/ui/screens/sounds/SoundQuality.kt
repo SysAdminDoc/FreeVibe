@@ -194,7 +194,7 @@ private val LEADING_DIGITS_REGEX = Regex("^\\d+.*")
 private val NON_ALNUM_REGEX = Regex("[^a-z0-9]+")
 
 private fun normalizedSoundTerms(raw: String): List<String> =
-    raw.lowercase()
+    raw.lowercase(java.util.Locale.ROOT)
         .split(NON_ALNUM_REGEX)
         .filter { it.isNotBlank() }
 

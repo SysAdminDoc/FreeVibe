@@ -242,7 +242,7 @@ class WallpapersViewModel @Inject constructor(
             val preferredResolution = prefs.preferredResolution.first()
             val userStyles = prefs.userStyles.first()
                 .split(",")
-                .map { it.trim().lowercase() }
+                .map { it.trim().lowercase(java.util.Locale.ROOT) }
                 .filter { it.isNotBlank() }
             _state.update {
                 it.copy(
@@ -559,7 +559,7 @@ class WallpapersViewModel @Inject constructor(
                     val preferredResolution = prefs.preferredResolution.first()
                     val userStyles = prefs.userStyles.first()
                         .split(",")
-                        .map { it.trim().lowercase() }
+                        .map { it.trim().lowercase(java.util.Locale.ROOT) }
                         .filter { it.isNotBlank() }
                     _state.update {
                         it.copy(
@@ -594,7 +594,7 @@ class WallpapersViewModel @Inject constructor(
                 val preferredResolution = prefs.preferredResolution.first()
                 val userStyles = prefs.userStyles.first()
                     .split(",")
-                    .map { it.trim().lowercase() }
+                    .map { it.trim().lowercase(java.util.Locale.ROOT) }
                     .filter { it.isNotBlank() }
                 val activeFilter = if (currentTab == WallpaperTab.DISCOVER) _state.value.discoverFilter else WallpaperDiscoverFilter.FOR_YOU
                 val combined = if (loadMore) _state.value.wallpapers + result.items else result.items

@@ -83,6 +83,9 @@ data class SoundEditorState(
     }
 }
 
+private val FILE_SANITIZE_REGEX = Regex("[^a-zA-Z0-9._-]")
+private val NAME_SANITIZE_REGEX = Regex("[^a-zA-Z0-9]")
+
 @HiltViewModel
 class SoundEditorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -381,7 +384,7 @@ class SoundEditorViewModel @Inject constructor(
         val cacheDir = File(context.cacheDir, "audio_edit")
         cacheDir.mkdirs()
         val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "local_audio"
-        val safeName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val safeName = fileName.replace(FILE_SANITIZE_REGEX, "_")
         val file = File(cacheDir, safeName)
         context.contentResolver.openInputStream(uri)?.use { input ->
             FileOutputStream(file).use { output -> input.copyTo(output) }
@@ -475,7 +478,7 @@ internal fun buildRemoteAudioCacheFileName(name: String, cacheIdentity: String, 
         url.contains(".flac", ignoreCase = true) -> ".flac"
         else -> ".mp3"
     }
-    val safeName = name.replace(Regex("[^a-zA-Z0-9]"), "_").trim('_').ifBlank { "audio" }
+    val safeName = name.replace(NAME_SANITIZE_REGEX, "_").trim('_').ifBlank { "audio" }
     val scopedSuffix = cacheIdentity.hashCode().toUInt().toString(16)
     return "${safeName}_$scopedSuffix$ext"
 }

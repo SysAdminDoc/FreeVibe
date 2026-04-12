@@ -112,6 +112,11 @@ class SoundsViewModel @Inject constructor(
     private val ytResolveSemaphore = Semaphore(6)
 
     private val titleBlocklist = Regex("hindi|telugu|pack|trending|popular|\\bnew\\b|\\btop\\b|\\bbest\\b", RegexOption.IGNORE_CASE)
+    private val WORD_SPLIT_REGEX = Regex("[^a-zA-Z0-9]+")
+    private val YOUTUBE_ID_PATTERNS = listOf(
+        Regex("""(?:youtube\.com/watch\?.*v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})"""),
+        Regex("""^([a-zA-Z0-9_-]{11})$"""),
+    )
 
     private val _communityUploads = MutableStateFlow<List<Sound>>(emptyList())
     val communityUploads = _communityUploads.asStateFlow()
@@ -289,12 +294,8 @@ class SoundsViewModel @Inject constructor(
     }
 
     private fun extractYouTubeId(url: String): String? {
-        val patterns = listOf(
-            Regex("""(?:youtube\.com/watch\?.*v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})"""),
-            Regex("""^([a-zA-Z0-9_-]{11})$"""),
-        )
         val trimmed = url.trim()
-        for (p in patterns) {
+        for (p in YOUTUBE_ID_PATTERNS) {
             p.find(trimmed)?.groupValues?.get(1)?.let { return it }
         }
         return null
@@ -609,7 +610,7 @@ class SoundsViewModel @Inject constructor(
     }
 
     suspend fun loadSimilar(sound: Sound): List<Sound> {
-        val keywords = sound.name.split(Regex("[^a-zA-Z0-9]+"))
+        val keywords = sound.name.split(WORD_SPLIT_REGEX)
             .filter { it.length > 2 }.take(4).joinToString(" ")
         if (keywords.isBlank()) return emptyList()
         return try {

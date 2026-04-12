@@ -14,6 +14,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val FFMPEG_TIMEOUT_SECONDS = 120L
+private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9_-]")
 
 @Singleton
 class AudioTrimmer @Inject constructor(
@@ -37,7 +38,7 @@ class AudioTrimmer @Inject constructor(
             val outputDir = File(context.cacheDir, "trimmed")
             outputDir.mkdirs()
             val ext = inputPath.substringAfterLast(".", "mp3")
-            val outputFile = File(outputDir, "${outputFileName.replace(Regex("[^a-zA-Z0-9_-]"), "_")}.$ext")
+            val outputFile = File(outputDir, "${outputFileName.replace(SANITIZE_REGEX, "_")}.$ext")
 
             val extractor = MediaExtractor()
             var muxer: MediaMuxer? = null

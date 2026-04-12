@@ -85,6 +85,6 @@ class SoundCloudRepository @Inject constructor(
         license.contains("cc-by-nc", ignoreCase = true) -> "CC BY-NC"
         license.contains("cc-by", ignoreCase = true) -> "CC BY"
         license.contains("cc0", ignoreCase = true) || license.contains("no-rights-reserved", ignoreCase = true) -> "CC0"
-        else -> license.take(8).uppercase().ifBlank { "CC" }
+        else -> license.take(8).uppercase(java.util.Locale.ROOT).ifBlank { "CC" }
     }
 }
