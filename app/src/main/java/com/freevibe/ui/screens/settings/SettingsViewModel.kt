@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
+import com.freevibe.data.model.WallpaperCollectionEntity
+import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.WallpaperHistoryManager
@@ -28,6 +30,7 @@ class SettingsViewModel @Inject constructor(
     private val historyManager: WallpaperHistoryManager,
     private val offlineFavorites: OfflineFavoritesManager,
     private val wallpaperCacheManager: WallpaperCacheManager,
+    private val collectionRepo: CollectionRepository,
 ) : ViewModel() {
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
@@ -158,6 +161,21 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setSchedulerSource(source: String) = viewModelScope.launch { prefs.setSchedulerSource(source) }
+
+    // Collection rotation ----------------------------------------------------
+    val collections: StateFlow<List<WallpaperCollectionEntity>> = collectionRepo.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val schedulerCollectionId = prefs.schedulerCollectionId
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -1L)
+
+    /**
+     * Pick a specific collection to rotate from. Also flips the source to "collection" so
+     * the next scheduler tick actually reads from it.
+     */
+    fun setSchedulerCollection(id: Long) = viewModelScope.launch {
+        prefs.setSchedulerCollection(id)
+        prefs.setSchedulerSource("collection")
+    }
     fun setSchedulerHome(enabled: Boolean) = viewModelScope.launch { prefs.setSchedulerHome(enabled) }
     fun setSchedulerLock(enabled: Boolean) = viewModelScope.launch { prefs.setSchedulerLock(enabled) }
     fun setSchedulerShuffle(shuffle: Boolean) = viewModelScope.launch { prefs.setSchedulerShuffle(shuffle) }

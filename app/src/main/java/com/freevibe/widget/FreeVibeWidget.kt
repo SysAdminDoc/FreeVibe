@@ -2,6 +2,8 @@ package com.freevibe.widget
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -19,6 +21,9 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import coil.imageLoader
+import coil.request.ImageRequest
+import kotlinx.coroutines.flow.first
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.WallpaperRepository
@@ -43,6 +48,7 @@ private val Tertiary = ColorProvider(Color(0xFFFF6B9D))
 private val SurfaceTone = ColorProvider(Color(0xFF1A1A24))
 private val TextDim = ColorProvider(Color(0xFF888888))
 private val White = ColorProvider(Color.White)
+private val Scrim = ColorProvider(Color(0xCC000000))
 
 private const val WIDGET_PREFS = "freevibe_widget"
 private const val LAST_SHUFFLE_KEY = "last_shuffle_time"
@@ -65,29 +71,77 @@ class FreeVibeWidget : GlanceAppWidget() {
         val lastShuffle = prefs.getLong(LAST_SHUFFLE_KEY, 0)
         val shuffleCount = prefs.getInt(SHUFFLE_COUNT_KEY, 0)
 
+        // Load most-recent wallpaper thumbnail as the widget background. Null if the user
+        // hasn't applied anything yet (fresh install) — widget falls back to the dark
+        // gradient in that case.
+        val bgBitmap = loadCurrentWallpaperThumbnail(context)
+
         provideContent {
             WidgetContent(
                 size = LocalSize.current,
                 lastShuffleTime = lastShuffle,
                 shuffleCount = shuffleCount,
+                backgroundBitmap = bgBitmap,
             )
         }
     }
+
+    private suspend fun loadCurrentWallpaperThumbnail(context: Context): Bitmap? {
+        return try {
+            val ep = getEntryPoint(context)
+            val entry = ep.wallpaperHistoryManager().mostRecent().first() ?: return null
+            val url = entry.thumbnailUrl.ifBlank { entry.fullUrl }
+            if (url.isBlank()) return null
+            // Widget RemoteViews have a ~5 MB payload limit; downsample hard.
+            val request = ImageRequest.Builder(context)
+                .data(url)
+                .size(WIDGET_BG_MAX_PX)
+                .allowHardware(false) // hardware bitmaps can't cross process boundaries
+                .build()
+            val result = context.imageLoader.execute(request)
+            (result.drawable as? BitmapDrawable)?.bitmap
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
+
+private const val WIDGET_BG_MAX_PX = 400
 
 @Composable
 private fun WidgetContent(
     size: DpSize,
     lastShuffleTime: Long,
     shuffleCount: Int,
+    backgroundBitmap: Bitmap? = null,
 ) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(WidgetBg)
-            .cornerRadius(16.dp)
-            .padding(12.dp),
+            .cornerRadius(16.dp),
     ) {
+        // Current wallpaper as the widget background (with a dark scrim for text legibility).
+        // Tap the image area to jump into the detail screen for that wallpaper.
+        if (backgroundBitmap != null) {
+            Image(
+                provider = ImageProvider(backgroundBitmap),
+                contentDescription = "Current wallpaper",
+                contentScale = ContentScale.Crop,
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .cornerRadius(16.dp)
+                    .clickable(actionRunCallback<OpenCurrentWallpaperAction>()),
+            )
+            // Dark scrim so the buttons + text remain readable on bright wallpapers.
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .background(Scrim)
+                    .cornerRadius(16.dp),
+            ) {}
+        }
+        Box(modifier = GlanceModifier.fillMaxSize().padding(12.dp)) {
         Column(
             modifier = GlanceModifier.fillMaxSize(),
             verticalAlignment = Alignment.Vertical.CenterVertically,
@@ -182,6 +236,7 @@ private fun WidgetContent(
                 )
             }
         }
+        }
     }
 }
 
@@ -262,6 +317,31 @@ class OpenFavoritesAction : ActionCallback {
             intent.putExtra("navigate_to", "favorites")
             context.startActivity(intent)
         }
+    }
+}
+
+/**
+ * Tap-on-current-wallpaper → deep-link into the detail screen for that wallpaper.
+ * Uses the same EXTRA_DAILY_WALLPAPER_* extras that MainActivity already parses for the
+ * Reddit daily notification, so no new intent-handling plumbing is needed.
+ */
+class OpenCurrentWallpaperAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val entry = try {
+            getEntryPoint(context).wallpaperHistoryManager().mostRecent().first()
+        } catch (_: Exception) { null }
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (entry != null) {
+            intent.putExtra("daily_wallpaper_id", entry.wallpaperId)
+            intent.putExtra("daily_wallpaper_url", entry.fullUrl)
+            intent.putExtra("daily_wallpaper_thumb", entry.thumbnailUrl)
+            intent.putExtra("daily_wallpaper_source", entry.source)
+            intent.putExtra("daily_wallpaper_width", entry.width)
+            intent.putExtra("daily_wallpaper_height", entry.height)
+        }
+        context.startActivity(intent)
     }
 }
 

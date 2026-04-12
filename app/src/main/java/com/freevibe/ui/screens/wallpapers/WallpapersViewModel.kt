@@ -18,6 +18,8 @@ import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toWallpaper
+import com.freevibe.service.ApplyFeedbackBus
+import com.freevibe.service.ApplyFeedbackEvent
 import com.freevibe.service.ColorExtractor
 import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.DownloadManager
@@ -74,6 +76,7 @@ class WallpapersViewModel @Inject constructor(
     private val prefs: PreferencesManager,
     private val colorExtractor: ColorExtractor,
     private val cacheManager: com.freevibe.data.local.WallpaperCacheManager,
+    private val applyFeedbackBus: ApplyFeedbackBus,
     val voteRepo: VoteRepository,
 ) : ViewModel() {
 
@@ -377,9 +380,11 @@ class WallpapersViewModel @Inject constructor(
     fun applyWallpaper(wallpaper: Wallpaper, target: WallpaperTarget) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true, applySuccess = null) }
+            // Capture the prior history entry BEFORE recording this new apply — that's the
+            // entry Undo will restore to. On first apply there's no prior and undoTarget stays null.
+            val undoTarget = historyManager.previousSnapshot()
             wallpaperApplier.applyFromUrl(wallpaper.fullUrl, target)
                 .onSuccess {
-                    // #11: Record in history
                     historyManager.record(wallpaper, target)
                     val label = when (target) {
                         WallpaperTarget.HOME -> "home screen"
@@ -387,9 +392,35 @@ class WallpapersViewModel @Inject constructor(
                         WallpaperTarget.BOTH -> "home & lock screen"
                     }
                     _state.update { it.copy(isApplying = false, applySuccess = "Set as $label wallpaper") }
+                    applyFeedbackBus.post(
+                        ApplyFeedbackEvent(
+                            message = "Applied to $label",
+                            undoTarget = undoTarget,
+                        )
+                    )
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isApplying = false, error = e.message) }
+                }
+        }
+    }
+
+    /**
+     * Restore a previously-applied wallpaper (used by the global "Undo" snackbar).
+     * Does not emit a new Undo event — we don't want undo-of-undo recursion.
+     */
+    fun undoApply(entry: com.freevibe.data.model.WallpaperHistoryEntity) {
+        viewModelScope.launch {
+            _state.update { it.copy(isApplying = true) }
+            val target = runCatching { WallpaperTarget.valueOf(entry.target) }
+                .getOrDefault(WallpaperTarget.BOTH)
+            wallpaperApplier.applyFromUrl(entry.fullUrl, target)
+                .onSuccess {
+                    _state.update { it.copy(isApplying = false, applySuccess = "Reverted") }
+                    applyFeedbackBus.post(ApplyFeedbackEvent(message = "Reverted to previous wallpaper", undoTarget = null))
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isApplying = false, error = "Undo failed: ${e.message}") }
                 }
         }
     }

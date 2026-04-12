@@ -128,12 +128,16 @@ class SettingsViewModelTest {
             coEvery { it.clearAll() } returns Unit
         }
 
+        val collectionRepo = mockk<com.freevibe.data.repository.CollectionRepository>().also {
+            every { it.getAll() } returns flowOf(emptyList())
+        }
         return SettingsViewModel(
             context = context,
             prefs = prefs,
             historyManager = historyManager,
             offlineFavorites = offlineFavorites,
             wallpaperCacheManager = wallpaperCacheManager,
+            collectionRepo = collectionRepo,
         )
     }
 
@@ -166,6 +170,7 @@ class SettingsViewModelTest {
             every { prefs.pexelsApiKey } returns flowOf("")
             every { prefs.pixabayApiKey } returns flowOf("")
             every { prefs.freesoundApiKey } returns flowOf("")
+            every { prefs.schedulerCollectionId } returns flowOf(-1L)
         }
 
     private fun waitForIdle(

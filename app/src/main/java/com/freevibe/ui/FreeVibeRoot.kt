@@ -23,6 +23,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.Wallpaper
@@ -58,6 +59,9 @@ private const val ONBOARDING_DONE = "onboarding_complete"
 @InstallIn(SingletonComponent::class)
 interface FreeVibeRootEntryPoint {
     fun favoritesRepository(): com.freevibe.data.repository.FavoritesRepository
+    fun applyFeedbackBus(): com.freevibe.service.ApplyFeedbackBus
+    fun wallpaperApplier(): com.freevibe.service.WallpaperApplier
+    fun wallpaperHistoryManager(): com.freevibe.service.WallpaperHistoryManager
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +108,47 @@ fun FreeVibeRoot(
 
     val startRoute = if (onboardingDone) Screen.Wallpapers.route else Screen.Onboarding.route
 
+    // Global "Applied — Undo" snackbar host. Any ViewModel that applies a wallpaper posts
+    // to ApplyFeedbackBus; we observe it here at the root so the snackbar persists across
+    // navigation (e.g. tap Apply on detail, back to list, snackbar still visible).
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        entryPoint.applyFeedbackBus().events.collect { event ->
+            val result = snackbarHostState.showSnackbar(
+                message = event.message,
+                actionLabel = if (event.undoTarget != null) "Undo" else null,
+                duration = SnackbarDuration.Short,
+                withDismissAction = true,
+            )
+            if (result == SnackbarResult.ActionPerformed && event.undoTarget != null) {
+                val entry = event.undoTarget
+                scope.launch {
+                    val target = runCatching {
+                        com.freevibe.data.model.WallpaperTarget.valueOf(entry.target)
+                    }.getOrDefault(com.freevibe.data.model.WallpaperTarget.BOTH)
+                    entryPoint.wallpaperApplier().applyFromUrl(entry.fullUrl, target)
+                        .onSuccess {
+                            entryPoint.applyFeedbackBus().post(
+                                com.freevibe.service.ApplyFeedbackEvent(
+                                    message = "Reverted to previous wallpaper",
+                                    undoTarget = null,
+                                )
+                            )
+                        }
+                        .onFailure { e ->
+                            entryPoint.applyFeedbackBus().post(
+                                com.freevibe.service.ApplyFeedbackEvent(
+                                    message = "Undo failed: ${e.message ?: "unknown error"}",
+                                    undoTarget = null,
+                                )
+                            )
+                        }
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -148,6 +193,14 @@ fun FreeVibeRoot(
 
         Scaffold(
             containerColor = Color.Transparent,
+            snackbarHost = {
+                // Lift the snackbar above the bottom nav bar when it's visible so it doesn't
+                // sit behind the floating nav pill.
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.padding(bottom = if (showBottomBar) 72.dp else 0.dp),
+                )
+            },
             bottomBar = {
                 if (showBottomBar) {
                     Box(
@@ -401,6 +454,7 @@ fun FreeVibeRoot(
                     onBack = { navController.popBackStack() },
                     onEdit = { wallpaper -> navController.navigate(Screen.WallpaperEditor.createRoute(wallpaper)) { launchSingleTop = true } },
                     onCrop = { wallpaper -> navController.navigate(Screen.WallpaperCrop.createRoute(wallpaper)) { launchSingleTop = true } },
+                    onPreview = { wallpaper -> navController.navigate(Screen.WallpaperPreview.createRoute(wallpaper)) { launchSingleTop = true } },
                     onSearchTag = { tag ->
                         navController.navigate(Screen.Wallpapers.createRoute(query = tag)) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -544,6 +598,58 @@ fun FreeVibeRoot(
                     wallpaperId = wallpaperId,
                     fallbackWallpaper = fallbackWallpaper,
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(
+                Screen.WallpaperPreview.destinationPattern,
+                arguments = listOf(
+                    navArgument("id") { type = NavType.StringType },
+                    navArgument("source") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("thumbnailUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("fullUrl") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("width") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                    navArgument("height") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    },
+                )
+            ) { backStackEntry ->
+                val wallpaperId = backStackEntry.arguments?.getString("id").orEmpty()
+                val fullUrl = backStackEntry.arguments?.getString("fullUrl").orEmpty()
+                val wallpaper = Wallpaper(
+                    id = wallpaperId,
+                    source = backStackEntry.arguments?.getString("source")
+                        ?.let { sourceName -> runCatching { ContentSource.valueOf(sourceName) }.getOrDefault(ContentSource.WALLHAVEN) }
+                        ?: ContentSource.WALLHAVEN,
+                    thumbnailUrl = backStackEntry.arguments?.getString("thumbnailUrl").orEmpty().ifBlank { fullUrl },
+                    fullUrl = fullUrl,
+                    width = backStackEntry.arguments?.getInt("width") ?: 0,
+                    height = backStackEntry.arguments?.getInt("height") ?: 0,
+                )
+                val previewVm: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+                com.freevibe.ui.screens.wallpapers.WallpaperPreviewScreen(
+                    wallpaper = wallpaper,
+                    onBack = { navController.popBackStack() },
+                    onApply = { target ->
+                        previewVm.applyWallpaper(wallpaper, target)
+                        navController.popBackStack()
+                    },
+                    viewModel = previewVm,
                 )
             }
             composable(

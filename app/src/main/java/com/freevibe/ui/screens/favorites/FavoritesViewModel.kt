@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.FavoriteEntity
 import com.freevibe.data.model.favoriteIdentity
+import com.freevibe.data.model.stableKey
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.repository.FavoritesRepository
@@ -68,6 +69,30 @@ class FavoritesViewModel @Inject constructor(
         if (wps.isEmpty()) return
         batchDownloadService.downloadBatch(wps)
         _message.update { _ -> "Downloading ${wps.size} wallpapers..." }
+    }
+
+    // -- Bulk actions (selection mode) ---------------------------------------
+
+    /** Remove every favorite whose stableKey is in [keys]. Returns the count deleted. */
+    fun bulkDelete(keys: Set<String>) = viewModelScope.launch {
+        if (keys.isEmpty()) return@launch
+        val w = wallpapers.value.filter { it.stableKey() in keys }
+        val s = sounds.value.filter { it.stableKey() in keys }
+        (w + s).forEach { favoritesRepo.remove(it.favoriteIdentity()) }
+        val total = w.size + s.size
+        if (total > 0) _message.update { _ -> "Removed $total favorite${if (total == 1) "" else "s"}" }
+    }
+
+    /** Kick off a batch download for every selected wallpaper favorite. Sounds are ignored. */
+    fun bulkDownload(keys: Set<String>) {
+        if (keys.isEmpty()) return
+        val wps = wallpapers.value.filter { it.stableKey() in keys }.map { it.toWallpaper() }
+        if (wps.isEmpty()) {
+            _message.update { _ -> "Select at least one wallpaper" }
+            return
+        }
+        batchDownloadService.downloadBatch(wps)
+        _message.update { _ -> "Downloading ${wps.size} wallpaper${if (wps.size == 1) "" else "s"}..." }
     }
 
     fun clearMessage() { _message.update { _ -> null } }
