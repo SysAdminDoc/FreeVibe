@@ -395,8 +395,7 @@ fun SettingsScreen(
                     }
                 },
             )
-            // Dark/light auto-switch toggle removed — DarkModeReceiver is not implemented
-            // (never registered, SharedPreferences keys never written)
+            // Dark/light auto-switch toggle removed — DarkModeReceiver deleted in v5.21.0
             // VFX particle overlays
             var showVfxPicker by remember { mutableStateOf(false) }
             SettingsItem(

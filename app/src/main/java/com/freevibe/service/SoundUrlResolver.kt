@@ -63,12 +63,7 @@ class SoundUrlResolver @Inject constructor(
         }.getOrNull().orEmpty()
         if (html.isBlank()) return null
 
-        val patterns = listOf(
-            Regex("""data-static-file-url="([^"]+)""""),
-            Regex("""twitter:player:stream" content="([^"]+)""""),
-            Regex("""data-mp3="([^"]+)""""),
-            Regex("""og:audio" content="([^"]+)""""),
-        )
+        val patterns = HTML_AUDIO_URL_PATTERNS
         return patterns
             .asSequence()
             .mapNotNull { pattern -> pattern.find(html)?.groupValues?.getOrNull(1) }
@@ -85,6 +80,15 @@ class SoundUrlResolver @Inject constructor(
             normalized = "https:$normalized"
         }
         return normalized.trim()
+    }
+
+    companion object {
+        private val HTML_AUDIO_URL_PATTERNS = listOf(
+            Regex("""data-static-file-url="([^"]+)""""),
+            Regex("""twitter:player:stream" content="([^"]+)""""),
+            Regex("""data-mp3="([^"]+)""""),
+            Regex("""og:audio" content="([^"]+)""""),
+        )
     }
 }
 
