@@ -85,6 +85,6 @@ class FreesoundV2Repository @Inject constructor(
             license.contains("CC0", ignoreCase = true) -> "CC0"
         license.contains("Attribution-NonCommercial", ignoreCase = true) -> "CC BY-NC"
         license.contains("Attribution-ShareAlike", ignoreCase = true) -> "CC BY-SA"
-        else -> license.take(8).uppercase()
+        else -> license.take(8).uppercase(java.util.Locale.ROOT)
     }
 }

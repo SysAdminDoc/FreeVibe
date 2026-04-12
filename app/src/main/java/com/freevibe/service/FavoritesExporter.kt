@@ -168,8 +168,8 @@ private fun FavoriteEntity.toExportItem() = FavoriteExportItem(
 
 private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
     val normalizedId = id.trim()
-    val normalizedSource = source.trim().uppercase()
-    val normalizedType = type.trim().uppercase()
+    val normalizedSource = source.trim().uppercase(java.util.Locale.ROOT)
+    val normalizedType = type.trim().uppercase(java.util.Locale.ROOT)
 
     if (normalizedId.isBlank()) return null
     if (normalizedSource.isBlank()) return null

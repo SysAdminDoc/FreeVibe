@@ -277,5 +277,9 @@ class VoteRepository @Inject constructor(
     }
 
     fun sanitizeKey(id: String): String =
-        id.replace(Regex("[.#$\\[\\]/]"), "_")
+        id.replace(FIREBASE_KEY_REGEX, "_")
+
+    companion object {
+        private val FIREBASE_KEY_REGEX = Regex("[.#$\\[\\]/]")
+    }
 }

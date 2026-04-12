@@ -819,7 +819,7 @@ fun SettingsScreen(
         var selectedStyles by remember(showStylePicker, userStyles) {
             mutableStateOf(
                 userStyles.split(",")
-                    .map { it.trim().lowercase() }
+                    .map { it.trim().lowercase(java.util.Locale.ROOT) }
                     .filter { it.isNotBlank() }
                     .toSet()
             )
@@ -1094,7 +1094,7 @@ private fun SettingsToggle(
 
 private fun userStylesSummary(raw: String): String {
     val styles = raw.split(",")
-        .map { it.trim().lowercase() }
+        .map { it.trim().lowercase(java.util.Locale.ROOT) }
         .filter { it.isNotBlank() }
     if (styles.isEmpty()) return "No style preference"
     return styles.joinToString(" • ") { stylePreferenceLabel(it) }

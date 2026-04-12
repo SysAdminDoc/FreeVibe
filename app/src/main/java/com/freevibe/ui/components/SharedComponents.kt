@@ -365,7 +365,7 @@ fun CompactSearchField(
 
 @Composable
 fun SourceBadge(source: String, modifier: Modifier = Modifier) {
-    val (color, label) = when (source.uppercase()) {
+    val (color, label) = when (source.uppercase(java.util.Locale.ROOT)) {
         "WALLHAVEN" -> MaterialTheme.colorScheme.primary to "Wallhaven"
         "PICSUM" -> MaterialTheme.colorScheme.outline to "Legacy"
         "BING" -> Color(0xFF00809D) to "Bing"

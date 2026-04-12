@@ -22,6 +22,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+private val UPLOAD_NAME_SANITIZE_REGEX = Regex("[^a-zA-Z0-9_\\- ]")
+
 class UploadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val identityProvider: CommunityIdentityProvider,
@@ -204,7 +206,7 @@ class UploadRepository @Inject constructor(
 
         val baseName = originalFileName.substringBeforeLast('.')
             .ifBlank { fallbackName }
-            .replace(Regex("[^a-zA-Z0-9_\\- ]"), "")
+            .replace(UPLOAD_NAME_SANITIZE_REGEX, "")
             .take(40)
             .ifBlank { "audio" }
 

@@ -19,6 +19,8 @@ import javax.inject.Singleton
  * Downloads the full-res file to internal storage and updates the FavoriteEntity
  * with the local path.
  */
+private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9_-]")
+
 @Singleton
 class OfflineFavoritesManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -41,8 +43,8 @@ class OfflineFavoritesManager @Inject constructor(
                     url.contains(".webp", true) -> "webp"
                     else -> "jpg"
                 }
-                val safeKey = favorite.stableKey().replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                val legacySafeId = favorite.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                val safeKey = favorite.stableKey().replace(SANITIZE_REGEX, "_")
+                val legacySafeId = favorite.id.replace(SANITIZE_REGEX, "_")
                 val file = File(offlineDir, "$safeKey.$ext")
                 val legacyFile = offlineDir.listFiles()
                     ?.firstOrNull { it.name.startsWith("$legacySafeId.") && it.length() > 0 }
@@ -91,8 +93,8 @@ class OfflineFavoritesManager @Inject constructor(
 
     /** Remove offline cache for an item */
     suspend fun removeOffline(favorite: FavoriteEntity) = withContext(Dispatchers.IO) {
-        val safeKey = favorite.stableKey().replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        val legacySafeId = favorite.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val safeKey = favorite.stableKey().replace(SANITIZE_REGEX, "_")
+        val legacySafeId = favorite.id.replace(SANITIZE_REGEX, "_")
         offlineDir.listFiles()?.filter {
             it.name.startsWith("$safeKey.") || it.name.startsWith("$legacySafeId.")
         }

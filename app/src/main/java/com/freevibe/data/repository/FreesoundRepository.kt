@@ -97,10 +97,10 @@ class FreesoundRepository @Inject constructor(
             license == "by-sa" -> "CC BY-SA"
             license == "by-nc" -> "CC BY-NC"
             license == "pdm" -> "Public Domain"
-            else -> license.uppercase().take(8)
+            else -> license.uppercase(java.util.Locale.ROOT).take(8)
         }
         val durationSec = (duration ?: 0) / 1000.0
-        val format = filetype?.uppercase()?.ifBlank { null } ?: "MP3"
+        val format = filetype?.uppercase(java.util.Locale.ROOT)?.ifBlank { null } ?: "MP3"
 
         return Sound(
             id = "ov_$id",

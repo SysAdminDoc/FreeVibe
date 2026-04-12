@@ -243,7 +243,9 @@ class DownloadManager @Inject constructor(
         }
     }
 
-    private fun sanitize(name: String) = name.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+    private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9._-]")
+
+    private fun sanitize(name: String) = name.replace(SANITIZE_REGEX, "_")
 
     private fun buildHistoryId(type: String, id: String): String = "${type.lowercase(java.util.Locale.ROOT)}:$id"
 
@@ -258,7 +260,7 @@ class DownloadManager @Inject constructor(
     }
 
     private fun guessAudioMime(url: String): String {
-        val path = url.substringBefore("?").substringBefore("#").lowercase()
+        val path = url.substringBefore("?").substringBefore("#").lowercase(java.util.Locale.ROOT)
         return when {
             path.endsWith(".ogg") -> "audio/ogg"
             path.endsWith(".wav") -> "audio/wav"

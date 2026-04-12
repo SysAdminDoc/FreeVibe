@@ -21,6 +21,8 @@ import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9._-]")
+
 @Singleton
 class SoundApplier @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -51,7 +53,7 @@ class SoundApplier @Inject constructor(
             // Determine MIME type from URL/extension
             val mimeType = guessMimeType(url)
             val safeFileName = ensureFileNameExtension(
-                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                fileName.replace(SANITIZE_REGEX, "_"),
                 mimeType,
             )
 
@@ -81,7 +83,7 @@ class SoundApplier @Inject constructor(
         runCatching {
             val mimeType = guessMimeType(url)
             val safeFileName = ensureFileNameExtension(
-                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                fileName.replace(SANITIZE_REGEX, "_"),
                 mimeType,
             )
             saveUrlToMediaStore(safeFileName, mimeType, type, url)
@@ -102,7 +104,7 @@ class SoundApplier @Inject constructor(
 
             val mimeType = guessMimeType(filePath)
             val safeFileName = ensureFileNameExtension(
-                fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_"),
+                fileName.replace(SANITIZE_REGEX, "_"),
                 mimeType,
             )
 

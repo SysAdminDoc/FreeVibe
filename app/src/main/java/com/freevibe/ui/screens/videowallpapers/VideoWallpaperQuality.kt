@@ -137,7 +137,7 @@ private fun VideoWallpaperItem.matchesFilter(filter: VideoFocusFilter, orientati
 }
 
 private fun VideoWallpaperItem.isLoopFriendly(): Boolean {
-    val title = title.lowercase()
+    val title = title.lowercase(java.util.Locale.ROOT)
     return LOOP_TERMS.any { it in title } ||
         duration in 4..18 ||
         source == "Pixabay"
