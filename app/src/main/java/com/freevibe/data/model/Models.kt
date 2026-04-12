@@ -1,5 +1,6 @@
 package com.freevibe.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -13,6 +14,7 @@ enum class WallpaperTarget { HOME, LOCK, BOTH }
 
 // -- Wallpaper --
 
+@Immutable
 data class Wallpaper(
     val id: String,
     val source: ContentSource,
@@ -33,6 +35,7 @@ data class Wallpaper(
 
 // -- Sound --
 
+@Immutable
 data class Sound(
     val id: String,
     val source: ContentSource,
@@ -50,6 +53,7 @@ data class Sound(
     val sourcePageUrl: String = "",
 )
 
+@Immutable
 data class FavoriteIdentity(
     val id: String,
     val source: String,
@@ -60,6 +64,7 @@ data class FavoriteIdentity(
 
 // -- Favorites (Room entity) --
 
+@Immutable
 @Entity(
     tableName = "favorites",
     primaryKeys = ["id", "source", "type"],
