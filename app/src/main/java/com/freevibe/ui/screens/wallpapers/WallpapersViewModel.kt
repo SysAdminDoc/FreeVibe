@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
+@androidx.compose.runtime.Immutable
 data class WallpapersUiState(
     val wallpapers: List<Wallpaper> = emptyList(),
     val isLoading: Boolean = false,

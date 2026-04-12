@@ -151,6 +151,10 @@ class DailyWallpaperWorker @AssistedInject constructor(
             )
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setInitialDelay(8, TimeUnit.HOURS)
+                // Match AutoWallpaperWorker / WeatherUpdateWorker: exponential backoff on retry.
+                // Default is 30s linear, which burns battery retrying transient network errors
+                // (Reddit 5xx, temporary DNS) at short intervals.
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(

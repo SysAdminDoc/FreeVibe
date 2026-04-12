@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 
+@androidx.compose.runtime.Immutable
 data class SoundsUiState(
     val sounds: List<Sound> = emptyList(),
     val isLoading: Boolean = false,
