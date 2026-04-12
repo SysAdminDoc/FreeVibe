@@ -45,6 +45,7 @@ fun WallpaperDetailScreen(
     onBack: () -> Unit,
     onEdit: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     onCrop: (com.freevibe.data.model.Wallpaper) -> Unit = {},
+    onPreview: (com.freevibe.data.model.Wallpaper) -> Unit = {},
     onSearchTag: (String) -> Unit = {},
     onSearchColor: (String) -> Unit = {},
     onFindSimilar: (com.freevibe.data.model.Wallpaper) -> Unit = {},
@@ -410,6 +411,7 @@ fun WallpaperDetailScreen(
                     onDismiss = { showMoreMenu = false },
                     onEdit = { showMoreMenu = false; onEdit(wp) },
                     onCrop = { showMoreMenu = false; onCrop(wp) },
+                    onPreview = { showMoreMenu = false; onPreview(wp) },
                     onCollection = { showMoreMenu = false; showCollectionPicker = true },
                     onFindSimilar = {
                         showMoreMenu = false
@@ -516,6 +518,7 @@ private fun MoreActionsSheet(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onCrop: () -> Unit,
+    onPreview: () -> Unit,
     onCollection: () -> Unit,
     onFindSimilar: (() -> Unit)?,
     uploaderName: String = "",
@@ -531,6 +534,7 @@ private fun MoreActionsSheet(
             if (uploaderName.isNotEmpty()) {
                 Text("by $uploaderName", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
             }
+            SheetOption(Icons.Default.Visibility, "Preview on mock lock / home") { onPreview() }
             SheetOption(Icons.Default.Edit, "Edit") { onEdit() }
             SheetOption(Icons.Default.Crop, "Crop & position") { onCrop() }
             SheetOption(Icons.Default.CreateNewFolder, "Save to collection") { onCollection() }

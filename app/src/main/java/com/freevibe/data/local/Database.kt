@@ -173,6 +173,9 @@ interface WallpaperHistoryDao {
     @Query("SELECT * FROM wallpaper_history ORDER BY appliedAt DESC LIMIT :limit")
     fun getRecent(limit: Int = 50): Flow<List<WallpaperHistoryEntity>>
 
+    @Query("SELECT * FROM wallpaper_history ORDER BY appliedAt DESC LIMIT :limit")
+    suspend fun getRecentSnapshot(limit: Int): List<WallpaperHistoryEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entry: WallpaperHistoryEntity)
 

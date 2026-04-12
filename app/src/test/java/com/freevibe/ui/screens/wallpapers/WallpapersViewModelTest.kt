@@ -486,6 +486,7 @@ class WallpapersViewModelTest {
             prefs = prefs,
             colorExtractor = mockk(relaxed = true),
             cacheManager = cacheManager,
+            applyFeedbackBus = mockk(relaxed = true),
             voteRepo = voteRepo,
         )
     }

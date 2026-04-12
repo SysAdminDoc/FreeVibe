@@ -165,6 +165,28 @@ sealed class Screen(
         }
     }
 
+    // ── Preview (mock lock + home screen over the wallpaper) ────
+    data object WallpaperPreview : Screen(
+        route = "wallpaper_preview/{id}",
+        title = "Preview",
+        icon = Icons.Filled.Visibility,
+        selectedIcon = Icons.Filled.Visibility,
+        destinationPattern = "wallpaper_preview/{id}?source={source}&thumbnailUrl={thumbnailUrl}&fullUrl={fullUrl}&width={width}&height={height}",
+    ) {
+        fun createRoute(id: String) = "wallpaper_preview/${Uri.encode(id)}"
+
+        fun createRoute(wallpaper: Wallpaper): String {
+            val queryParams = buildList {
+                add("source=${Uri.encode(wallpaper.source.name)}")
+                add("thumbnailUrl=${Uri.encode(wallpaper.thumbnailUrl)}")
+                add("fullUrl=${Uri.encode(wallpaper.fullUrl)}")
+                add("width=${wallpaper.width}")
+                add("height=${wallpaper.height}")
+            }.joinToString("&")
+            return "${createRoute(wallpaper.id)}?$queryParams"
+        }
+    }
+
     // ── Crop/Position ─────────────────────────────────────────────
     data object WallpaperCrop : Screen(
         route = "wallpaper_crop/{id}",

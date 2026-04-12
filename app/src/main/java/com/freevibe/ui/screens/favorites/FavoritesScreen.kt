@@ -1,7 +1,9 @@
 package com.freevibe.ui.screens.favorites
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -47,6 +49,19 @@ fun FavoritesScreen(
     val scope = rememberCoroutineScope()
     val tabs = listOf("Wallpapers (${wallpapers.size})", "Sounds (${sounds.size})")
 
+    // -- Bulk selection state (wallpaper tab only in v1) --
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedKeys by remember { mutableStateOf(emptySet<String>()) }
+    fun exitSelection() { selectionMode = false; selectedKeys = emptySet() }
+    fun toggleSelect(key: String) {
+        selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
+        if (selectedKeys.isEmpty()) selectionMode = false
+    }
+    // Exit selection on back before closing the screen.
+    BackHandler(enabled = selectionMode) { exitSelection() }
+    // Also exit if the user switches tabs — selection is scoped to the wallpaper tab.
+    LaunchedEffect(selectedTab) { if (selectedTab != 0) exitSelection() }
+
     val sortedWallpapers = remember(wallpapers, sortBy) {
         when (sortBy) {
             "name" -> wallpapers.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
@@ -78,6 +93,65 @@ fun FavoritesScreen(
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
+            if (selectionMode) {
+                TopAppBar(
+                    title = { Text("${selectedKeys.size} selected", style = MaterialTheme.typography.titleMedium) },
+                    navigationIcon = {
+                        IconButton(onClick = { exitSelection() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Exit selection")
+                        }
+                    },
+                    actions = {
+                        val allKeys = sortedWallpapers.map { it.stableKey() }.toSet()
+                        val allSelected = allKeys.isNotEmpty() && selectedKeys.containsAll(allKeys)
+                        IconButton(onClick = {
+                            selectedKeys = if (allSelected) emptySet() else allKeys
+                            if (selectedKeys.isEmpty()) selectionMode = false
+                        }) {
+                            Icon(
+                                if (allSelected) Icons.Default.Deselect else Icons.Default.SelectAll,
+                                contentDescription = if (allSelected) "Deselect all" else "Select all",
+                            )
+                        }
+                        IconButton(
+                            enabled = selectedKeys.isNotEmpty(),
+                            onClick = {
+                                viewModel.bulkDownload(selectedKeys)
+                                exitSelection()
+                            },
+                        ) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = "Download selected")
+                        }
+                        IconButton(
+                            enabled = selectedKeys.isNotEmpty(),
+                            onClick = {
+                                val snapshot = selectedKeys
+                                val snapshotItems = sortedWallpapers.filter { it.stableKey() in snapshot }
+                                viewModel.bulkDelete(snapshot)
+                                exitSelection()
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = "Removed ${snapshot.size} favorite${if (snapshot.size == 1) "" else "s"}",
+                                        actionLabel = "Undo",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        snapshotItems.forEach { viewModel.restoreFavorite(it) }
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove selected")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                )
+            } else {
             TopAppBar(
                 title = { Text("Favorites") },
                 actions = {
@@ -133,6 +207,7 @@ fun FavoritesScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
+            }
 
             TabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEachIndexed { index, title ->
@@ -192,37 +267,77 @@ fun FavoritesScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(sortedWallpapers, key = { it.stableKey() }, contentType = { "favorite_card" }) { fav ->
+                                val key = fav.stableKey()
+                                val isSelected = key in selectedKeys
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier.border(
+                                                    width = 3.dp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    shape = RoundedCornerShape(12.dp),
+                                                )
+                                            } else Modifier,
+                                        )
                                         .combinedClickable(
                                             onClick = {
-                                                viewModel.selectWallpaper(fav, sortedWallpapers)
-                                                onWallpaperClick(fav)
+                                                if (selectionMode) {
+                                                    toggleSelect(key)
+                                                } else {
+                                                    viewModel.selectWallpaper(fav, sortedWallpapers)
+                                                    onWallpaperClick(fav)
+                                                }
                                             },
                                             onLongClick = {
-                                                viewModel.removeFavorite(fav)
-                                                scope.launch {
-                                                    val result = snackbarHostState.showSnackbar(
-                                                        message = "Removed from favorites",
-                                                        actionLabel = "Undo",
-                                                        duration = SnackbarDuration.Short,
-                                                    )
-                                                    if (result == SnackbarResult.ActionPerformed) {
-                                                        viewModel.restoreFavorite(fav)
-                                                    }
-                                                }
+                                                if (!selectionMode) selectionMode = true
+                                                toggleSelect(key)
                                             },
                                         ),
                                     shape = RoundedCornerShape(12.dp),
                                 ) {
-                                    AsyncImage(
-                                        model = fav.thumbnailUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxWidth().aspectRatio(0.67f),
-                                    )
+                                    Box {
+                                        AsyncImage(
+                                            model = fav.thumbnailUrl,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxWidth().aspectRatio(0.67f),
+                                        )
+                                        if (selectionMode) {
+                                            // Dim unselected cards to emphasize the selection.
+                                            if (!isSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .matchParentSize()
+                                                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)),
+                                                )
+                                            }
+                                            // Selection indicator: filled check for selected, outlined circle otherwise.
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(8.dp)
+                                                    .size(26.dp)
+                                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                                    .background(
+                                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                                    ),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

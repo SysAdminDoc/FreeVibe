@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -273,10 +274,23 @@ fun SettingsScreen(
                     subtitle = formatInterval(schedulerInterval),
                     onClick = { showSchedulerInterval = true },
                 )
+                val collectionsList by viewModel.collections.collectAsStateWithLifecycle()
+                val activeCollectionId by viewModel.schedulerCollectionId.collectAsStateWithLifecycle()
+                val activeCollectionName = remember(collectionsList, activeCollectionId) {
+                    collectionsList.firstOrNull { it.collectionId == activeCollectionId }?.name
+                }
+                val sourceSubtitle = when {
+                    schedulerSource == "collection" && activeCollectionName != null ->
+                        "Collection: $activeCollectionName"
+                    schedulerSource == "collection" ->
+                        "Collection (none selected)"
+                    else ->
+                        schedulerSource.replaceFirstChar { it.uppercase() }
+                }
                 SettingsItem(
                     icon = Icons.Default.Source,
                     title = "Source",
-                    subtitle = schedulerSource.replaceFirstChar { it.uppercase() },
+                    subtitle = sourceSubtitle,
                     onClick = { showSchedulerSource = true },
                 )
                 SettingsToggle(
@@ -326,11 +340,12 @@ fun SettingsScreen(
                 )
             }
 
+            var showCollectionPicker by remember { mutableStateOf(false) }
             if (showSchedulerSource) {
                 val sources = listOf(
                     "discover" to "Discover (mixed)", "favorites" to "My Favorites",
                     "wallhaven" to "Wallhaven", "pixabay" to "Pixabay", "reddit" to "Reddit",
-                    "bing" to "Bing Daily", "collection" to "Collection",
+                    "bing" to "Bing Daily", "collection" to "A collection…",
                 )
                 AlertDialog(
                     onDismissRequest = { showSchedulerSource = false },
@@ -339,7 +354,18 @@ fun SettingsScreen(
                         Column {
                             sources.forEach { (key, label) ->
                                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = schedulerSource == key, onClick = { viewModel.setSchedulerSource(key); showSchedulerSource = false })
+                                    RadioButton(
+                                        selected = schedulerSource == key,
+                                        onClick = {
+                                            if (key == "collection") {
+                                                showSchedulerSource = false
+                                                showCollectionPicker = true
+                                            } else {
+                                                viewModel.setSchedulerSource(key)
+                                                showSchedulerSource = false
+                                            }
+                                        },
+                                    )
                                     Spacer(Modifier.width(8.dp))
                                     Text(label)
                                 }
@@ -347,6 +373,56 @@ fun SettingsScreen(
                         }
                     },
                     confirmButton = { TextButton(onClick = { showSchedulerSource = false }) { Text("Cancel") } },
+                )
+            }
+
+            if (showCollectionPicker) {
+                val collections by viewModel.collections.collectAsStateWithLifecycle()
+                val activeId by viewModel.schedulerCollectionId.collectAsStateWithLifecycle()
+                AlertDialog(
+                    onDismissRequest = { showCollectionPicker = false },
+                    title = { Text("Rotate from which collection?") },
+                    text = {
+                        if (collections.isEmpty()) {
+                            // Empty-state guidance: we can't rotate through something that
+                            // doesn't exist yet.
+                            Column {
+                                Text(
+                                    "You haven't created any collections yet.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Save wallpapers to a collection from the wallpaper detail screen, then come back here.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            Column(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                                collections.forEach { c ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.setSchedulerCollection(c.collectionId)
+                                                showCollectionPicker = false
+                                            }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(selected = activeId == c.collectionId, onClick = {
+                                            viewModel.setSchedulerCollection(c.collectionId)
+                                            showCollectionPicker = false
+                                        })
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(c.name, style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showCollectionPicker = false }) { Text("Cancel") } },
                 )
             }
         }
