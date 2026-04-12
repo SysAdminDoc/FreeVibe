@@ -67,6 +67,7 @@ data class VideoWallpaperItem(
 
 enum class OrientationFilter { ALL, PORTRAIT, LANDSCAPE }
 
+@androidx.compose.runtime.Immutable
 data class VideoWallpapersState(
     val items: List<VideoWallpaperItem> = emptyList(),
     val isLoading: Boolean = false,
