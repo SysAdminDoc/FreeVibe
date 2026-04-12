@@ -6,6 +6,7 @@ import kotlin.math.max
 
 enum class WallpaperDiscoverFilter { FOR_YOU, AMOLED, HIGH_RES, PORTRAIT, ICON_SAFE }
 
+@androidx.compose.runtime.Immutable
 internal data class WallpaperQualityHints(
     val resolutionLabel: String,
     val orientationLabel: String,

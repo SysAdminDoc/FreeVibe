@@ -44,10 +44,16 @@ class PreferencesManager @Inject constructor(
     val pixabayApiKey: Flow<String> = get(Keys.PIXABAY_KEY, com.freevibe.BuildConfig.PIXABAY_API_KEY)
     val freesoundApiKey: Flow<String> = get(Keys.FREESOUND_KEY, com.freevibe.BuildConfig.FREESOUND_API_KEY)
 
-    suspend fun setWallhavenKey(key: String) = set(Keys.WALLHAVEN_KEY, key)
-    suspend fun setPexelsKey(key: String) = set(Keys.PEXELS_KEY, key)
-    suspend fun setPixabayKey(key: String) = set(Keys.PIXABAY_KEY, key)
-    suspend fun setFreesoundKey(key: String) = set(Keys.FREESOUND_KEY, key)
+    // Sanitize API keys: strip surrounding whitespace and reject any control chars (including CR/LF
+    // which OkHttp would throw on when placed in a request header — prefer to drop them here with
+    // a clean user-facing validation instead of a crash at request time).
+    private fun sanitizeApiKey(key: String): String =
+        key.trim().filter { it.code >= 0x20 && it.code != 0x7F }
+
+    suspend fun setWallhavenKey(key: String) = set(Keys.WALLHAVEN_KEY, sanitizeApiKey(key))
+    suspend fun setPexelsKey(key: String) = set(Keys.PEXELS_KEY, sanitizeApiKey(key))
+    suspend fun setPixabayKey(key: String) = set(Keys.PIXABAY_KEY, sanitizeApiKey(key))
+    suspend fun setFreesoundKey(key: String) = set(Keys.FREESOUND_KEY, sanitizeApiKey(key))
 
     // ── Auto-wallpaper ────────────────────────────────────────────
 

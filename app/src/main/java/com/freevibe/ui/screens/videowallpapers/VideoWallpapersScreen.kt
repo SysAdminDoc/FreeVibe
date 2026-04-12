@@ -47,6 +47,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
 
+@androidx.compose.runtime.Immutable
 data class VideoWallpaperItem(
     val id: String,
     val title: String,
