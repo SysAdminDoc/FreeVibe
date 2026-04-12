@@ -5,7 +5,7 @@ Open-source Android app for device personalization. Wallpapers, video wallpapers
 
 ## Tech Stack
 - Kotlin 2.1.0 / Jetpack Compose / Material 3
-- Hilt 2.53.1 DI, Room 2.6.1 DB (v11), Retrofit 2.11.0 + OkHttp, Moshi + KSP
+- Hilt 2.53.1 DI, Room 2.6.1 DB (v14), Retrofit 2.11.0 + OkHttp, Moshi + KSP
 - Coil 2.7.0 (images), Media3 ExoPlayer (audio/video), WorkManager 2.10.0, Glance 1.1.1 (widget)
 - NewPipe Extractor (YouTube search), yt-dlp (stream extraction), FFmpeg (video crop + audio fade/convert/normalize)
 - Freesound v2 API (primary sound source, requires client_id), Openverse API (fallback, zero auth)
@@ -21,8 +21,8 @@ JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot" ./gradlew as
 Gradle 8.12 pinned via wrapper. AGP 8.7.3. SDK path in `local.properties` must point to `C:/Users/Xray/AppData/Local/Android/Sdk`.
 
 ## Version
-- **v5.12.0** (versionCode 62)
-- Version strings in: `app/build.gradle.kts`, `SettingsScreen.kt` About section, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA, `README.md` badge
+- **v5.21.0** (versionCode 71)
+- Version strings in: `app/build.gradle.kts`, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA
 
 ## Architecture
 ```
@@ -109,7 +109,7 @@ DataStore: Settings, Onboarding, User Styles
 - **MutableStateFlow read-modify-write** — Always use `.update { it + newVal }` not `.value = .value + newVal` for thread safety in concurrent coroutines.
 - **Bitmap.createBitmap** can return the same object as source — always check `!==` before recycling to avoid double-recycle crash.
 - **MediaPlayer.stop() + release()** — Always separate into two try blocks; if stop() throws, release() must still be called.
-- **DarkModeReceiver** is dead code — BroadcastReceiver never registered in manifest, SharedPreferences keys never written. TODO documented.
+- **DarkModeReceiver** deleted in v5.21.0 — was dead code (never registered, SP keys never written).
 - **Nav route arguments** — All detail/picker routes use `Uri.encode(id)` to handle special characters in IDs.
 - **Atomic file writes** — OfflineFavoritesManager and SoundEditorScreen use temp-then-rename pattern to prevent corrupt files on interruption.
 - Package is `com.freevibe`, display name is "Aura"
@@ -150,10 +150,14 @@ DataStore: Settings, Onboarding, User Styles
 - YouTube videos use thumbnail dimensions as orientation proxy
 - Community Favorites only shows wallpapers in local Room cache
 - SoundCloud requires API key registration (optional, graceful degradation)
-- DarkModeReceiver is dead code (never registered, SP keys never written)
 - SelectedContentHolder does not survive process death (in-memory singleton)
 
 ## Version History
+- v5.21.0: Round 4 audit — perf, dead code. Hoisted ~150+ per-call Regex compilations to top-level/companion constants across 7 files (VideoWallpapersViewModel Reddit parsing, WallpaperFeedQuality ranking, SoundQuality scoring, Mappers BingDaily, SoundUrlResolver HTML scraping). Deleted DarkModeReceiver.kt (88 lines of never-registered, never-written dead code).
+- v5.20.0: Round 3 audit — data integrity, crash prevention, locale completion, widget UX. WallpaperApplier.prepareParallaxWallpaper atomic temp-then-rename (truncated parallax images). downloadBitmap rejects zero-dimension bounds (OOM on corrupt images). SoundApplier guessMimeType/ensureFileNameExtension Locale.ROOT. WallpaperRepository nearestWallhavenColor Locale.ROOT. Widget shuffle actions show "Shuffling..." toast before network call.
+- v5.19.0: Round 2 audit — FFmpeg hang-proofing, batch-download progress UI, grid perf. AudioTrimmer 4 FFmpeg operations now have 120s waitFor timeout with destroyForcibly. FavoritesScreen wired BatchDownloadService.state to progress banner. WallpapersScreen topVoted filter+take hoisted to derivedStateOf.
+- v5.18.0: Round 1 audit — concurrency, lifecycle, locale. BatchDownloadService state/scope lock. WallpapersViewModel.extractColors job cancellation. SelectedContentHolder.selectSound @Synchronized. SoundsViewModel.loadCommunityTab timeoutJob finally. Migrated all 16 screens from collectAsState to collectAsStateWithLifecycle. Locale.ROOT sweep on machine-use lowercase calls across AudioTrimmer, DownloadManager, UploadRepository, WallpapersViewModel, SoundsViewModel, WallpaperFeedQuality.
+- v5.17.0: Wallpaper Discover mixed-feed pagination/total aggregation fix. Preserved-feed refresh stale hasMore fix (wallpapers + sounds). Video wallpapers: Phone fit respects landscape, empty-batch pagination exhaustion, Pexels ALL orientation, rotating fallback queries. DB schema v14. New unit tests. .kotlin/ in .gitignore.
 - v5.12.0: Bug audit — locale, performance, validation, timeout. **Medium**: Locale-sensitive lowercase() in SoundsScreen tab labels, FavoritesScreen sort, WallpapersScreen error message (Turkish locale garbles text; added Locale.ROOT); WeatherParticleRenderer allocates Paint in drawStars on every frame at 30 FPS (GC pressure + jank; moved to instance field); RedditPost.parsedResolution recompiles Regex on every access (25-100x per page load; extracted to companion const); FavoritesExporter accepts arbitrary source strings on import (invalid ContentSource persisted; now validates against enum); VideoCropScreen FFmpeg process.waitFor() has no timeout (can hang indefinitely on corrupt input; added 120s timeout with destroyForcibly).
 - v5.11.0: Bug audit — ViewModel state, pagination, dead UI. **High**: RedditRepository.getMultiSubreddit() resetPagination() regression from v5.9.0 (loadMore always fetched page 1 → duplicate wallpapers; removed, ViewModel already resets in selectTab); SoundsViewModel communityJob not cancelled on tab switch (Firebase flow overwrites other tabs' sounds list); VideoWallpapersViewModel load() cancels loadMore jobs (initial load killed by pagination; only cancel for fresh loads); WallpapersViewModel Discover cache sets isLoading=false prematurely (loadMore can race with background network fetch; keep isLoading true). **Medium**: CollectionRepository.delete() relies on CASCADE which is per-connection PRAGMA (orphaned items possible; now explicitly deletes items first); SettingsScreen exposes dead "Dark/light auto-switch" toggle (DarkModeReceiver never registered; removed misleading toggle).
 - v5.10.0: Bug audit — API fixes, data mapping, UI edge cases. **High**: SoundCloud stream URL fallback constructs invalid permalink-based URL (all v2 API tracks fail to play; removed invalid branch, kept API v2 endpoint); SoundCloud sourcePageUrl always 404s (used non-existent /tracks/{id} path; now uses permalinkUrl from API); WallpaperCropScreen BitmapFactory.decodeByteArray null not handled (blank crop screen with no error; now throws with message); SoundDetailScreen DisposableEffect uses togglePlayback causing race on navigation (new sound immediately paused; replaced with stopIfPlaying); DualWallpaperService bitmap leak when home download fails after lock completes (10-30MB native memory per failure; now recycles). **Medium**: OnboardingScreen complete() fires isComplete before preferences write finishes (user style selections lost on race; moved inside coroutine); RedditPost.isImage fails for URLs with query parameters (valid image posts filtered out; now strips query/fragment before extension check); Bing Daily pagination requests out-of-range idx causing empty pages 11-20 (wasted network calls; limited to 1 batch per market).
