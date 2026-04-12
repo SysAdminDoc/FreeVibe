@@ -6,6 +6,10 @@ import android.app.NotificationManager
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.service.CommunityIdentityProvider
 import com.freevibe.service.OfflineFavoritesManager
@@ -14,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -23,10 +28,13 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltAndroidApp
-class FreeVibeApp : Application(), Configuration.Provider {
+class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+
+    @Inject
+    lateinit var okHttpClient: OkHttpClient
 
     @Inject
     lateinit var wallpaperCacheManager: WallpaperCacheManager
@@ -43,6 +51,22 @@ class FreeVibeApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .okHttpClient(okHttpClient)
+        .memoryCache {
+            MemoryCache.Builder(this)
+                .maxSizePercent(0.25) // 25% of available app memory
+                .build()
+        }
+        .diskCache {
+            DiskCache.Builder()
+                .directory(File(cacheDir, "coil_cache"))
+                .maxSizeBytes(256L * 1024 * 1024) // 256 MB — wallpaper app needs generous image cache
+                .build()
+        }
+        .crossfade(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()
