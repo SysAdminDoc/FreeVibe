@@ -346,12 +346,12 @@ private fun WaveformView(
     trimEnd: Float,
     playbackPosition: Float,
     isPlaying: Boolean,
-    fadeInFraction: Float = 0f,
-    fadeOutFraction: Float = 0f,
-    onDragStart: () -> Unit = {},
     onTrimStartChange: (Float) -> Unit,
     onTrimEndChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    fadeInFraction: Float = 0f,
+    fadeOutFraction: Float = 0f,
+    onDragStart: () -> Unit = {},
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val dimmed = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)

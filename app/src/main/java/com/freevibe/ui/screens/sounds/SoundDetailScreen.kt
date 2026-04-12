@@ -354,7 +354,7 @@ private fun SimilarSoundsSection(
 }
 
 @Composable
-private fun DetailWaveform(duration: Double, isPlaying: Boolean, progress: Float = 0f, onSeek: ((Float) -> Unit)? = null, modifier: Modifier = Modifier) {
+private fun DetailWaveform(duration: Double, isPlaying: Boolean, modifier: Modifier = Modifier, progress: Float = 0f, onSeek: ((Float) -> Unit)? = null) {
     val barColor = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
     val activeColor = MaterialTheme.colorScheme.primary
     val barCount = 60

@@ -21,7 +21,7 @@ JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot" ./gradlew as
 Gradle 8.12 pinned via wrapper. AGP 8.7.3. SDK path in `local.properties` must point to `C:/Users/Xray/AppData/Local/Android/Sdk`.
 
 ## Version
-- **v5.21.0** (versionCode 71)
+- **v5.26.0** (versionCode 76)
 - Version strings in: `app/build.gradle.kts`, `AppModule.kt` User-Agent, `VideoWallpapersScreen.kt` Reddit UA
 
 ## Architecture
@@ -153,6 +153,11 @@ DataStore: Settings, Onboarding, User Styles
 - SelectedContentHolder does not survive process death (in-memory singleton)
 
 ## Version History
+- v5.26.0: Round 9 audit — ModifierParameter lint cleanup. Reordered `WaveformView` and `DetailWaveform` parameters so `Modifier` is the first optional parameter (Compose guideline). Callers use named args so no behavior change. Verified runBlocking/Thread.sleep absent from production code.
+- v5.25.0: Round 8 audit — Compose stability (UI state), WorkManager backoff. `WallpapersUiState`, `SoundsUiState`, `VideoWallpapersState` marked `@Immutable` (completes the screen-to-card stability chain started in v5.24.0). `DailyWallpaperWorker.schedule` now has EXPONENTIAL 15m backoff to match AutoWallpaperWorker / WeatherUpdateWorker.
+- v5.24.0: Round 7 audit — Compose stability (data), HTTPS, input sanitization. `Wallpaper`, `Sound`, `FavoriteIdentity`, `FavoriteEntity`, `VideoWallpaperItem`, `WallpaperQualityHints` marked `@Immutable`. Manifest `usesCleartextTraffic="false"` (defense-in-depth). PreferencesManager API key setters now strip whitespace + ASCII control chars (prevents OkHttp CRLF IAE).
+- v5.23.0: Round 6 audit — Coil disk cache. FreeVibeApp implements ImageLoaderFactory with 256 MB disk cache, shared DI OkHttpClient, crossfade. Room DAOs verified clean.
+- v5.22.0: Round 5 audit — final locale + regex sweep. SharedComponents.SourceBadge Locale.ROOT (Turkish badge fix — real bug). 12 more Locale.ROOT fixes + ~20 more Regex hoisted to constants. ProGuard rules verified adequate.
 - v5.21.0: Round 4 audit — perf, dead code. Hoisted ~150+ per-call Regex compilations to top-level/companion constants across 7 files (VideoWallpapersViewModel Reddit parsing, WallpaperFeedQuality ranking, SoundQuality scoring, Mappers BingDaily, SoundUrlResolver HTML scraping). Deleted DarkModeReceiver.kt (88 lines of never-registered, never-written dead code).
 - v5.20.0: Round 3 audit — data integrity, crash prevention, locale completion, widget UX. WallpaperApplier.prepareParallaxWallpaper atomic temp-then-rename (truncated parallax images). downloadBitmap rejects zero-dimension bounds (OOM on corrupt images). SoundApplier guessMimeType/ensureFileNameExtension Locale.ROOT. WallpaperRepository nearestWallhavenColor Locale.ROOT. Widget shuffle actions show "Shuffling..." toast before network call.
 - v5.19.0: Round 2 audit — FFmpeg hang-proofing, batch-download progress UI, grid perf. AudioTrimmer 4 FFmpeg operations now have 120s waitFor timeout with destroyForcibly. FavoritesScreen wired BatchDownloadService.state to progress banner. WallpapersScreen topVoted filter+take hoisted to derivedStateOf.
