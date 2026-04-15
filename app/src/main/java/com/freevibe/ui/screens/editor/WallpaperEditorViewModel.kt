@@ -97,6 +97,11 @@ class WallpaperEditorViewModel @Inject constructor(
         applyFilters()
     }
 
+    override fun onCleared() {
+        filterJob?.cancel()
+        super.onCleared()
+    }
+
     fun resetAll() {
         filterJob?.cancel()
         _state.update {

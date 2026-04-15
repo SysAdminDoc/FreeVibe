@@ -52,7 +52,10 @@ class DailyWallpaperWorker @AssistedInject constructor(
                         timeRange = "day",
                         limit = 5,
                     ).data.children.map { it.data }
-                } catch (_: Exception) { emptyList() }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    emptyList()
+                }
             }
                 .filter { it.isImage && !it.over18 }
                 .maxByOrNull { it.ups }
@@ -120,7 +123,8 @@ class DailyWallpaperWorker @AssistedInject constructor(
                 bitmap?.recycle()
             }
             Result.success()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.retry()
         }
     }

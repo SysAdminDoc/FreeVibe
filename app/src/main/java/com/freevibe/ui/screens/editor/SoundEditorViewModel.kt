@@ -317,7 +317,9 @@ class SoundEditorViewModel @Inject constructor(
                                 if (dur > 0) _state.update { it.copy(playbackPosition = pos.toFloat() / dur) }
                                 kotlinx.coroutines.delay(50)
                             }
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                        }
                         stopPlayback()
                     }
                 }
@@ -347,6 +349,7 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        loadJob?.cancel()
         stopPlayback()
         super.onCleared()
     }

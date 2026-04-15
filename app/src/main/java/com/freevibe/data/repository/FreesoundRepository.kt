@@ -5,6 +5,7 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.freesound.FreesoundApi
 import com.freevibe.data.remote.freesound.OpenverseAudio
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,7 +43,10 @@ class FreesoundRepository @Inject constructor(
                     }
                     .map { it.toSound() }
                 filtered + extra
-            } catch (_: Exception) { filtered }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                filtered
+            }
         } else filtered
 
         return SearchResult(

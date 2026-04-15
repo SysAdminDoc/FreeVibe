@@ -82,7 +82,10 @@ class RedditRepository @Inject constructor(
             async {
                 try {
                     getSubredditWallpapers(sub, sort = "top", timeRange = "week")
-                } catch (_: Exception) { null }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    null
+                }
             }
         }.awaitAll().filterNotNull()
 
@@ -102,7 +105,10 @@ class RedditRepository @Inject constructor(
                 redditApi.getSubredditPosts(
                     subreddit = sub, sort = "top", timeRange = "day", limit = 5,
                 ).data.children.map { it.data }
-            } catch (_: Exception) { emptyList() }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                emptyList()
+            }
         }
             .filter { it.isImage && !it.over18 }
             .maxByOrNull { it.ups }

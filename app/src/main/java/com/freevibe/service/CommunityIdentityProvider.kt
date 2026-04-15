@@ -49,7 +49,8 @@ class CommunityIdentityProvider @Inject constructor(
 
         val signedInUid = try {
             auth?.signInAnonymously()?.await()?.user?.uid
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 

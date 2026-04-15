@@ -311,7 +311,7 @@ private fun SimilarSoundsSection(
     LaunchedEffect(sound.stableKey()) {
         if (!loaded && !isLoading.value) {
             isLoading.value = true; similarSounds.value = emptyList()
-            try { similarSounds.value = viewModel.loadSimilar(sound) } catch (_: Exception) {}
+            try { similarSounds.value = viewModel.loadSimilar(sound) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e }
             isLoading.value = false; loaded = true
         }
     }
