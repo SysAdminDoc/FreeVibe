@@ -244,19 +244,17 @@ class WallpapersViewModel @Inject constructor(
     fun setDiscoverFilter(filter: WallpaperDiscoverFilter) {
         viewModelScope.launch {
             val preferredResolution = prefs.preferredResolution.first()
-            val userStyles = prefs.userStyles.first()
-                .split(",")
-                .map { it.trim().lowercase(java.util.Locale.ROOT) }
-                .filter { it.isNotBlank() }
+            val userStyles = loadUserStyles()
+            val ranked = rankWallpapers(
+                wallpapers = _state.value.wallpapers,
+                filter = filter,
+                preferredResolution = preferredResolution,
+                userStyles = userStyles,
+            )
             _state.update {
                 it.copy(
                     discoverFilter = filter,
-                    wallpapers = rankWallpapers(
-                        wallpapers = it.wallpapers,
-                        filter = filter,
-                        preferredResolution = preferredResolution,
-                        userStyles = userStyles,
-                    ),
+                    wallpapers = ranked,
                 )
             }
         }
@@ -590,18 +588,16 @@ class WallpapersViewModel @Inject constructor(
                 val cached = wallpaperRepo.getCachedDiscover(s.currentPage)
                 if (!cached.isNullOrEmpty()) {
                     val preferredResolution = prefs.preferredResolution.first()
-                    val userStyles = prefs.userStyles.first()
-                        .split(",")
-                        .map { it.trim().lowercase(java.util.Locale.ROOT) }
-                        .filter { it.isNotBlank() }
+                    val userStyles = loadUserStyles()
+                    val rankedCached = rankWallpapers(
+                        wallpapers = cached,
+                        filter = _state.value.discoverFilter,
+                        preferredResolution = preferredResolution,
+                        userStyles = userStyles,
+                    )
                     _state.update {
                         it.copy(
-                            wallpapers = rankWallpapers(
-                                wallpapers = cached,
-                                filter = it.discoverFilter,
-                                preferredResolution = preferredResolution,
-                                userStyles = userStyles,
-                            ),
+                            wallpapers = rankedCached,
                             hasMore = true,
                         )
                     }
@@ -625,10 +621,7 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(_state.value.selectedColor ?: "", currentPage)
                 }
                 val preferredResolution = prefs.preferredResolution.first()
-                val userStyles = prefs.userStyles.first()
-                    .split(",")
-                    .map { it.trim().lowercase(java.util.Locale.ROOT) }
-                    .filter { it.isNotBlank() }
+                val userStyles = loadUserStyles()
                 val activeFilter = if (currentTab == WallpaperTab.DISCOVER) _state.value.discoverFilter else WallpaperDiscoverFilter.FOR_YOU
                 val combined = if (loadMore) _state.value.wallpapers + result.items else result.items
                 val rankedWallpapers = rankWallpapers(
@@ -845,6 +838,12 @@ class WallpapersViewModel @Inject constructor(
         }
         else -> e.message ?: "Failed to load wallpapers"
     }
+
+    private suspend fun loadUserStyles(): List<String> =
+        prefs.userStyles.first()
+            .split(",")
+            .map { it.trim().lowercase(java.util.Locale.ROOT) }
+            .filter { it.isNotBlank() }
 }
 
 internal fun matchesWallpaperIdentity(

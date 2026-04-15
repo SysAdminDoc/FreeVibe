@@ -37,6 +37,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freevibe.data.repository.matchesHiddenIds
+import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperService
 import com.freevibe.ui.components.CompactSearchField
 import com.freevibe.ui.LiveWallpaperLaunchMode
@@ -161,6 +163,7 @@ fun VideoWallpapersScreen(
     viewModel: VideoWallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val gallerySelectionResult by viewModel.gallerySelectionResult.collectAsStateWithLifecycle()
     val resolvedIds by viewModel.resolvedIds.collectAsStateWithLifecycle()
     val hiddenIds by viewModel.voteRepo.hiddenIds.collectAsStateWithLifecycle(initialValue = emptySet())
     val itemIds = remember(state.items) { state.items.map { it.id } }
@@ -174,7 +177,7 @@ fun VideoWallpapersScreen(
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
     val visibleItems = remember(state.items, hiddenIds) {
-        state.items.filter { it.id !in hiddenIds }
+        state.items.filterNot { isVideoWallpaperHidden(it, hiddenIds) }
     }
     var showOrientationMenu by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
@@ -184,34 +187,7 @@ fun VideoWallpapersScreen(
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            val cacheFile = try {
-                val input = context.contentResolver.openInputStream(it)
-                val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
-                input?.use { inp -> cacheFile.outputStream().use { out -> inp.copyTo(out) } }
-                cacheFile
-            } catch (_: Exception) { null }
-            if (cacheFile != null) {
-                persistSelectedVideoWallpaper(context, cacheFile)
-                when (
-                    launchLiveWallpaperPicker(
-                        context = context,
-                        serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
-                        tag = "VideoWallpaperGallery",
-                    )
-                ) {
-                    LiveWallpaperLaunchMode.DIRECT -> {
-                        Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
-                    }
-                    LiveWallpaperLaunchMode.CHOOSER -> {
-                        Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
-                    }
-                    null -> {
-                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
+        uri?.let { viewModel.prepareGalleryVideoWallpaper(it) }
     }
 
     // Video crop editor
@@ -236,6 +212,35 @@ fun VideoWallpapersScreen(
     LaunchedEffect(state.error, state.items.isNotEmpty()) {
         if (state.items.isNotEmpty()) {
             state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
+        }
+    }
+    LaunchedEffect(gallerySelectionResult) {
+        when (val result = gallerySelectionResult) {
+            VideoWallpaperSelectionResult.Ready -> {
+                when (
+                    launchLiveWallpaperPicker(
+                        context = context,
+                        serviceComponent = android.content.ComponentName(context, VideoWallpaperService::class.java),
+                        tag = "VideoWallpaperGallery",
+                    )
+                ) {
+                    LiveWallpaperLaunchMode.DIRECT -> {
+                        Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+                    }
+                    LiveWallpaperLaunchMode.CHOOSER -> {
+                        Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                    }
+                    null -> {
+                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                    }
+                }
+                viewModel.clearGallerySelectionResult()
+            }
+            is VideoWallpaperSelectionResult.Failure -> {
+                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                viewModel.clearGallerySelectionResult()
+            }
+            else -> Unit
         }
     }
 
@@ -911,3 +916,8 @@ private fun videoSourceHealthSummary(degradedSources: List<String>): String {
     val labels = degradedSources.sorted().joinToString(", ")
     return "Limited source health right now: $labels"
 }
+
+internal fun isVideoWallpaperHidden(
+    item: VideoWallpaperItem,
+    hiddenIds: Set<String>,
+): Boolean = matchesHiddenIds(hiddenIds, item.id)

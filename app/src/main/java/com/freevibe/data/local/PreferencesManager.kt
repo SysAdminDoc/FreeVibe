@@ -132,7 +132,12 @@ class PreferencesManager @Inject constructor(
     val videoFpsLimit: Flow<Int> = get(Keys.VIDEO_FPS_LIMIT, 30)
     val videoPlaybackSpeed: Flow<Float> = get(Keys.VIDEO_PLAYBACK_SPEED, 1.0f)
 
-    suspend fun setVideoFpsLimit(fps: Int) = set(Keys.VIDEO_FPS_LIMIT, fps)
+    suspend fun setVideoFpsLimit(fps: Int) {
+        val sanitized = sanitizeVideoFpsLimit(fps)
+        set(Keys.VIDEO_FPS_LIMIT, sanitized)
+        context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
+            .edit().putInt("video_fps_limit", sanitized).apply()
+    }
     suspend fun setVideoPlaybackSpeed(speed: Float) {
         set(Keys.VIDEO_PLAYBACK_SPEED, speed)
         // Also write to SharedPreferences so VideoWallpaperService can read it
@@ -169,6 +174,12 @@ class PreferencesManager @Inject constructor(
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
+    }
+
+    private fun sanitizeVideoFpsLimit(fps: Int): Int = when {
+        fps <= 15 -> 15
+        fps >= 60 -> 60
+        else -> 30
     }
 
     private object Keys {

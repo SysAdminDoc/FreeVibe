@@ -6,10 +6,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import com.freevibe.data.local.DownloadDao
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.DownloadEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -95,13 +99,13 @@ class DownloadManager @Inject constructor(
         relativePath: String,
         collection: Uri,
         contentType: String,
-    ): Result<Uri> = runCatching {
+    ): Result<Uri> = try {
         updateProgress(historyId, DownloadProgress(historyId, fileName, 0f, 0, 0))
 
         // Start HTTP download
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
-        response.use { resp ->
+        Result.success(response.use { resp ->
             if (!resp.isSuccessful) {
                 throw IllegalStateException("Download failed: HTTP ${resp.code}")
             }
@@ -199,9 +203,11 @@ class DownloadManager @Inject constructor(
             }
 
             uri
-        }
-    }.onFailure { e ->
+        })
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
         updateProgress(historyId, DownloadProgress(historyId, fileName, 0f, 0, 0, error = e.message))
+        Result.failure(e)
     }
 
     fun clearCompleted(id: String) {
@@ -209,13 +215,17 @@ class DownloadManager @Inject constructor(
     }
 
     suspend fun deleteDownload(id: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val existing = downloadDao.getById(id)
             existing?.localPath
                 ?.takeIf { it.isNotBlank() }
                 ?.let(::deleteStoredContent)
             downloadDao.deleteById(id)
             clearCompleted(id)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Result.failure(e)
         }
     }
 
@@ -226,21 +236,44 @@ class DownloadManager @Inject constructor(
     private fun deleteStoredContent(rawPath: String) {
         val uri = runCatching { Uri.parse(rawPath) }.getOrNull()
         when {
-            uri == null -> java.io.File(rawPath).takeIf { it.exists() }?.delete()
+            uri == null -> resolveManagedLocalDeletionTarget(rawPath)?.takeIf { it.exists() }?.delete()
             uri.scheme == null || uri.scheme.equals("file", ignoreCase = true) -> {
-                val path = uri.path ?: rawPath
-                java.io.File(path).takeIf { it.exists() }?.delete()
+                resolveManagedLocalDeletionTarget(uri.path ?: rawPath)?.takeIf { it.exists() }?.delete()
             }
             uri.scheme.equals("content", ignoreCase = true) -> {
-                try {
-                    context.contentResolver.delete(uri, null, null)
-                } catch (_: Exception) {
+                if (isAuraManagedContentUri(uri, context)) {
+                    try {
+                        context.contentResolver.delete(uri, null, null)
+                    } catch (_: Exception) {
+                    }
+                } else if (com.freevibe.BuildConfig.DEBUG) {
+                    Log.w("DownloadManager", "Skipping deletion for unmanaged content URI: $uri")
                 }
             }
-            else -> {
-                java.io.File(rawPath).takeIf { it.exists() }?.delete()
-            }
+            else -> resolveManagedLocalDeletionTarget(rawPath)?.takeIf { it.exists() }?.delete()
         }
+    }
+
+    private fun resolveManagedLocalDeletionTarget(rawPath: String): File? {
+        val canonicalTarget = runCatching { File(rawPath).canonicalFile }.getOrNull() ?: return null
+        val managedRoots = listOfNotNull(
+            context.filesDir,
+            context.cacheDir,
+            context.externalCacheDir,
+            context.getExternalFilesDir(null),
+        ).mapNotNull { root ->
+            runCatching { root.canonicalFile }.getOrNull()
+        }
+        val isAppManaged = managedRoots.any { root ->
+            canonicalTarget == root || canonicalTarget.path.startsWith(root.path + File.separator)
+        }
+        if (isAppManaged || isAuraManagedAbsolutePath(canonicalTarget.path)) {
+            return canonicalTarget
+        }
+        if (com.freevibe.BuildConfig.DEBUG) {
+            Log.w("DownloadManager", "Skipping deletion for unmanaged local path: $rawPath")
+        }
+        return null
     }
 
     private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9._-]")
@@ -269,4 +302,51 @@ class DownloadManager @Inject constructor(
             else -> "audio/mpeg"
         }
     }
+}
+
+private val AURA_MEDIA_DIRECTORIES = listOfNotNull(
+    Environment.DIRECTORY_PICTURES,
+    Environment.DIRECTORY_RINGTONES,
+    Environment.DIRECTORY_NOTIFICATIONS,
+    Environment.DIRECTORY_ALARMS,
+    Environment.DIRECTORY_MUSIC,
+    Environment.DIRECTORY_MOVIES,
+).ifEmpty {
+    listOf("Pictures", "Ringtones", "Notifications", "Alarms", "Music", "Movies")
+}
+
+internal fun isAuraManagedRelativePath(relativePath: String?): Boolean {
+    val normalized = relativePath
+        ?.replace('\\', '/')
+        ?.trim('/')
+        ?.lowercase(Locale.ROOT)
+        ?: return false
+    return AURA_MEDIA_DIRECTORIES.any { directory ->
+        val managedRoot = "${directory.lowercase(Locale.ROOT)}/aura"
+        normalized == managedRoot || normalized.startsWith("$managedRoot/")
+    }
+}
+
+internal fun isAuraManagedAbsolutePath(path: String?): Boolean {
+    val normalized = path
+        ?.replace('\\', '/')
+        ?.lowercase(Locale.ROOT)
+        ?: return false
+    return AURA_MEDIA_DIRECTORIES.any { directory ->
+        normalized.contains("/${directory.lowercase(Locale.ROOT)}/aura/")
+    }
+}
+
+internal fun isAuraManagedContentUri(uri: Uri, context: Context): Boolean {
+    return runCatching {
+        context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)
+            ?.use { cursor ->
+                if (!cursor.moveToFirst() || cursor.isNull(0)) {
+                    false
+                } else {
+                    isAuraManagedRelativePath(cursor.getString(0))
+                }
+            }
+            ?: false
+    }.getOrDefault(false)
 }

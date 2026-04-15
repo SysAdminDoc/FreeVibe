@@ -3,9 +3,13 @@ package com.freevibe.ui.screens.wallpapers
 import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,17 +31,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freevibe.data.model.ContentSource
+import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.model.stableKey
 import com.freevibe.service.ParallaxWallpaperService
 import com.freevibe.ui.LiveWallpaperLaunchMode
+import com.freevibe.ui.components.GlassCard
+import com.freevibe.ui.components.HighlightPill
+import com.freevibe.ui.components.SourceBadge
 import com.freevibe.ui.launchLiveWallpaperPicker
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun WallpaperDetailScreen(
     wallpaperId: String,
@@ -82,19 +91,58 @@ fun WallpaperDetailScreen(
     if (initialWp == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (!restoreResolved) {
-                CircularProgressIndicator()
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.BrokenImage,
-                        null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    contentPadding = PaddingValues(24.dp),
+                ) {
+                    HighlightPill(
+                        label = "Loading wallpaper",
+                        icon = Icons.Default.AutoAwesome,
+                        tint = MaterialTheme.colorScheme.secondary,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                    Spacer(Modifier.height(14.dp))
+                    Text("Preparing the detail view", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Aura is restoring the image and its metadata so you can preview, save, or apply it cleanly.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    CircularProgressIndicator()
+                }
+            } else {
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    contentPadding = PaddingValues(24.dp),
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                    ) {
+                        Icon(
+                            Icons.Default.BrokenImage,
+                            null,
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .size(28.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text("Wallpaper unavailable", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "This item is no longer available from its source or couldn't be restored from local state.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    FilledTonalButton(onClick = onBack) { Text("Back to feed") }
                 }
             }
         }
@@ -144,6 +192,7 @@ fun WallpaperDetailScreen(
 
     // Use pager's current wallpaper for UI (not the reactive wp which causes reorder)
     val wp = currentWp
+    val hints = remember(wp) { wp.qualityHints() }
 
     val isFavorite by viewModel.isFavorite(wp).collectAsStateWithLifecycle(initialValue = false)
     val collections by viewModel.collections.collectAsStateWithLifecycle()
@@ -209,180 +258,261 @@ fun WallpaperDetailScreen(
                 WallpaperImage(url = wp.fullUrl, modifier = Modifier.fillMaxSize())
             }
 
-            // Top: back button + resolution
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.5f), Color.Transparent))),
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.24f),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.62f),
+                            ),
+                        ),
+                    ),
             )
-            Row(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
-                }
-                if (wp.width > 0) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Text(
-                            "${wp.width}x${wp.height}",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            color = Color.White.copy(alpha = 0.8f),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-            }
 
-            // Right side: vote buttons (always visible)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // Upvote
-                IconButton(
-                    onClick = { viewModel.upvote(wp.stableKey()) },
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.4f)),
+                        .statusBarsPadding()
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.ThumbUp, "Upvote", tint = Color.White, modifier = Modifier.size(22.dp))
-                }
-                if (voteCount > 0) {
-                    Text(
-                        "$voteCount",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White,
+                    DetailTopIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack,
                     )
-                }
-                // Downvote (hide — item removed from pager list automatically)
-                IconButton(
-                    onClick = { viewModel.downvote(wp.stableKey()) },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.4f)),
-                ) {
-                    Icon(Icons.Default.ThumbDown, "Skip", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(22.dp))
-                }
-            }
-
-            // Bottom: apply + actions
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // Apply button
-                Button(
-                    onClick = { showApplyOptions = true },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    enabled = !state.isApplying,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    if (state.isApplying) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Wallpaper, null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Apply Wallpaper")
-                    }
-                }
-
-                // Tag chips (from Wallhaven)
-                if (wp.tags.isNotEmpty()) {
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        wp.tags.take(8).forEach { tag ->
-                            item {
-                                SuggestionChip(
-                                    onClick = { onSearchTag(tag) },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = Color.White.copy(alpha = 0.15f),
-                                        labelColor = Color.White,
-                                    ),
-                                    border = null,
-                                    modifier = Modifier.height(28.dp),
-                                )
-                            }
+                        if (wallpapers.size > 1) {
+                            DetailOverlayPill(
+                                label = "${pagerState.currentPage + 1} of ${wallpapers.size}",
+                                icon = Icons.Default.Collections,
+                            )
+                        }
+                        if (wp.width > 0) {
+                            DetailOverlayPill(label = "${wp.width} x ${wp.height}")
                         }
                     }
                 }
 
-                // Color palette dots — tap to search by color
-                if (wp.colors.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        wp.colors.take(5).forEach { hex ->
-                            val colorInt = runCatching { android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex") }.getOrDefault(0)
-                            Surface(
-                                onClick = { onSearchColor(hex.removePrefix("#")) },
-                                color = Color(colorInt),
-                                shape = CircleShape,
-                                modifier = Modifier.size(22.dp),
-                                content = {},
+                Spacer(Modifier.weight(1f))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        contentPadding = PaddingValues(18.dp),
+                        highlightHeight = 180.dp,
+                        shadowElevation = 10.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                SourceBadge(wp.source.name)
+                                if (voteCount > 0) {
+                                    HighlightPill(
+                                        label = "${formatCompactCount(voteCount)} likes",
+                                        icon = Icons.Default.ThumbUp,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = wallpaperDetailTitle(wp),
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = wallpaperDetailSubtitle(wp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            DetailInfoChip(hints.resolutionLabel)
+                            DetailInfoChip(hints.orientationLabel)
+                            if (hints.isAmoled) DetailInfoChip("AMOLED-friendly")
+                            if (hints.isIconSafe) DetailInfoChip("Icon-safe")
+                            if (wp.views > 0) DetailInfoChip("${formatCompactCount(wp.views)} views")
+                            if (wp.favorites > 0) DetailInfoChip("${formatCompactCount(wp.favorites)} saves")
+                            formatFileTypeLabel(wp.fileType)?.let { DetailInfoChip(it) }
+                            formatFileSizeLabel(wp.fileSize)?.let { DetailInfoChip(it) }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Button(
+                                onClick = { showApplyOptions = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(54.dp),
+                                enabled = !state.isApplying,
+                                shape = RoundedCornerShape(18.dp),
+                            ) {
+                                if (state.isApplying) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Wallpaper, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Set wallpaper")
+                                }
+                            }
+                            FilledTonalButton(
+                                onClick = { onPreview(wp) },
+                                modifier = Modifier
+                                    .weight(0.72f)
+                                    .height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                            ) {
+                                Icon(Icons.Default.Visibility, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Preview")
+                            }
+                        }
+
+                        if (wp.colors.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            DetailSectionTitle("Palette")
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                wp.colors.take(5).forEach { hex ->
+                                    val colorInt = runCatching {
+                                        android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex")
+                                    }.getOrDefault(0)
+                                    Surface(
+                                        onClick = { onSearchColor(hex.removePrefix("#")) },
+                                        color = Color(colorInt),
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(24.dp),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                                        content = {},
+                                    )
+                                }
+                            }
+                        }
+
+                        if (wp.tags.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            DetailSectionTitle("Explore related looks")
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                wp.tags.take(8).forEach { tag ->
+                                    SuggestionChip(
+                                        onClick = { onSearchTag(tag) },
+                                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                                        colors = SuggestionChipDefaults.suggestionChipColors(
+                                            containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                                            labelColor = MaterialTheme.colorScheme.onSurface,
+                                        ),
+                                        border = null,
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            DetailActionPill(
+                                icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                label = if (isFavorite) "Saved" else "Save",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                                onClick = { viewModel.toggleFavorite(wp) },
+                            )
+                            DetailActionPill(
+                                icon = Icons.Default.Download,
+                                label = "Download",
+                                tint = MaterialTheme.colorScheme.primary,
+                                onClick = { viewModel.downloadWallpaper(wp) },
+                            )
+                            DetailActionPill(
+                                icon = Icons.Default.ImageSearch,
+                                label = "Similar",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                onClick = { onFindSimilar(wp) },
+                            )
+                            DetailActionPill(
+                                icon = Icons.Default.Share,
+                                label = "Share",
+                                tint = MaterialTheme.colorScheme.primary,
+                                onClick = {
+                                    val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, shareUrl)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
+                                },
+                            )
+                            if (wp.sourcePageUrl.isNotBlank()) {
+                                DetailActionPill(
+                                    icon = Icons.Default.Link,
+                                    label = "Source",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    onClick = {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(wp.sourcePageUrl))
+                                            )
+                                        }
+                                    },
+                                )
+                            }
+                            DetailActionPill(
+                                icon = Icons.Default.ThumbUp,
+                                label = "Like",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                onClick = { viewModel.upvote(wp.stableKey()) },
+                            )
+                            DetailActionPill(
+                                icon = Icons.Default.ThumbDown,
+                                label = "Hide",
+                                tint = MaterialTheme.colorScheme.error,
+                                onClick = { viewModel.downvote(wp.stableKey()) },
+                            )
+                            DetailActionPill(
+                                icon = Icons.Default.MoreHoriz,
+                                label = "More",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = { showMoreMenu = true },
                             )
                         }
                     }
-                }
-
-                // Action row: favorite, download, find similar, share, more
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    ActionCircle(
-                        icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else Color.White,
-                        onClick = { viewModel.toggleFavorite(wp) },
-                    )
-                    ActionCircle(
-                        icon = Icons.Default.Download,
-                        contentDescription = "Download wallpaper",
-                        onClick = { viewModel.downloadWallpaper(wp) },
-                    )
-                    ActionCircle(
-                        icon = Icons.Default.ImageSearch,
-                        contentDescription = "Find similar wallpapers",
-                        onClick = { onFindSimilar(wp) },
-                    )
-                    ActionCircle(
-                        icon = Icons.Default.Share,
-                        contentDescription = "Share wallpaper",
-                        onClick = {
-                        val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, shareUrl)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "Share"))
-                    })
-                    ActionCircle(
-                        icon = Icons.Default.MoreHoriz,
-                        contentDescription = "More wallpaper actions",
-                        onClick = { showMoreMenu = true },
-                    )
                 }
             }
 
@@ -468,20 +598,94 @@ private fun WallpaperImage(url: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ActionCircle(
+private fun DetailTopIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
-    tint: Color = Color.White,
     onClick: () -> Unit,
 ) {
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(48.dp)
+            .size(44.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.15f)),
+            .background(Color.Black.copy(alpha = 0.28f)),
     ) {
-        Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription, tint = Color.White, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun DetailOverlayPill(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.34f),
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.88f), modifier = Modifier.size(14.dp))
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.92f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailInfoChip(label: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun DetailSectionTitle(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun DetailActionPill(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = tint.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.12f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
+        }
     }
 }
 
@@ -498,16 +702,25 @@ private fun ApplyOptionsSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Set wallpaper", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
-            SheetOption(Icons.Default.Home, "Home screen") { onApply(WallpaperTarget.HOME) }
-            SheetOption(Icons.Default.Lock, "Lock screen") { onApply(WallpaperTarget.LOCK) }
-            SheetOption(Icons.Default.Smartphone, "Both") { onApply(WallpaperTarget.BOTH) }
+            Text("Set wallpaper", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Choose how Aura should apply this wallpaper across your device.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            SheetOption(Icons.Default.Home, "Home screen", "Apply it to the launcher only") { onApply(WallpaperTarget.HOME) }
+            SheetOption(Icons.Default.Lock, "Lock screen", "Keep your launcher as-is and update the lock view") { onApply(WallpaperTarget.LOCK) }
+            SheetOption(Icons.Default.Smartphone, "Home and lock", "Use the same wallpaper on both surfaces") { onApply(WallpaperTarget.BOTH) }
             HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            SheetOption(Icons.Default.Splitscreen, "Split crop (different home & lock)") { onSplitCrop() }
-            SheetOption(Icons.Default.Layers, "Parallax depth (3D tilt effect)") { onParallax() }
+            SheetOption(Icons.Default.Splitscreen, "Split crop", "Create separate home and lock crops from the same image") { onSplitCrop() }
+            SheetOption(Icons.Default.Layers, "Parallax depth", "Turn this wallpaper into a subtle 3D tilt effect") { onParallax() }
         }
     }
 }
@@ -528,18 +741,27 @@ private fun MoreActionsSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Text("More actions", style = MaterialTheme.typography.titleLarge)
             if (uploaderName.isNotEmpty()) {
-                Text("by $uploaderName", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+                Text(
+                    "Uploaded by $uploaderName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            SheetOption(Icons.Default.Visibility, "Preview on mock lock / home") { onPreview() }
-            SheetOption(Icons.Default.Edit, "Edit") { onEdit() }
-            SheetOption(Icons.Default.Crop, "Crop & position") { onCrop() }
-            SheetOption(Icons.Default.CreateNewFolder, "Save to collection") { onCollection() }
+            Spacer(Modifier.height(4.dp))
+            SheetOption(Icons.Default.Visibility, "Preview on mock lock / home", "See how this wallpaper frames before you apply it") { onPreview() }
+            SheetOption(Icons.Default.Edit, "Edit", "Open Aura's wallpaper editor for tone and effect adjustments") { onEdit() }
+            SheetOption(Icons.Default.Crop, "Crop & position", "Fine-tune framing for your device before applying") { onCrop() }
+            SheetOption(Icons.Default.CreateNewFolder, "Save to collection", "Keep this wallpaper in one of your curated sets") { onCollection() }
             if (onFindSimilar != null) {
-                SheetOption(Icons.Default.ColorLens, "Find similar wallpapers") { onFindSimilar() }
+                SheetOption(Icons.Default.ColorLens, "Find similar wallpapers", "Search for wallpapers with a related mood or composition") { onFindSimilar() }
             }
         }
     }
@@ -549,16 +771,45 @@ private fun MoreActionsSheet(
 private fun SheetOption(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
+    subtitle: String? = null,
     onClick: () -> Unit,
 ) {
-    Surface(onClick = onClick, color = Color.Transparent, shape = RoundedCornerShape(12.dp)) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(18.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp, horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            ) {
+                Icon(
+                    icon,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -579,12 +830,23 @@ private fun CollectionPickerSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Save to Collection", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+            Text("Save to collection", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Keep standout wallpapers grouped so rotation and revisit flows stay tidy.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
             collections.forEach { collection ->
-                SheetOption(Icons.Default.Folder, collection.name) { onSelectCollection(collection.collectionId) }
+                SheetOption(Icons.Default.Folder, collection.name, "Add this wallpaper to the collection") {
+                    onSelectCollection(collection.collectionId)
+                }
             }
             if (showCreateField) {
                 Row(
@@ -603,8 +865,79 @@ private fun CollectionPickerSheet(
                     FilledTonalButton(onClick = { if (newName.isNotBlank()) onCreateNew(newName.trim()) }, enabled = newName.isNotBlank()) { Text("Create") }
                 }
             } else {
-                SheetOption(Icons.Default.Add, "New collection") { showCreateField = true }
+                SheetOption(Icons.Default.Add, "New collection", "Create a new place to save wallpapers like this") {
+                    showCreateField = true
+                }
             }
         }
     }
+}
+
+internal fun wallpaperDetailTitle(wallpaper: Wallpaper): String =
+    when {
+        wallpaper.category.isNotBlank() -> wallpaper.category.replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase() else it.toString()
+        }
+        wallpaper.tags.isNotEmpty() -> wallpaper.tags.first().replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase() else it.toString()
+        }
+        else -> "${sourceDisplayName(wallpaper.source)} wallpaper"
+    }
+
+internal fun wallpaperDetailSubtitle(wallpaper: Wallpaper): String {
+    val sourceLabel = sourceDisplayName(wallpaper.source)
+    return when {
+        wallpaper.uploaderName.isNotBlank() ->
+            "By ${wallpaper.uploaderName} on $sourceLabel"
+        wallpaper.sourcePageUrl.isNotBlank() ->
+            "Sourced from $sourceLabel with a direct source page available"
+        else ->
+            "Sourced from $sourceLabel"
+    }
+}
+
+internal fun sourceDisplayName(source: ContentSource): String = when (source) {
+    ContentSource.WALLHAVEN -> "Wallhaven"
+    ContentSource.PICSUM -> "Picsum"
+    ContentSource.BING -> "Bing"
+    ContentSource.WIKIMEDIA -> "Wikimedia"
+    ContentSource.INTERNET_ARCHIVE -> "Internet Archive"
+    ContentSource.REDDIT -> "Reddit"
+    ContentSource.NASA -> "NASA"
+    ContentSource.FREESOUND -> "Freesound"
+    ContentSource.JAMENDO -> "Jamendo"
+    ContentSource.AUDIUS -> "Audius"
+    ContentSource.CCMIXTER -> "ccMixter"
+    ContentSource.LOCAL -> "Local"
+    ContentSource.YOUTUBE -> "YouTube"
+    ContentSource.PEXELS -> "Pexels"
+    ContentSource.PIXABAY -> "Pixabay"
+    ContentSource.KLIPY -> "Klipy"
+    ContentSource.SOUNDCLOUD -> "SoundCloud"
+    ContentSource.COMMUNITY -> "Community"
+    ContentSource.BUNDLED -> "Aura Picks"
+}
+
+internal fun formatCompactCount(value: Int): String = when {
+    value >= 1_000_000 -> "%.1fM".format(value / 1_000_000f)
+    value >= 1_000 -> "%.1fk".format(value / 1_000f)
+    else -> value.toString()
+}
+
+internal fun formatFileTypeLabel(fileType: String): String? {
+    val clean = fileType.trim()
+    if (clean.isBlank()) return null
+    return when {
+        clean.contains("jpeg", ignoreCase = true) || clean.contains("jpg", ignoreCase = true) -> "JPG"
+        clean.contains("png", ignoreCase = true) -> "PNG"
+        clean.contains("webp", ignoreCase = true) -> "WEBP"
+        else -> clean.substringAfterLast('/').uppercase()
+    }
+}
+
+internal fun formatFileSizeLabel(bytes: Long): String? = when {
+    bytes <= 0L -> null
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
+    bytes >= 1024L -> "%.0f KB".format(bytes / 1024f)
+    else -> "$bytes B"
 }

@@ -21,6 +21,7 @@ private const val CURRENT_EXPORT_VERSION = 1
 private const val MAX_IMPORT_ITEMS = 5000
 private const val MAX_IMPORT_CHARS = 2_000_000
 private const val MAX_TEXT_LENGTH = 512
+private const val MAX_URL_LENGTH = 2048
 
 @Singleton
 class FavoritesExporter @Inject constructor(
@@ -166,7 +167,22 @@ private fun FavoriteEntity.toExportItem() = FavoriteExportItem(
     views = views, favoritesCount = favoritesCount, addedAt = addedAt,
 )
 
-private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
+internal fun isAllowedImportedFavoriteUrl(
+    url: String,
+    allowBlank: Boolean = false,
+): Boolean {
+    val normalizedUrl = url.trim()
+    if (normalizedUrl.isBlank()) return allowBlank
+
+    val scheme = runCatching { java.net.URI(normalizedUrl).scheme }
+        .getOrNull()
+        ?.lowercase(java.util.Locale.ROOT)
+        ?: return false
+
+    return scheme == "https" || scheme == "http"
+}
+
+internal fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
     val normalizedId = id.trim()
     val normalizedSource = source.trim().uppercase(java.util.Locale.ROOT)
     val normalizedType = type.trim().uppercase(java.util.Locale.ROOT)
@@ -178,8 +194,9 @@ private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
     if (normalizedType !in setOf("WALLPAPER", "SOUND")) return null
 
     val normalizedName = name.trim().take(MAX_TEXT_LENGTH)
-    val normalizedThumbnailUrl = thumbnailUrl.trim()
-    val normalizedFullUrl = fullUrl.trim()
+    val normalizedThumbnailUrl = thumbnailUrl.trim().take(MAX_URL_LENGTH)
+    val normalizedFullUrl = fullUrl.trim().take(MAX_URL_LENGTH)
+    val normalizedSourcePageUrl = sourcePageUrl?.trim()?.take(MAX_URL_LENGTH)?.takeIf { it.isNotBlank() }
 
     if (normalizedType == "WALLPAPER" && (normalizedThumbnailUrl.isBlank() || normalizedFullUrl.isBlank())) {
         return null
@@ -187,6 +204,11 @@ private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
     if (normalizedType == "SOUND" && normalizedFullUrl.isBlank()) {
         return null
     }
+    if (!isAllowedImportedFavoriteUrl(normalizedFullUrl)) return null
+    if (!isAllowedImportedFavoriteUrl(normalizedThumbnailUrl, allowBlank = normalizedType == "SOUND")) {
+        return null
+    }
+    if (!isAllowedImportedFavoriteUrl(normalizedSourcePageUrl.orEmpty(), allowBlank = true)) return null
 
     return FavoriteEntity(
         id = normalizedId,
@@ -202,7 +224,7 @@ private fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {
         colors = colors?.trim()?.take(MAX_TEXT_LENGTH)?.takeIf { it.isNotBlank() },
         category = category?.trim()?.take(MAX_TEXT_LENGTH)?.takeIf { it.isNotBlank() },
         uploaderName = uploaderName?.trim()?.take(MAX_TEXT_LENGTH)?.takeIf { it.isNotBlank() },
-        sourcePageUrl = sourcePageUrl?.trim()?.take(MAX_TEXT_LENGTH)?.takeIf { it.isNotBlank() },
+        sourcePageUrl = normalizedSourcePageUrl,
         fileSize = fileSize?.coerceAtLeast(0L),
         fileType = fileType?.trim()?.take(MAX_TEXT_LENGTH)?.takeIf { it.isNotBlank() },
         views = views?.coerceAtLeast(0L),

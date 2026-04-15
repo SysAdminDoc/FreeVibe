@@ -227,10 +227,10 @@ fun ShimmerSoundList(modifier: Modifier = Modifier) {
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(24.dp),
-    contentPadding: PaddingValues = PaddingValues(18.dp),
-    highlightHeight: Dp = 120.dp,
-    shadowElevation: Dp = 12.dp,
+    shape: Shape = RoundedCornerShape(26.dp),
+    contentPadding: PaddingValues = PaddingValues(20.dp),
+    highlightHeight: Dp = 144.dp,
+    shadowElevation: Dp = 10.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
@@ -247,10 +247,11 @@ fun GlassCard(
         Box(
             modifier = Modifier
                 .background(
-                    Brush.linearGradient(
+                    Brush.verticalGradient(
                         listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
+                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
                         ),
                     ),
                 ),
@@ -278,6 +279,41 @@ fun GlassCard(
 }
 
 @Composable
+fun HighlightPill(
+    label: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    tint: Color = MaterialTheme.colorScheme.primary,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = tint.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = tint,
+            )
+        }
+    }
+}
+
+@Composable
 fun CompactSearchField(
     value: String,
     onValueChange: (String) -> Unit,
@@ -293,15 +329,15 @@ fun CompactSearchField(
     var isFocused by remember { mutableStateOf(false) }
 
     Surface(
-        modifier = modifier.height(40.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = if (isFocused) 0.56f else 0.46f),
+        modifier = modifier.height(44.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = if (isFocused) 0.78f else 0.62f),
         shape = shape,
         border = BorderStroke(
             1.dp,
             if (isFocused) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
             } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)
             },
         ),
         tonalElevation = 0.dp,
@@ -309,7 +345,7 @@ fun CompactSearchField(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -317,7 +353,7 @@ fun CompactSearchField(
                 imageVector = leadingIcon,
                 contentDescription = null,
                 tint = leadingTint,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(18.dp),
             )
 
             BasicTextField(
@@ -353,8 +389,8 @@ fun CompactSearchField(
             )
 
             if (value.isNotEmpty() && onClear != null) {
-                IconButton(onClick = onClear, modifier = Modifier.size(20.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(12.dp))
+                IconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -388,14 +424,15 @@ fun SourceBadge(source: String, modifier: Modifier = Modifier) {
     }
 
     Surface(
-        color = color.copy(alpha = 0.15f),
-        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.16f),
+        shape = RoundedCornerShape(10.dp),
         modifier = modifier,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.12f)),
     ) {
         Text(
             label,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
             color = color,
         )
     }

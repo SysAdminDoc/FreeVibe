@@ -10,23 +10,33 @@ import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeoutOrNull
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import javax.inject.Inject
 import javax.inject.Singleton
 
 internal fun mergeDiscoverResults(
     results: List<SearchResult<Wallpaper>?>,
     page: Int,
+    maxItems: Int = Int.MAX_VALUE,
 ): SearchResult<Wallpaper> {
     val bySource = results.filterNotNull().map { it.items.toMutableList() }
     val interleaved = mutableListOf<Wallpaper>()
     var rounds = 0
-    while (bySource.any { it.isNotEmpty() }) {
+    while (bySource.any { it.isNotEmpty() } && interleaved.size < maxItems) {
         for (source in bySource) {
-            if (source.isNotEmpty()) interleaved.add(source.removeAt(0))
+            if (source.isNotEmpty()) {
+                interleaved.add(source.removeAt(0))
+                if (interleaved.size >= maxItems) break
+            }
         }
         rounds++
         if (rounds > 200) break
@@ -48,6 +58,23 @@ internal fun mergeDiscoverResults(
         hasMore = results.any { it?.hasMore == true },
     )
 }
+
+internal fun shouldRetryBingHost(error: Throwable): Boolean = when (error) {
+    is UnknownHostException,
+    is ConnectException,
+    is SocketTimeoutException,
+    is SSLException,
+    -> true
+    else -> false
+}
+
+private fun Throwable.rethrowIfCancelled() {
+    if (this is CancellationException) throw this
+}
+
+private const val DISCOVER_PER_SOURCE_TIMEOUT_MS = 4_500L
+private const val DISCOVER_SECONDARY_SOURCE_BUDGET_MS = 1_200L
+private const val DISCOVER_PAGE_SIZE = 60
 
 @Singleton
 class WallpaperRepository @Inject constructor(
@@ -128,10 +155,10 @@ class WallpaperRepository @Inject constructor(
     /** Search across all sources simultaneously */
     suspend fun searchAll(query: String, page: Int = 1): SearchResult<Wallpaper> = supervisorScope {
         val sources = listOf(
-            async { runCatching { getWallhaven(query = query, page = page) }.getOrNull() },
-            async { runCatching { getPixabay(query = query, page = page) }.getOrNull() },
+            async { loadSourceSafely { getWallhaven(query = query, page = page) } },
+            async { loadSourceSafely { getPixabay(query = query, page = page) } },
         )
-        val results = sources.map { it.await() }
+        val results = sources.awaitAll()
         val bySource = results.filterNotNull().map { it.items.toMutableList() }
         val combined = mutableListOf<Wallpaper>()
         while (bySource.any { it.isNotEmpty() }) {
@@ -207,7 +234,10 @@ class WallpaperRepository @Inject constructor(
             val idx = (page - 1) / marketsCount
             val marketIndex = (page - 1) % marketsCount
             val market = BingDailyApi.MARKETS[marketIndex]
-            val response = bingApi.getImages(idx = (idx * 8).coerceAtMost(7), n = 8, market = market)
+            val response = fetchBingImages(
+                idx = (idx * 8).coerceAtMost(7),
+                market = market,
+            )
             SearchResult(
                 items = response.images.map { it.toWallpaper() },
                 totalCount = marketsCount * 8,
@@ -275,20 +305,27 @@ class WallpaperRepository @Inject constructor(
     }
 
     suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null): SearchResult<Wallpaper> = supervisorScope {
-        val perSourceTimeout = 6000L // Don't let any single source hold up the feed
-        val sources = mutableListOf(
-            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getWallhaven(page = page) }.getOrNull() } },
-            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPixabay(page = page) }.getOrNull() } },
-            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getBingDaily(page = page) }.getOrNull() } },
-            async { withTimeoutOrNull(perSourceTimeout) { runCatching { getPexelsCurated(page = page) }.getOrNull() } },
+        val primarySources = mutableListOf(
+            async { loadSourceSafely { getWallhaven(page = page) } },
+            async { loadSourceSafely { getPixabay(page = page) } },
+            async { loadSourceSafely { getPexelsCurated(page = page) } },
         )
-        // Reddit
         if (redditRepo != null) {
-            sources.add(async { withTimeoutOrNull(perSourceTimeout) { runCatching { redditRepo.getMultiSubreddit() }.getOrNull() } })
+            primarySources.add(async { loadSourceSafely { redditRepo.getMultiSubreddit() } })
         }
+        val secondarySources = listOf(
+            async { loadSourceSafely { getBingDaily(page = page) } },
+        )
 
-        val results = sources.map { it.await() }
-        val merged = mergeDiscoverResults(results, page)
+        val primaryResults = primarySources.awaitAll()
+        val secondaryResults = withTimeoutOrNull(DISCOVER_SECONDARY_SOURCE_BUDGET_MS) {
+            secondarySources.awaitAll()
+        } ?: emptyList()
+        val merged = mergeDiscoverResults(
+            results = primaryResults + secondaryResults,
+            page = page,
+            maxItems = DISCOVER_PAGE_SIZE,
+        )
 
         // Cache combined discover result for instant startup next time
         if (merged.items.isNotEmpty()) {
@@ -312,6 +349,7 @@ class WallpaperRepository @Inject constructor(
             }
             result
         } catch (e: Exception) {
+            e.rethrowIfCancelled()
             val cached = cacheManager.getStaleCached(cacheKey)
             if (cached != null && cached.isNotEmpty()) {
                 SearchResult(
@@ -324,5 +362,35 @@ class WallpaperRepository @Inject constructor(
                 throw e
             }
         }
+    }
+
+    private suspend fun loadSourceSafely(
+        fetch: suspend () -> SearchResult<Wallpaper>,
+    ): SearchResult<Wallpaper>? = withTimeoutOrNull(DISCOVER_PER_SOURCE_TIMEOUT_MS) {
+        try {
+            fetch()
+        } catch (e: Exception) {
+            e.rethrowIfCancelled()
+            null
+        }
+    }
+
+    private suspend fun fetchBingImages(idx: Int, market: String): com.freevibe.data.remote.bing.BingImageResponse {
+        var lastRetryableError: Exception? = null
+        for (baseUrl in BingDailyApi.FALLBACK_BASE_URLS) {
+            try {
+                return bingApi.getImages(
+                    url = BingDailyApi.archiveUrl(baseUrl),
+                    idx = idx,
+                    n = 8,
+                    market = market,
+                )
+            } catch (e: Exception) {
+                e.rethrowIfCancelled()
+                if (!shouldRetryBingHost(e)) throw e
+                lastRetryableError = e
+            }
+        }
+        throw lastRetryableError ?: IllegalStateException("Unable to load Bing Daily wallpapers")
     }
 }

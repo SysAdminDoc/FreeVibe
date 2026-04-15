@@ -31,7 +31,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
@@ -145,7 +148,10 @@ class SoundsViewModel @Inject constructor(
                 val blocked = try {
                     prefs.ytSoundBlockedWords.first()
                         .split(",").map { it.trim() }.filter { it.isNotBlank() }
-                } catch (_: Exception) { emptyList() }
+                } catch (e: Exception) {
+                    e.rethrowIfCancelled()
+                    emptyList()
+                }
 
                 val queries = PreferencesManager.defaultTopHitQueries(Year.now().value)
                 val allHits = mutableListOf<Sound>()
@@ -164,8 +170,11 @@ class SoundsViewModel @Inject constructor(
                                     allHits.add(it)
                                 }
                             }
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        e.rethrowIfCancelled()
+                    }
                 }
+                currentCoroutineContext().ensureActive()
                 _topHits.value = rankSounds(allHits, SoundTab.RINGTONES, SoundQualityFilter.BEST).take(5)
 
                 // Pre-resolve preview URLs
@@ -175,14 +184,19 @@ class SoundsViewModel @Inject constructor(
                             ytResolveSemaphore.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))?.let { url ->
+                                    currentCoroutineContext().ensureActive()
                                     cacheResolvedPreview(hit, url)
                                     _cachedYtIds.update { it + hit.id }
                                 }
-                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
+                            } catch (e: Exception) {
+                                e.rethrowIfCancelled()
+                            } finally { ytResolveSemaphore.release() }
                         }
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                e.rethrowIfCancelled()
+            }
         }
     }
 
@@ -289,6 +303,7 @@ class SoundsViewModel @Inject constructor(
                     _cachedYtIds.update { it + "yt_$videoId" }
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancelled()
                 _state.update { it.copy(isLoading = false, error = "Could not load video: ${e.message}") }
             }
         }
@@ -754,7 +769,8 @@ class SoundsViewModel @Inject constructor(
                 }
             }
 
-            fun flushToUi() {
+            suspend fun flushToUi() {
+                currentCoroutineContext().ensureActive()
                 _state.update { st ->
                     val snapshot = rankSounds(
                         sounds = synchronized(resultLock) { allResults.toList() },
@@ -790,7 +806,10 @@ class SoundsViewModel @Inject constructor(
                         val blocked = try {
                             prefs.ytSoundBlockedWords.first()
                                 .split(",").map { it.trim() }.filter { it.isNotBlank() }
-                        } catch (_: Exception) { emptyList() }
+                        } catch (e: Exception) {
+                            e.rethrowIfCancelled()
+                            emptyList()
+                        }
 
                         queries.ytQueries.forEach { ytQ ->
                             launch {
@@ -808,13 +827,17 @@ class SoundsViewModel @Inject constructor(
                                             ytResolveSemaphore.acquire()
                                             try {
                                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
+                                                    currentCoroutineContext().ensureActive()
                                                     cacheResolvedPreview(yt, url)
                                                     _cachedYtIds.update { it + yt.id }
                                                 }
-                                            } catch (_: Exception) {} finally { ytResolveSemaphore.release() }
+                                            } catch (e: Exception) {
+                                                e.rethrowIfCancelled()
+                                            } finally { ytResolveSemaphore.release() }
                                         }
                                     }
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -836,6 +859,7 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -856,6 +880,7 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -878,6 +903,7 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -900,6 +926,7 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -921,6 +948,7 @@ class SoundsViewModel @Inject constructor(
                                     result.items.forEach { if (addUnique(it)) added = true }
                                     if (added) flushToUi()
                                 } catch (e: Exception) {
+                                    e.rethrowIfCancelled()
                                     noteFailure(e)
                                 }
                             }
@@ -928,6 +956,7 @@ class SoundsViewModel @Inject constructor(
                     }
                 }
 
+                currentCoroutineContext().ensureActive()
                 val combined = rankSounds(
                     sounds = synchronized(resultLock) { allResults.toList() },
                     tab = loadTab,
@@ -958,6 +987,7 @@ class SoundsViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancelled()
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -1068,6 +1098,7 @@ class SoundsViewModel @Inject constructor(
                 // waiting for the 10 s delay to fire a spurious "timed out" error.
                 _state.update { it.copy(isLoading = false, isRefreshing = false) }
             } catch (e: Exception) {
+                e.rethrowIfCancelled()
                 _state.update { it.copy(isLoading = false, isRefreshing = false, error = e.message) }
             } finally {
                 timeoutJob.cancel()
@@ -1082,7 +1113,10 @@ class SoundsViewModel @Inject constructor(
                 val blocked = try {
                     prefs.ytSoundBlockedWords.first()
                         .split(",").map { it.trim() }.filter { it.isNotBlank() }
-                } catch (_: Exception) { emptyList() }
+                } catch (e: Exception) {
+                    e.rethrowIfCancelled()
+                    emptyList()
+                }
 
                 val result = youtubeRepo.searchSounds(
                     query = query,
@@ -1107,10 +1141,12 @@ class SoundsViewModel @Inject constructor(
                             ytResolveSemaphore.acquire()
                             try {
                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
+                                    currentCoroutineContext().ensureActive()
                                     cacheResolvedPreview(yt, url)
                                     _cachedYtIds.update { it + yt.id }
                                 }
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                e.rethrowIfCancelled()
                             } finally {
                                 ytResolveSemaphore.release()
                             }
@@ -1118,6 +1154,7 @@ class SoundsViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancelled()
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -1160,6 +1197,10 @@ class SoundsViewModel @Inject constructor(
             }
         }
     }
+}
+
+internal fun Throwable.rethrowIfCancelled() {
+    if (this is CancellationException) throw this
 }
 
 private fun Sound.youtubeVideoId(): String? =

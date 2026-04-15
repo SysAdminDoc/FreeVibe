@@ -4,6 +4,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.BuildConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
@@ -87,9 +88,11 @@ class YouTubeRepository @Inject constructor() {
                 currentPage = 1,
                 hasMore = searchExtractor.initialPage.hasNextPage(),
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "Search failed for '$query': ${e.javaClass.simpleName}: ${e.message}")
-            SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
+            throw e
         }
     }
 
@@ -109,6 +112,8 @@ class YouTubeRepository @Inject constructor() {
             val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
             if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
             streamUrl?.also { streamCache[videoId] = CachedStream(it, System.currentTimeMillis()) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "getAudioPreviewUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null
@@ -126,6 +131,8 @@ class YouTubeRepository @Inject constructor() {
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             val streamUrl = response.out?.trim()
             if (streamUrl.isNullOrBlank()) null else streamUrl
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) android.util.Log.e("YouTubeRepo", "getAudioStreamUrl failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
             null
@@ -141,6 +148,8 @@ class YouTubeRepository @Inject constructor() {
             val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
             val streamUrl = response.out?.trim()?.lines()?.firstOrNull()
             if (streamUrl.isNullOrBlank()) null else streamUrl
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) { null }
     }
 

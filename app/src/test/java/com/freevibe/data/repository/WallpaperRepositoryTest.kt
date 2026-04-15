@@ -7,6 +7,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.ConnectException
+import java.net.UnknownHostException
 
 class WallpaperRepositoryTest {
 
@@ -57,6 +59,49 @@ class WallpaperRepositoryTest {
 
         assertEquals(2, merged.totalCount)
         assertFalse(merged.hasMore)
+    }
+
+    @Test
+    fun `mergeDiscoverResults limits item count while preserving provider interleave`() {
+        val merged = mergeDiscoverResults(
+            results = listOf(
+                SearchResult(
+                    items = listOf(
+                        wallpaper("wallhaven_1"),
+                        wallpaper("wallhaven_2"),
+                        wallpaper("wallhaven_3"),
+                    ),
+                    totalCount = 100,
+                    currentPage = 1,
+                    hasMore = true,
+                ),
+                SearchResult(
+                    items = listOf(
+                        wallpaper("pexels_1", source = ContentSource.PEXELS),
+                        wallpaper("pexels_2", source = ContentSource.PEXELS),
+                        wallpaper("pexels_3", source = ContentSource.PEXELS),
+                    ),
+                    totalCount = 100,
+                    currentPage = 1,
+                    hasMore = true,
+                ),
+            ),
+            page = 1,
+            maxItems = 4,
+        )
+
+        assertEquals(
+            listOf("wallhaven_1", "pexels_1", "wallhaven_2", "pexels_2"),
+            merged.items.map { it.id },
+        )
+        assertTrue(merged.hasMore)
+    }
+
+    @Test
+    fun `shouldRetryBingHost only retries transient network failures`() {
+        assertTrue(shouldRetryBingHost(UnknownHostException("dns")))
+        assertTrue(shouldRetryBingHost(ConnectException("connect")))
+        assertFalse(shouldRetryBingHost(IllegalArgumentException("bad request")))
     }
 
     private fun wallpaper(

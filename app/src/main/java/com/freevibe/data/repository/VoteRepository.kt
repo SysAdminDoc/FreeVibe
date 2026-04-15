@@ -22,6 +22,30 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val FIREBASE_KEY_REGEX = Regex("[.#$\\[\\]/]")
+
+internal fun sanitizeVoteKey(id: String): String =
+    id.replace(FIREBASE_KEY_REGEX, "_")
+
+internal fun matchesHiddenIds(hiddenIds: Set<String>, vararg candidateIds: String?): Boolean =
+    candidateIds.asSequence()
+        .filterNotNull()
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .any { candidate ->
+            candidate in hiddenIds || sanitizeVoteKey(candidate) in hiddenIds
+        }
+
+private fun expandHiddenIds(ids: Set<String>): Set<String> = buildSet(ids.size * 2) {
+    ids.forEach { id ->
+        val normalized = id.trim()
+        if (normalized.isNotEmpty()) {
+            add(normalized)
+            add(sanitizeVoteKey(normalized))
+        }
+    }
+}
+
 /**
  * Community voting + admin moderation via Firebase Realtime Database.
  *
@@ -102,7 +126,7 @@ class VoteRepository @Inject constructor(
 
     /** Combined hidden IDs: local downvotes + global moderation */
     val hiddenIds: Flow<Set<String>> = combine(_localHiddenIds, _moderatedIds) { local, moderated ->
-        local + moderated
+        expandHiddenIds(local) + expandHiddenIds(moderated)
     }
 
     // ── Voting ──
@@ -230,7 +254,8 @@ class VoteRepository @Inject constructor(
     }
 
     fun isHidden(contentId: String): Boolean =
-        contentId in _localHiddenIds.value || contentId in _moderatedIds.value
+        matchesHiddenIds(_localHiddenIds.value, contentId) ||
+            matchesHiddenIds(_moderatedIds.value, contentId)
 
     // ── Batch ──
 
@@ -277,9 +302,5 @@ class VoteRepository @Inject constructor(
     }
 
     fun sanitizeKey(id: String): String =
-        id.replace(FIREBASE_KEY_REGEX, "_")
-
-    companion object {
-        private val FIREBASE_KEY_REGEX = Regex("[.#$\\[\\]/]")
-    }
+        sanitizeVoteKey(id)
 }

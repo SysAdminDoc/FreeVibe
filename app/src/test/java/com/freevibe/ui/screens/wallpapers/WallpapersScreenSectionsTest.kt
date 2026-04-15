@@ -3,6 +3,7 @@ package com.freevibe.ui.screens.wallpapers
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.stableKey
+import com.freevibe.data.repository.sanitizeVoteKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -87,6 +88,24 @@ class WallpapersScreenSectionsTest {
         assertEquals(listOf(ContentSource.PIXABAY), sections.feedWallpapers.map { it.source })
         assertEquals(listOf(ContentSource.PIXABAY), sections.pagerWallpapers.map { it.source })
         assertTrue(sections.hasRenderableContent)
+    }
+
+    @Test
+    fun `visible sections honor sanitized moderation ids for raw provider keys`() {
+        val moderatedWallpaper = wallpaper("folder/item", source = ContentSource.REDDIT)
+        val visibleWallpaper = wallpaper("plain-item", source = ContentSource.REDDIT)
+
+        val sections = computeVisibleWallpaperSections(
+            wallpapers = listOf(moderatedWallpaper, visibleWallpaper),
+            hiddenIds = setOf(sanitizeVoteKey(moderatedWallpaper.stableKey())),
+            topVoted = emptyList(),
+            dailyPick = moderatedWallpaper,
+            isDiscoverTab = true,
+        )
+
+        assertNull(sections.dailyPick)
+        assertEquals(listOf("plain-item"), sections.feedWallpapers.map { it.id })
+        assertEquals(listOf("plain-item"), sections.pagerWallpapers.map { it.id })
     }
 
     @Test

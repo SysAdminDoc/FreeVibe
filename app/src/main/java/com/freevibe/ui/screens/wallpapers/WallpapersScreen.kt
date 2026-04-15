@@ -47,9 +47,11 @@ import com.freevibe.data.model.FavoriteIdentity
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.favoriteIdentity
 import com.freevibe.data.model.stableKey
+import com.freevibe.data.repository.matchesHiddenIds
 import com.freevibe.ui.components.CompactSearchField
 import com.freevibe.ui.components.DownloadProgressBar
 import com.freevibe.ui.components.GlassCard
+import com.freevibe.ui.components.HighlightPill
 import com.freevibe.ui.components.SearchHistoryDropdown
 import com.freevibe.ui.components.ShimmerBox
 import com.freevibe.ui.components.ShimmerWallpaperGrid
@@ -168,9 +170,42 @@ fun WallpapersScreen(
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 shape = RoundedCornerShape(18.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
-                highlightHeight = 56.dp,
+                highlightHeight = 120.dp,
                 shadowElevation = 6.dp,
             ) {
+                HighlightPill(
+                    label = wallpaperHeaderEyebrow(
+                        tab = state.selectedTab,
+                        discoverFilter = state.discoverFilter,
+                    ),
+                    icon = wallpaperTabIcon(state.selectedTab),
+                    tint = if (state.selectedTab == WallpaperTab.DISCOVER) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = wallpaperHeaderTitle(
+                        tab = state.selectedTab,
+                        query = state.query,
+                    ),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = wallpaperHeaderSubtitle(
+                        tab = state.selectedTab,
+                        discoverFilter = state.discoverFilter,
+                        query = state.query,
+                        selectedColor = state.selectedColor,
+                        wallpaperCount = visibleSections.feedWallpapers.size,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -253,7 +288,7 @@ fun WallpapersScreen(
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -341,70 +376,89 @@ fun WallpapersScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 when {
                     state.isLoading && state.wallpapers.isEmpty() -> {
-                        ShimmerWallpaperGrid(Modifier.fillMaxSize())
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            WallpaperStateCard(
+                                icon = Icons.Default.AutoAwesome,
+                                title = "Curating your wallpaper feed",
+                                description = "Aura is gathering higher-quality picks from your active sources so the first load feels worth browsing.",
+                            )
+                            ShimmerWallpaperGrid(Modifier.fillMaxWidth().weight(1f))
+                        }
                     }
                     state.error != null && state.wallpapers.isEmpty() -> {
-                        // #5: Source-specific error with retry
-                        Column(
-                            modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                Icons.Default.CloudOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                            WallpaperStateCard(
+                                icon = Icons.Default.CloudOff,
+                                title = state.errorSource?.let {
+                                    "Couldn't refresh ${it.lowercase(java.util.Locale.ROOT)} right now"
+                                } ?: "Wallpaper loading hit a snag",
+                                description = state.error ?: "Try again in a moment or switch sources.",
+                                primaryAction = WallpaperStateAction(
+                                    label = "Retry",
+                                    icon = Icons.Default.Refresh,
+                                    onClick = { viewModel.refresh() },
+                                ),
+                                secondaryAction = if (state.selectedTab != WallpaperTab.DISCOVER) {
+                                    WallpaperStateAction(
+                                        label = "Back to Discover",
+                                        icon = Icons.Default.Explore,
+                                        onClick = { viewModel.selectTab(WallpaperTab.DISCOVER) },
+                                    )
+                                } else null,
                             )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                text = state.errorSource?.let { "Failed to load from ${it.lowercase(java.util.Locale.ROOT)}" }
-                                    ?: "Something went wrong",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Text(
-                                text = state.error ?: "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = { viewModel.refresh() }) {
-                                Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Retry")
-                            }
                         }
                     }
                     !visibleSections.hasRenderableContent && !state.isRefreshing -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(32.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.ImageNotSupported,
-                                    null,
-                                    Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    when {
-                                        state.selectedTab == WallpaperTab.SEARCH -> "No results for \"${state.query}\""
-                                        state.selectedTab == WallpaperTab.COLOR -> "No wallpapers with this color"
-                                        state.selectedTab == WallpaperTab.PIXABAY -> "Add your Pixabay API key in Settings"
-                                        else -> "No wallpapers found"
+                            WallpaperStateCard(
+                                modifier = Modifier.padding(24.dp),
+                                icon = Icons.Default.ImageNotSupported,
+                                title = when {
+                                    state.selectedTab == WallpaperTab.SEARCH -> "No results for \"${state.query}\""
+                                    state.selectedTab == WallpaperTab.COLOR -> "No wallpapers matched this tone"
+                                    state.selectedTab == WallpaperTab.PIXABAY -> "Pixabay needs a key before it can load"
+                                    else -> "Nothing is ready to show here yet"
+                                },
+                                description = when {
+                                    state.selectedTab == WallpaperTab.SEARCH ->
+                                        "Try a broader term, fewer keywords, or jump back into Discover for curated results."
+                                    state.selectedTab == WallpaperTab.COLOR ->
+                                        "Try another tone or return to Discover for a wider mix."
+                                    state.selectedTab == WallpaperTab.PIXABAY ->
+                                        "Add your Pixabay API key in Settings to unlock this source."
+                                    else ->
+                                        "Refresh the feed or switch sources to keep browsing."
+                                },
+                                primaryAction = WallpaperStateAction(
+                                    label = if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                        "Back to Discover"
+                                    } else {
+                                        "Refresh"
                                     },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                if (state.selectedColor != null) {
-                                    Spacer(Modifier.height(8.dp))
-                                    FilledTonalButton(onClick = { viewModel.selectTab(WallpaperTab.DISCOVER) }) {
-                                        Text("Back to Discover")
-                                    }
-                                }
-                            }
+                                    icon = if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                        Icons.Default.Explore
+                                    } else {
+                                        Icons.Default.Refresh
+                                    },
+                                    onClick = {
+                                        if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                            viewModel.selectTab(WallpaperTab.DISCOVER)
+                                        } else {
+                                            viewModel.refresh()
+                                        }
+                                    },
+                                ),
+                            )
                         }
                     }
                     else -> {
@@ -449,29 +503,14 @@ fun WallpapersScreen(
                 .padding(horizontal = 16.dp, vertical = 20.dp),
         )
 
-        // Compact FABs
-        Column(
+        FloatingActionTray(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            if (state.selectedTab == WallpaperTab.DISCOVER) {
-                SmallFloatingActionButton(
-                    onClick = { viewModel.matchMyTheme() },
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                ) {
-                    Icon(Icons.Default.Palette, contentDescription = "Match my theme", modifier = Modifier.size(20.dp))
-                }
-            }
-            SmallFloatingActionButton(
-                onClick = { viewModel.loadRandom() },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(Icons.Default.Shuffle, contentDescription = "Surprise me", modifier = Modifier.size(20.dp))
-            }
-        }
+            showThemeMatch = state.selectedTab == WallpaperTab.DISCOVER,
+            onThemeMatch = { viewModel.matchMyTheme() },
+            onSurpriseMe = { viewModel.loadRandom() },
+        )
     }
 
     if (showFiltersSheet) {
@@ -786,41 +825,7 @@ private fun WallpaperGrid(
         // Curated collections carousel (Discover tab only)
         if (isDiscoverTab) {
             item(span = StaggeredGridItemSpan.FullLine, key = "curated_collections") {
-                Column {
-                    Text(
-                        "Explore Collections",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        val collections = listOf(
-                            "AMOLED Black" to "amoled black dark",
-                            "Minimal" to "minimal clean simple",
-                            "Nature 4K" to "nature landscape 4k",
-                            "Cyberpunk" to "cyberpunk neon city",
-                            "Space" to "space galaxy nebula",
-                            "Abstract" to "abstract colorful gradient",
-                            "Anime" to "anime art illustration",
-                            "Ocean" to "ocean sea waves beach",
-                            "Mountains" to "mountain peak scenic",
-                            "Urban" to "city skyline urban night",
-                        )
-                        collections.forEach { (name, query) ->
-                            item {
-                                ElevatedFilterChip(
-                                    selected = false,
-                                    onClick = { onSearch?.invoke(query) },
-                                    label = { Text(name) },
-                                    leadingIcon = { Icon(Icons.Default.Collections, contentDescription = null, Modifier.size(16.dp)) },
-                                    shape = RoundedCornerShape(18.dp),
-                                )
-                            }
-                        }
-                    }
-                }
+                DiscoverCollectionsRow(onSearch = onSearch)
             }
 
         }
@@ -1054,6 +1059,285 @@ private fun WallpaperCard(
     }
 }
 
+private data class WallpaperStateAction(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun WallpaperStateCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    primaryAction: WallpaperStateAction? = null,
+    secondaryAction: WallpaperStateAction? = null,
+) {
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(20.dp),
+        highlightHeight = 128.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(12.dp)
+                    .size(24.dp),
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (primaryAction != null || secondaryAction != null) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                primaryAction?.let { action ->
+                    Button(
+                        onClick = action.onClick,
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(action.label)
+                    }
+                }
+                secondaryAction?.let { action ->
+                    OutlinedButton(
+                        onClick = action.onClick,
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(action.label)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverCollectionsRow(
+    onSearch: ((String) -> Unit)?,
+) {
+    val collections = remember {
+        listOf(
+            DiscoverCollectionShortcut("AMOLED Black", "Deep blacks and low-glow contrast", "amoled black dark", Icons.Default.DarkMode, Color(0xFF7F5AF0)),
+            DiscoverCollectionShortcut("Minimal", "Clean lines with quiet composition", "minimal clean simple", Icons.Default.CropSquare, Color(0xFF3A86FF)),
+            DiscoverCollectionShortcut("Nature 4K", "Landscapes, forests, and natural depth", "nature landscape 4k", Icons.Default.Landscape, Color(0xFF43AA8B)),
+            DiscoverCollectionShortcut("Cyberpunk", "Electric nightlife and neon geometry", "cyberpunk neon city", Icons.Default.Bolt, Color(0xFFFF5D8F)),
+            DiscoverCollectionShortcut("Space", "Nebulae, stars, and cinematic skies", "space galaxy nebula", Icons.Default.Public, Color(0xFF8E9AAF)),
+            DiscoverCollectionShortcut("Abstract", "Gradients, form studies, and color fields", "abstract colorful gradient", Icons.Default.AutoAwesome, Color(0xFFF4A261)),
+            DiscoverCollectionShortcut("Anime", "Illustrated scenes and stylized worlds", "anime art illustration", Icons.Default.Movie, Color(0xFFE76F51)),
+            DiscoverCollectionShortcut("Ocean", "Waves, shoreline light, and cool tones", "ocean sea waves beach", Icons.Default.Water, Color(0xFF219EBC)),
+            DiscoverCollectionShortcut("Mountains", "Peaks, fog, and wide scenic balance", "mountain peak scenic", Icons.Default.Terrain, Color(0xFF6A994E)),
+            DiscoverCollectionShortcut("Urban", "Skylines, streets, and city atmosphere", "city skyline urban night", Icons.Default.LocationCity, Color(0xFF6D6875)),
+        )
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "Explore Collections",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Text(
+            "Quick routes into polished looks when you want a more directed browse.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp),
+        ) {
+            items(collections.size) { index ->
+                val shortcut = collections[index]
+                Surface(
+                    onClick = { onSearch?.invoke(shortcut.query) },
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.width(176.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = shortcut.tint.copy(alpha = 0.14f),
+                        ) {
+                            Icon(
+                                imageVector = shortcut.icon,
+                                contentDescription = null,
+                                tint = shortcut.tint,
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .size(18.dp),
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(shortcut.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                shortcut.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                minLines = 2,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class DiscoverCollectionShortcut(
+    val title: String,
+    val description: String,
+    val query: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tint: Color,
+)
+
+@Composable
+private fun FloatingActionTray(
+    modifier: Modifier = Modifier,
+    showThemeMatch: Boolean,
+    onThemeMatch: () -> Unit,
+    onSurpriseMe: () -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        if (showThemeMatch) {
+            FloatingActionRow(
+                icon = Icons.Default.Palette,
+                label = "Theme match",
+                tint = MaterialTheme.colorScheme.tertiary,
+                onClick = onThemeMatch,
+            )
+        }
+        FloatingActionRow(
+            icon = Icons.Default.Shuffle,
+            label = "Surprise me",
+            tint = MaterialTheme.colorScheme.primary,
+            onClick = onSurpriseMe,
+        )
+    }
+}
+
+@Composable
+private fun FloatingActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.16f)),
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
+        }
+    }
+}
+
+private fun wallpaperHeaderEyebrow(
+    tab: WallpaperTab,
+    discoverFilter: WallpaperDiscoverFilter,
+): String = when (tab) {
+    WallpaperTab.DISCOVER -> when (discoverFilter) {
+        WallpaperDiscoverFilter.FOR_YOU -> "Curated for your device"
+        else -> "${wallpaperFilterLabel(discoverFilter)} discover mix"
+    }
+    WallpaperTab.SEARCH -> "Cross-source search"
+    WallpaperTab.COLOR -> "Color-focused browsing"
+    else -> "${wallpaperTabLabel(tab)} source"
+}
+
+private fun wallpaperHeaderTitle(
+    tab: WallpaperTab,
+    query: String,
+): String = when (tab) {
+    WallpaperTab.DISCOVER -> "Discover wallpapers"
+    WallpaperTab.SEARCH -> if (query.isNotBlank()) "Results for \"$query\"" else "Search results"
+    WallpaperTab.COLOR -> "Browse by tone"
+    else -> wallpaperTabLabel(tab)
+}
+
+private fun wallpaperHeaderSubtitle(
+    tab: WallpaperTab,
+    discoverFilter: WallpaperDiscoverFilter,
+    query: String,
+    selectedColor: String?,
+    wallpaperCount: Int,
+): String = when (tab) {
+    WallpaperTab.DISCOVER -> when {
+        wallpaperCount > 0 && discoverFilter == WallpaperDiscoverFilter.FOR_YOU ->
+            "$wallpaperCount polished picks are ready across trusted sources, tuned for phone-friendly browsing."
+        discoverFilter != WallpaperDiscoverFilter.FOR_YOU ->
+            "Showing a ${wallpaperFilterLabel(discoverFilter).lowercase(java.util.Locale.ROOT)} mix while keeping quality and composition in focus."
+        else ->
+            "Curated wallpaper picks optimized for phone-friendly composition and cleaner home screens."
+    }
+    WallpaperTab.SEARCH -> if (query.isNotBlank()) {
+        "Searching across multiple wallpaper sources for broader, more useful matches."
+    } else {
+        "Use keywords, themes, or moods to pull in wallpapers from multiple providers."
+    }
+    WallpaperTab.COLOR -> if (selectedColor != null) {
+        "Explore wallpapers built around this tone, then jump back to Discover whenever you want a wider mix."
+    } else {
+        "Pick a tone to bias results toward a specific visual mood."
+    }
+    WallpaperTab.WALLHAVEN -> "High-signal artwork and photography with stronger filtering controls."
+    WallpaperTab.PEXELS -> "Clean photography and motion-friendly imagery from Pexels."
+    WallpaperTab.PIXABAY -> "Free-use imagery with a broad catalog once your source is configured."
+    WallpaperTab.REDDIT -> "Community-driven finds, trending daily picks, and unexpected standouts."
+}
+
+private fun wallpaperTabIcon(tab: WallpaperTab): androidx.compose.ui.graphics.vector.ImageVector = when (tab) {
+    WallpaperTab.DISCOVER -> Icons.Default.Explore
+    WallpaperTab.PEXELS -> Icons.Default.PhotoLibrary
+    WallpaperTab.PIXABAY -> Icons.Default.Collections
+    WallpaperTab.REDDIT -> Icons.Default.Public
+    WallpaperTab.WALLHAVEN -> Icons.Default.ImageSearch
+    WallpaperTab.COLOR -> Icons.Default.Palette
+    WallpaperTab.SEARCH -> Icons.Default.Search
+}
+
 private fun wallpaperTabLabel(tab: WallpaperTab): String =
     when (tab) {
         WallpaperTab.DISCOVER -> "Discover"
@@ -1164,4 +1448,4 @@ internal fun computeWallpaperPagerItems(
 internal fun isWallpaperHidden(
     wallpaper: Wallpaper,
     hiddenIds: Set<String>,
-): Boolean = wallpaper.stableKey() in hiddenIds || wallpaper.id in hiddenIds
+): Boolean = matchesHiddenIds(hiddenIds, wallpaper.stableKey(), wallpaper.id)
