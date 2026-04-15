@@ -1,7 +1,6 @@
 package com.freevibe.service
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.os.Handler
@@ -89,7 +88,9 @@ class WeatherWallpaperService : WallpaperService() {
                 try {
                     val file = java.io.File(path)
                     if (!file.exists()) return@Thread
-                    val bmp = BitmapFactory.decodeFile(path) ?: return@Thread
+                    val (targetWidth, targetHeight) = resolveDecodeTarget()
+                    val bmp = BitmapSampling.decodeSampledBitmap(path, targetWidth, targetHeight)
+                        ?: return@Thread
                     handler.post {
                         if (destroyed) { bmp.recycle(); return@post }
                         synchronized(bitmapLock) {
@@ -115,6 +116,13 @@ class WeatherWallpaperService : WallpaperService() {
                     }
                 } catch (_: Exception) {}
             }.start()
+        }
+
+        private fun resolveDecodeTarget(): Pair<Int, Int> {
+            val rect = surfaceHolder.surfaceFrame
+            val width = if (rect.width() > 0) rect.width() else resources.displayMetrics.widthPixels
+            val height = if (rect.height() > 0) rect.height() else resources.displayMetrics.heightPixels
+            return width.coerceAtLeast(1) to height.coerceAtLeast(1)
         }
 
         private fun loadVfxFromPrefs() {

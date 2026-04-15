@@ -84,9 +84,22 @@ class WallpaperHistoryManager @Inject constructor(
      * One-shot snapshot of the previous wallpaper (entry index 1). Used by the Undo
      * action at the moment the snackbar is tapped — we don't want a Flow subscription
      * here, we want exactly the entry that was second-most-recent when Undo was posted.
+     *
+     * Call this AFTER [record] so that the newly-recorded entry occupies index 0 and
+     * the wallpaper that was active before the apply occupies index 1.
      */
     suspend fun previousSnapshot(): WallpaperHistoryEntity? =
         dao.getRecentSnapshot(2).getOrNull(1)
+
+    /**
+     * Re-insert [entity] with a fresh [appliedAt] timestamp after an Undo restores it.
+     * This ensures that the next apply's [previousSnapshot] correctly points at the
+     * restored wallpaper rather than whatever was recorded before the Undo happened.
+     */
+    suspend fun recordRestore(entity: WallpaperHistoryEntity) {
+        dao.insert(entity.copy(historyId = 0, appliedAt = System.currentTimeMillis()))
+        dao.pruneOld()
+    }
 
     suspend fun clearAll() = dao.clearAll()
 }

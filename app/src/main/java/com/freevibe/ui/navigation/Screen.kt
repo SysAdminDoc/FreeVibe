@@ -293,6 +293,7 @@ sealed class Screen(
     )
 
     companion object {
-        val bottomNavItems = listOf(Wallpapers, VideoWallpapers, Sounds, Favorites, Settings)
+        val bottomNavItems: List<Screen>
+            get() = listOf(Wallpapers, VideoWallpapers, Sounds, Favorites, Settings)
     }
 }

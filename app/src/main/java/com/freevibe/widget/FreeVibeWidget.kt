@@ -300,25 +300,28 @@ private fun updateWidgetStats(context: Context) {
 
 class ShuffleWallpaperAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        applyRandom(context, WallpaperTarget.BOTH)
-        updateWidgetStats(context)
-        FreeVibeWidget().updateAll(context)
+        if (applyRandom(context, WallpaperTarget.BOTH)) {
+            updateWidgetStats(context)
+            FreeVibeWidget().updateAll(context)
+        }
     }
 }
 
 class ApplyHomeAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        applyRandom(context, WallpaperTarget.HOME)
-        updateWidgetStats(context)
-        FreeVibeWidget().updateAll(context)
+        if (applyRandom(context, WallpaperTarget.HOME)) {
+            updateWidgetStats(context)
+            FreeVibeWidget().updateAll(context)
+        }
     }
 }
 
 class ApplyLockAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        applyRandom(context, WallpaperTarget.LOCK)
-        updateWidgetStats(context)
-        FreeVibeWidget().updateAll(context)
+        if (applyRandom(context, WallpaperTarget.LOCK)) {
+            updateWidgetStats(context)
+            FreeVibeWidget().updateAll(context)
+        }
     }
 }
 
@@ -359,17 +362,19 @@ class OpenCurrentWallpaperAction : ActionCallback {
 
 class ShufflePixabayAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        applyFromSource(context, "pixabay", WallpaperTarget.BOTH)
-        updateWidgetStats(context)
-        FreeVibeWidget().updateAll(context)
+        if (applyFromSource(context, "pixabay", WallpaperTarget.BOTH)) {
+            updateWidgetStats(context)
+            FreeVibeWidget().updateAll(context)
+        }
     }
 }
 
 class ShuffleRedditAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        applyFromSource(context, "reddit", WallpaperTarget.BOTH)
-        updateWidgetStats(context)
-        FreeVibeWidget().updateAll(context)
+        if (applyFromSource(context, "reddit", WallpaperTarget.BOTH)) {
+            updateWidgetStats(context)
+            FreeVibeWidget().updateAll(context)
+        }
     }
 }
 
@@ -382,12 +387,12 @@ class OpenAppAction : ActionCallback {
     }
 }
 
-private suspend fun applyFromSource(context: Context, source: String, target: WallpaperTarget) {
+private suspend fun applyFromSource(context: Context, source: String, target: WallpaperTarget): Boolean {
     // Immediate feedback — a widget tap that kicks off a 3–10 s network call with no visible
     // response used to feel unresponsive. Show the toast before the IO hop so the user knows
     // the tap was registered.
     withContext(Dispatchers.Main) { Toast.makeText(context, "Shuffling…", Toast.LENGTH_SHORT).show() }
-    withContext(Dispatchers.IO) {
+    return withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
             val items = when (source) {
@@ -398,19 +403,30 @@ private suspend fun applyFromSource(context: Context, source: String, target: Wa
             val wp = items.randomOrNull()
             if (wp == null) {
                 withContext(Dispatchers.Main) { Toast.makeText(context, "No wallpapers available", Toast.LENGTH_SHORT).show() }
-                return@withContext
+                return@withContext false
             }
-            ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target)
-            ep.wallpaperHistoryManager().record(wp, target)
+            ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target).fold(
+                onSuccess = {
+                    ep.wallpaperHistoryManager().record(wp, target)
+                    true
+                },
+                onFailure = { error ->
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed: ${error.message?.take(50)}", Toast.LENGTH_SHORT).show()
+                    }
+                    false
+                },
+            )
         } catch (e: Exception) {
             withContext(Dispatchers.Main) { Toast.makeText(context, "Failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show() }
+            false
         }
     }
 }
 
-private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
+private suspend fun applyRandom(context: Context, target: WallpaperTarget): Boolean {
     withContext(Dispatchers.Main) { Toast.makeText(context, "Shuffling…", Toast.LENGTH_SHORT).show() }
-    withContext(Dispatchers.IO) {
+    return withContext(Dispatchers.IO) {
         try {
             val ep = getEntryPoint(context)
             val wp = ep.wallpaperRepository().getWallhaven(page = (1..5).random()).items.randomOrNull()
@@ -418,14 +434,25 @@ private suspend fun applyRandom(context: Context, target: WallpaperTarget) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "No wallpapers available", Toast.LENGTH_SHORT).show()
                 }
-                return@withContext
+                return@withContext false
             }
-            ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target)
-            ep.wallpaperHistoryManager().record(wp, target)
+            ep.wallpaperApplier().applyFromUrl(wp.fullUrl, target).fold(
+                onSuccess = {
+                    ep.wallpaperHistoryManager().record(wp, target)
+                    true
+                },
+                onFailure = { error ->
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Shuffle failed: ${error.message?.take(50)}", Toast.LENGTH_SHORT).show()
+                    }
+                    false
+                },
+            )
         } catch (e: Exception) {
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Shuffle failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show()
             }
+            false
         }
     }
 }

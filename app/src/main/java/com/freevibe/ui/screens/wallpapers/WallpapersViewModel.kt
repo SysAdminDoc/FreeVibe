@@ -380,12 +380,13 @@ class WallpapersViewModel @Inject constructor(
     fun applyWallpaper(wallpaper: Wallpaper, target: WallpaperTarget) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true, applySuccess = null) }
-            // Capture the prior history entry BEFORE recording this new apply — that's the
-            // entry Undo will restore to. On first apply there's no prior and undoTarget stays null.
-            val undoTarget = historyManager.previousSnapshot()
             wallpaperApplier.applyFromUrl(wallpaper.fullUrl, target)
                 .onSuccess {
                     historyManager.record(wallpaper, target)
+                    // Capture the previous entry AFTER recording so index 1 is the wallpaper
+                    // that was active before this apply — that's what Undo should restore to.
+                    // Capturing before record() would give index 2 (two hops back), not one.
+                    val undoTarget = historyManager.previousSnapshot()
                     val label = when (target) {
                         WallpaperTarget.HOME -> "home screen"
                         WallpaperTarget.LOCK -> "lock screen"

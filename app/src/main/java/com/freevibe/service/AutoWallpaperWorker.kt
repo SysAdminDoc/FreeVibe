@@ -71,7 +71,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
         val wallpapers = fetchWallpapers(source)
         if (wallpapers.isEmpty()) return Result.retry()
 
-        val pick = if (shuffle) wallpapers.random() else wallpapers.first()
+        val pick = pickScheduledWallpaper(wallpapers, shuffle) ?: return Result.retry()
 
         if (homeEnabled && lockEnabled) {
             applyAndRecord(pick, WallpaperTarget.BOTH)
@@ -79,8 +79,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
             if (homeEnabled) applyAndRecord(pick, WallpaperTarget.HOME)
             if (lockEnabled) {
                 // Pick a different wallpaper for lock if available
-                val others = wallpapers.filter { it.stableKey() != pick.stableKey() }
-                val lockPick = if (others.isNotEmpty()) others.random() else pick
+                val lockPick = pickAlternateWallpaper(wallpapers, pick)
                 applyAndRecord(lockPick, WallpaperTarget.LOCK)
             }
         }
@@ -179,3 +178,20 @@ internal fun String.normalizeWallpaperRotationSource(): String = when (lowercase
     "", "unsplash" -> "discover"
     else -> this
 }
+
+internal fun pickScheduledWallpaper(
+    wallpapers: List<Wallpaper>,
+    shuffle: Boolean,
+): Wallpaper? = when {
+    wallpapers.isEmpty() -> null
+    shuffle -> wallpapers.random()
+    else -> wallpapers.first()
+}
+
+internal fun pickAlternateWallpaper(
+    wallpapers: List<Wallpaper>,
+    current: Wallpaper,
+): Wallpaper = wallpapers
+    .filter { it.stableKey() != current.stableKey() }
+    .randomOrNull()
+    ?: current

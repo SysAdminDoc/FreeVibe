@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
@@ -77,7 +76,8 @@ fun FreeVibeRoot(
     }
     val favoritesCount by remember { entryPoint.favoritesRepository().count() }.collectAsStateWithLifecycle(initialValue = 0)
     val prefs = remember { context.getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE) }
-    val onboardingDone = remember { prefs.getBoolean(ONBOARDING_DONE, false) }
+    var onboardingDone by remember { mutableStateOf(prefs.getBoolean(ONBOARDING_DONE, false)) }
+    val navigationRootRoute = if (onboardingDone) Screen.Wallpapers.route else Screen.Onboarding.route
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -93,7 +93,7 @@ fun FreeVibeRoot(
 
         if (route != null) {
             navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) {
+                popUpTo(navigationRootRoute) {
                     saveState = route == Screen.Favorites.route
                 }
                 launchSingleTop = true
@@ -103,10 +103,10 @@ fun FreeVibeRoot(
     }
 
     val showBottomBar = Screen.bottomNavItems.any {
-        currentDestination?.hierarchy?.any { dest -> it.matchesDestination(dest.route) } == true
+        isBottomNavDestination(screen = it, destination = currentDestination)
     }
 
-    val startRoute = if (onboardingDone) Screen.Wallpapers.route else Screen.Onboarding.route
+    val startRoute = navigationRootRoute
 
     // Global "Applied — Undo" snackbar host. Any ViewModel that applies a wallpaper posts
     // to ApplyFeedbackBus; we observe it here at the root so the snackbar persists across
@@ -129,6 +129,9 @@ fun FreeVibeRoot(
                     }.getOrDefault(com.freevibe.data.model.WallpaperTarget.BOTH)
                     entryPoint.wallpaperApplier().applyFromUrl(entry.fullUrl, target)
                         .onSuccess {
+                            // Re-record the restored wallpaper so that the next apply's
+                            // previousSnapshot() correctly reflects what is now on-screen.
+                            entryPoint.wallpaperHistoryManager().recordRestore(entry)
                             entryPoint.applyFeedbackBus().post(
                                 com.freevibe.service.ApplyFeedbackEvent(
                                     message = "Reverted to previous wallpaper",
@@ -235,15 +238,16 @@ fun FreeVibeRoot(
                                     .padding(horizontal = 2.dp),
                             ) {
                                 Screen.bottomNavItems.forEach { screen ->
-                                    val selected = currentDestination?.hierarchy?.any {
-                                        screen.matchesDestination(it.route)
-                                    } == true
+                                    val selected = isBottomNavDestination(
+                                        screen = screen,
+                                        destination = currentDestination,
+                                    )
 
                                     NavigationBarItem(
                                         selected = selected,
                                         onClick = {
                                             navController.navigate(screen.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                popUpTo(navigationRootRoute) {
                                                     saveState = true
                                                 }
                                                 launchSingleTop = true
@@ -312,6 +316,7 @@ fun FreeVibeRoot(
                 OnboardingScreen(
                     onComplete = {
                         prefs.edit().putBoolean(ONBOARDING_DONE, true).apply()
+                        onboardingDone = true
                         navController.navigate(Screen.Wallpapers.route) {
                             popUpTo(Screen.Onboarding.route) { inclusive = true }
                         }
@@ -463,7 +468,7 @@ fun FreeVibeRoot(
                     onPreview = { wallpaper -> navController.navigate(Screen.WallpaperPreview.createRoute(wallpaper)) { launchSingleTop = true } },
                     onSearchTag = { tag ->
                         navController.navigate(Screen.Wallpapers.createRoute(query = tag)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navigationRootRoute) {
                                 saveState = false
                             }
                             launchSingleTop = true
@@ -472,7 +477,7 @@ fun FreeVibeRoot(
                     },
                     onSearchColor = { colorHex ->
                         navController.navigate(Screen.Wallpapers.createRoute(color = colorHex)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navigationRootRoute) {
                                 saveState = false
                             }
                             launchSingleTop = true
@@ -481,7 +486,7 @@ fun FreeVibeRoot(
                     },
                     onFindSimilar = { wallpaper ->
                         navController.navigate(Screen.Wallpapers.createSimilarRoute(wallpaper)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navigationRootRoute) {
                                 saveState = false
                             }
                             launchSingleTop = true
@@ -546,7 +551,7 @@ fun FreeVibeRoot(
                     },
                     onSearchTag = { tag ->
                         navController.navigate(Screen.Sounds.createRoute(query = tag)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navigationRootRoute) {
                                 saveState = false
                             }
                             launchSingleTop = true
@@ -673,12 +678,34 @@ fun FreeVibeRoot(
                     width = backStackEntry.arguments?.getInt("width") ?: 0,
                     height = backStackEntry.arguments?.getInt("height") ?: 0,
                 )
+                // previewVm is used only for color extraction — the actual apply runs in
+                // the root `scope` so it cannot be cancelled by popBackStack().
                 val previewVm: com.freevibe.ui.screens.wallpapers.WallpapersViewModel = androidx.hilt.navigation.compose.hiltViewModel()
                 com.freevibe.ui.screens.wallpapers.WallpaperPreviewScreen(
                     wallpaper = wallpaper,
                     onBack = { navController.popBackStack() },
                     onApply = { target ->
-                        previewVm.applyWallpaper(wallpaper, target)
+                        // Kick off the apply in the root composition scope (survives pop)
+                        // so the bitmap download + WallpaperManager call complete even if
+                        // the preview destination is removed from the back stack first.
+                        scope.launch {
+                            entryPoint.wallpaperApplier().applyFromUrl(wallpaper.fullUrl, target)
+                                .onSuccess {
+                                    entryPoint.wallpaperHistoryManager().record(wallpaper, target)
+                                    val undoTarget = entryPoint.wallpaperHistoryManager().previousSnapshot()
+                                    val label = when (target) {
+                                        com.freevibe.data.model.WallpaperTarget.HOME -> "home screen"
+                                        com.freevibe.data.model.WallpaperTarget.LOCK -> "lock screen"
+                                        com.freevibe.data.model.WallpaperTarget.BOTH -> "home & lock screen"
+                                    }
+                                    entryPoint.applyFeedbackBus().post(
+                                        com.freevibe.service.ApplyFeedbackEvent(
+                                            message = "Applied to $label",
+                                            undoTarget = undoTarget,
+                                        )
+                                    )
+                                }
+                        }
                         navController.popBackStack()
                     },
                     viewModel = previewVm,
@@ -851,7 +878,7 @@ fun FreeVibeRoot(
                     onBack = { navController.popBackStack() },
                     onCategoryClick = { query ->
                         navController.navigate(Screen.Wallpapers.createRoute(query = query)) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(navigationRootRoute) {
                                 saveState = false
                             }
                             launchSingleTop = true
@@ -896,5 +923,15 @@ fun FreeVibeRoot(
             }
             }
         }
+    }
+}
+
+private fun isBottomNavDestination(
+    screen: Screen,
+    destination: androidx.navigation.NavDestination?,
+): Boolean {
+    if (destination == null) return false
+    return destination.hierarchy.any { navDestination ->
+        screen.matchesDestination(navDestination.route)
     }
 }
