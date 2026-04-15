@@ -96,7 +96,7 @@ fun SearchHistoryDropdown(
                         )
                         IconButton(
                             onClick = { onDeleteQuery(query) },
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(36.dp),
                         ) {
                             Icon(Icons.Default.Close, "Remove", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                         }

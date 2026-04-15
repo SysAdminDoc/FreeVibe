@@ -179,7 +179,7 @@ internal fun isAllowedImportedFavoriteUrl(
         ?.lowercase(java.util.Locale.ROOT)
         ?: return false
 
-    return scheme == "https" || scheme == "http"
+    return scheme == "https"
 }
 
 internal fun FavoriteExportItem.toValidatedEntity(): FavoriteEntity? {

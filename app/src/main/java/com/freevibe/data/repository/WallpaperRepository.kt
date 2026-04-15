@@ -202,7 +202,7 @@ class WallpaperRepository @Inject constructor(
             val b2 = c and 0xFF
             (r1 - r2) * (r1 - r2) + (g1 - g2) * (g1 - g2) + (b1 - b2) * (b1 - b2)
         }
-        return String.format("%06x", nearest)
+        return String.format(java.util.Locale.ROOT, "%06x", nearest)
     }
 
     suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> {

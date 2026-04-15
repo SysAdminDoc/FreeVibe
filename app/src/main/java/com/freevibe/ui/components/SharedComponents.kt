@@ -112,7 +112,7 @@ private fun DownloadItem(
                 }
 
                 if (download.isComplete || download.error != null) {
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Close, "Dismiss", modifier = Modifier.size(16.dp))
                     }
                 }
@@ -389,7 +389,7 @@ fun CompactSearchField(
             )
 
             if (value.isNotEmpty() && onClear != null) {
-                IconButton(onClick = onClear, modifier = Modifier.size(24.dp)) {
+                IconButton(onClick = onClear, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(14.dp))
                 }
             }

@@ -74,6 +74,11 @@ internal fun buildLaunchNavigation(
     }
 }
 
+private fun isAllowedLaunchUrl(url: String): Boolean {
+    val scheme = android.net.Uri.parse(url).scheme?.lowercase(java.util.Locale.ROOT)
+    return scheme == "https"
+}
+
 internal fun buildLaunchWallpaper(
     wallpaperId: String? = null,
     fullUrl: String = "",
@@ -83,7 +88,7 @@ internal fun buildLaunchWallpaper(
     height: Int = 0,
 ): Wallpaper? {
     val normalizedThumb = thumbnailUrl.ifBlank { fullUrl }
-    return if (!wallpaperId.isNullOrBlank() && fullUrl.isNotBlank()) {
+    return if (!wallpaperId.isNullOrBlank() && fullUrl.isNotBlank() && isAllowedLaunchUrl(fullUrl)) {
         Wallpaper(
             id = wallpaperId,
             source = sourceName

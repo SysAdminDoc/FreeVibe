@@ -756,19 +756,19 @@ private fun VideoCard(
                 }
             }
             // Vote buttons
-            IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onUpvote, modifier = Modifier.size(36.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.ThumbUp, "Upvote video", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     if (voteCount > 0) Text("$voteCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 2.dp))
                 }
             }
-            IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onDownvote, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Default.VisibilityOff, "Hide video", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (onPreview != null) {
                 IconButton(
                     onClick = onPreview,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Icon(
                         Icons.Default.Visibility,

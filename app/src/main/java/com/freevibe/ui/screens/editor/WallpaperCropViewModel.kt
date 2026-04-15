@@ -76,6 +76,7 @@ class WallpaperCropViewModel @Inject constructor(
                 }
                 _state.update { it.copy(bitmap = bitmap, isLoading = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }
@@ -114,6 +115,7 @@ class WallpaperCropViewModel @Inject constructor(
                         _state.update { it.copy(isApplying = false, error = e.message) }
                     }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 cropped?.recycle()
                 _state.update { it.copy(isApplying = false, error = e.message) }
             }

@@ -159,10 +159,12 @@ fun WallpapersScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            val visibleTabs = WallpaperTab.entries.filter {
-                it != WallpaperTab.SEARCH || state.selectedTab == WallpaperTab.SEARCH
-            }.filter {
-                it != WallpaperTab.COLOR || state.selectedTab == WallpaperTab.COLOR
+            val visibleTabs = remember(state.selectedTab) {
+                WallpaperTab.entries.filter {
+                    it != WallpaperTab.SEARCH || state.selectedTab == WallpaperTab.SEARCH
+                }.filter {
+                    it != WallpaperTab.COLOR || state.selectedTab == WallpaperTab.COLOR
+                }
             }
             GlassCard(
                 modifier = Modifier

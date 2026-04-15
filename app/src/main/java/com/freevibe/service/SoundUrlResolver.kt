@@ -75,7 +75,7 @@ class SoundUrlResolver @Inject constructor(
         var normalized = raw.replace("&amp;", "&")
         normalized = normalized
             .replace("https://freesound.orghttps://", "https://")
-            .replace("https://freesound.orghttp://", "http://")
+            .replace("https://freesound.orghttp://", "https://")
         if (normalized.startsWith("//")) {
             normalized = "https:$normalized"
         }

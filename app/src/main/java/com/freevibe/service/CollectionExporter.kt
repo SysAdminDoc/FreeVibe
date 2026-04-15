@@ -25,6 +25,8 @@ import javax.inject.Singleton
  * NOT shipped in v6.1.0; "share my collection to a friend" is the actual use case we need
  * today. Import via intent-filter is a v6.2+ feature.
  */
+private val FILENAME_SANITIZE_REGEX = Regex("[^a-zA-Z0-9_-]")
+
 @Singleton
 class CollectionExporter @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -64,7 +66,7 @@ class CollectionExporter @Inject constructor(
             val shareDir = File(context.cacheDir, "share_out").apply { mkdirs() }
             // Sanitize filename to [a-zA-Z0-9_-] so the share intent's title looks clean
             // in the destination app (e.g. Gmail subject, Messenger file name).
-            val safeName = collectionName.replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "collection" }
+            val safeName = collectionName.replace(FILENAME_SANITIZE_REGEX, "_").ifBlank { "collection" }
             val shareFile = File(shareDir, "aura_${safeName}_${collectionId}.json").apply {
                 writeBytes(json.toByteArray())
             }

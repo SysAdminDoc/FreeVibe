@@ -169,8 +169,10 @@ fun SoundsScreen(
         },
     ) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
-            val visibleTabs = SoundTab.entries.filter {
-                it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
+            val visibleTabs = remember(state.selectedTab) {
+                SoundTab.entries.filter {
+                    it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
+                }
             }
             GlassCard(
                 modifier = Modifier
