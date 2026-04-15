@@ -6,12 +6,8 @@ import android.graphics.Paint
 import android.graphics.SurfaceTexture
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
-import android.os.Handler
-import android.os.HandlerThread
 import android.service.wallpaper.WallpaperService
-import android.view.Surface
 import android.view.SurfaceHolder
-import android.view.TextureView
 import com.freevibe.BuildConfig
 
 /**
@@ -35,6 +31,17 @@ class VideoWallpaperService : WallpaperService() {
         private fun getPlaybackSpeed(): Float =
             getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
                 .getFloat("video_playback_speed", 1.0f).takeIf { it > 0 } ?: 1.0f
+        private fun getFpsLimit(): Float =
+            getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
+                .getInt("video_fps_limit", 30)
+                .let { fps ->
+                    when {
+                        fps <= 15 -> 15
+                        fps >= 60 -> 60
+                        else -> 30
+                    }
+                }
+                .toFloat()
 
         private fun resolveScreenSize() {
             try {
@@ -129,6 +136,15 @@ class VideoWallpaperService : WallpaperService() {
                 val sh = screenHeight.takeIf { it > 0 } ?: holder.surfaceFrame.height()
                 if (sw > 0 && sh > 0) {
                     try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    try {
+                        holder.surface.setFrameRate(
+                            getFpsLimit(),
+                            android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                        )
+                    } catch (_: Exception) {
+                    }
                 }
 
                 val safeHolder = object : SurfaceHolder by holder {

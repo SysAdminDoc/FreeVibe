@@ -1,9 +1,13 @@
 package com.freevibe.ui.screens.videowallpapers
 
+import com.freevibe.data.repository.sanitizeVoteKey
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class VideoWallpapersViewModelTest {
@@ -44,5 +48,39 @@ class VideoWallpapersViewModelTest {
         assertNull(resolvePexelsOrientationParam(OrientationFilter.ALL))
         assertEquals("portrait", resolvePexelsOrientationParam(OrientationFilter.PORTRAIT))
         assertEquals("landscape", resolvePexelsOrientationParam(OrientationFilter.LANDSCAPE))
+    }
+
+    @Test
+    fun `rethrowIfCancelled rethrows cancellation exceptions`() {
+        val expected = CancellationException("cancelled")
+
+        try {
+            expected.rethrowIfCancelled()
+            fail("Expected cancellation to be rethrown")
+        } catch (actual: CancellationException) {
+            assertSame(expected, actual)
+        }
+    }
+
+    @Test
+    fun `rethrowIfCancelled ignores ordinary failures`() {
+        IllegalStateException("boom").rethrowIfCancelled()
+    }
+
+    @Test
+    fun `isVideoWallpaperHidden matches sanitized moderation ids`() {
+        val item = VideoWallpaperItem(
+            id = "reddit/post/42",
+            title = "Aurora",
+            thumbnailUrl = "https://example.com/thumb.jpg",
+            source = "Reddit",
+        )
+
+        assertTrue(
+            isVideoWallpaperHidden(
+                item = item,
+                hiddenIds = setOf(sanitizeVoteKey(item.id)),
+            )
+        )
     }
 }

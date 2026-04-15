@@ -4,6 +4,7 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import retrofit2.http.GET
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 /**
  * Bing Image of the Day API.
@@ -13,8 +14,9 @@ import retrofit2.http.Query
  */
 interface BingDailyApi {
 
-    @GET("HPImageArchive.aspx")
+    @GET
     suspend fun getImages(
+        @Url url: String = archiveUrl(BASE_URL),
         @Query("format") format: String = "js",
         @Query("idx") idx: Int = 0,
         @Query("n") n: Int = 8,
@@ -23,12 +25,20 @@ interface BingDailyApi {
 
     companion object {
         const val BASE_URL = "https://www.bing.com/"
+        val FALLBACK_BASE_URLS = listOf(
+            BASE_URL,
+            "https://www2.bing.com/",
+            "https://cn.bing.com/",
+        )
 
         /** Available markets for more image variety */
         val MARKETS = listOf(
             "en-US", "en-GB", "en-AU", "de-DE", "fr-FR",
             "ja-JP", "zh-CN", "en-CA", "en-IN", "es-ES",
         )
+
+        fun archiveUrl(baseUrl: String): String =
+            baseUrl.trimEnd('/') + "/HPImageArchive.aspx"
 
         /** Build full-res URL from urlbase */
         fun fullUrl(urlbase: String): String =

@@ -1,9 +1,12 @@
 package com.freevibe.ui.screens.settings
 
 import android.content.Context
+import android.net.Uri
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.VideoWallpaperSelectionResult
+import com.freevibe.service.VideoWallpaperStorage
 import com.freevibe.service.WallpaperHistoryManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -104,12 +107,48 @@ class SettingsViewModelTest {
         coVerify(exactly = 1) { wallpaperCacheManager.clearAll() }
     }
 
+    @Test
+    fun `prepareVideoWallpaperFromUri publishes ready when storage succeeds`() = runTest(dispatcher) {
+        val uri = mockk<Uri>()
+        val storage = mockk<VideoWallpaperStorage>()
+        coEvery { storage.prepareFromUri(uri) } returns Result.success(File("live_wallpaper.mp4"))
+        val viewModel = createViewModel(
+            cacheDir = createTempDirectory("settings-video-ready").toFile().also(tempDirs::add),
+            videoWallpaperStorageOverride = storage,
+        )
+
+        viewModel.prepareVideoWallpaperFromUri(uri)
+        advanceUntilIdle()
+
+        assertEquals(VideoWallpaperSelectionResult.Ready, viewModel.videoWallpaperSelectionResult.value)
+    }
+
+    @Test
+    fun `prepareVideoWallpaperFromUri publishes failure when storage rejects input`() = runTest(dispatcher) {
+        val uri = mockk<Uri>()
+        val storage = mockk<VideoWallpaperStorage>()
+        coEvery { storage.prepareFromUri(uri) } returns Result.failure(
+            IllegalStateException("Animated GIF wallpapers are not supported yet."),
+        )
+        val viewModel = createViewModel(
+            cacheDir = createTempDirectory("settings-video-failure").toFile().also(tempDirs::add),
+            videoWallpaperStorageOverride = storage,
+        )
+
+        viewModel.prepareVideoWallpaperFromUri(uri)
+        advanceUntilIdle()
+
+        val failure = viewModel.videoWallpaperSelectionResult.value as VideoWallpaperSelectionResult.Failure
+        assertEquals("Animated GIF wallpapers are not supported yet.", failure.message)
+    }
+
     private fun createViewModel(
         cacheDir: File,
         offlineFavoritesSize: Long = 0L,
         wallpaperCacheCounts: List<Int> = listOf(0),
         offlineFavoritesOverride: OfflineFavoritesManager? = null,
         wallpaperCacheManagerOverride: WallpaperCacheManager? = null,
+        videoWallpaperStorageOverride: VideoWallpaperStorage? = null,
     ): SettingsViewModel {
         val context = mockk<Context>(relaxed = true).also {
             every { it.cacheDir } returns cacheDir
@@ -132,6 +171,7 @@ class SettingsViewModelTest {
             every { it.getAll() } returns flowOf(emptyList())
         }
         val wallpaperApplier = mockk<com.freevibe.service.WallpaperApplier>(relaxed = true)
+        val videoWallpaperStorage = videoWallpaperStorageOverride ?: mockk(relaxed = true)
         return SettingsViewModel(
             context = context,
             prefs = prefs,
@@ -140,6 +180,7 @@ class SettingsViewModelTest {
             wallpaperCacheManager = wallpaperCacheManager,
             collectionRepo = collectionRepo,
             wallpaperApplier = wallpaperApplier,
+            videoWallpaperStorage = videoWallpaperStorage,
         )
     }
 

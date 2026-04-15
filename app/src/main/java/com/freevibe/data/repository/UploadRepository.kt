@@ -14,6 +14,7 @@ import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -21,9 +22,26 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
 private val UPLOAD_NAME_SANITIZE_REGEX = Regex("[^a-zA-Z0-9_\\- ]")
+private val UPLOAD_TAG_SANITIZE_REGEX = Regex("[^a-z0-9_\\- ]")
+private val ALLOWED_UPLOAD_AUDIO_MIMES = setOf(
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/ogg",
+    "audio/flac",
+    "audio/aac",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/m4a",
+)
+private val ALLOWED_UPLOAD_CATEGORIES = setOf("ringtone", "notification", "alarm")
+private const val MAX_AUDIO_UPLOAD_BYTES = 20L * 1024L * 1024L
+private const val MAX_UPLOAD_TAGS = 8
+private const val MAX_UPLOAD_TAG_LENGTH = 24
 
+@Singleton
 class UploadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val identityProvider: CommunityIdentityProvider,
@@ -57,65 +75,73 @@ class UploadRepository @Inject constructor(
         val storageInstance = storage ?: throw IllegalStateException("Firebase Storage not available")
         val uploadsRefInstance = uploadsRef ?: throw IllegalStateException("Firebase Database not available")
 
-        // Validate file size (max 20MB)
-        val fileSize = context.contentResolver.openFileDescriptor(localUri, "r")?.use { it.statSize } ?: 0
-        if (fileSize > 20 * 1024 * 1024) {
-            throw IllegalArgumentException("File too large (max 20MB)")
-        }
-
-        // Validate audio MIME type — strict whitelist
-        val fileMime = context.contentResolver.getType(localUri) ?: ""
-        val allowedMimes = setOf(
-            "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
-            "audio/ogg", "audio/flac", "audio/aac", "audio/mp4",
-            "audio/x-m4a", "audio/m4a",
-        )
-        if (fileMime.isNotBlank() && fileMime !in allowedMimes) {
-            throw IllegalArgumentException("Unsupported audio format: $fileMime")
-        }
-
         // Validate name length
         val sanitizedName = name.trim().take(100)
         if (sanitizedName.isBlank()) {
             throw IllegalArgumentException("Sound name cannot be empty")
         }
 
+        val normalizedCategory = normalizeUploadCategory(category)
+        val normalizedTags = sanitizeUploadTags(tags)
+        val uploadInfo = resolveUploadFileInfo(localUri, sanitizedName)
+        val normalizedMimeType = uploadInfo.mimeType.lowercase(java.util.Locale.ROOT)
+        if (!isSupportedAudioUploadMime(normalizedMimeType)) {
+            throw IllegalArgumentException("Unsupported audio format")
+        }
+
+        val fileSize = resolveUploadSize(localUri)
+        validateUploadSize(fileSize)
+        ensureReadableUpload(localUri)
+
         val timestamp = System.currentTimeMillis()
         val uploaderId = identityProvider.ensureSignedIn()
         val uploaderLabel = identityProvider.currentUploaderLabel()
-        val uploadInfo = resolveUploadFileInfo(localUri, sanitizedName)
-        val storagePath = "sounds/$uploaderId/${timestamp}_${uploadInfo.baseName}.${uploadInfo.extension}"
+        val storagePath = "sounds/${sanitizeUploadStorageSegment(uploaderId)}/${timestamp}_${uploadInfo.baseName}.${uploadInfo.extension}"
         val storageRef = storageInstance.reference.child(storagePath)
+        var metadataSaved = false
 
-        // Upload file
-        val uploadTask = storageRef.putFile(localUri)
-        uploadTask.addOnProgressListener { snapshot ->
-            val progress = snapshot.bytesTransferred.toFloat() / snapshot.totalByteCount
-            onProgress(progress)
+        try {
+            // Upload file
+            val uploadTask = storageRef.putFile(localUri)
+            uploadTask.addOnProgressListener { snapshot ->
+                val totalByteCount = snapshot.totalByteCount.takeIf { it > 0 } ?: 0L
+                val progress = if (totalByteCount > 0) {
+                    snapshot.bytesTransferred.toFloat() / totalByteCount
+                } else {
+                    0f
+                }
+                onProgress(progress.coerceIn(0f, 1f))
+            }
+            uploadTask.await()
+
+            // Get download URL
+            val downloadUrl = storageRef.downloadUrl.await().toString()
+
+            // Write metadata to RTDB
+            val pushRef = uploadsRefInstance.push()
+            val metadata = mapOf(
+                "name" to sanitizedName,
+                "category" to normalizedCategory,
+                "tags" to normalizedTags,
+                "downloadUrl" to downloadUrl,
+                "fileType" to normalizedMimeType,
+                "originalFileName" to uploadInfo.originalFileName,
+                "uploadedAt" to timestamp,
+                "uploaderId" to uploaderId,
+                "uploaderLabel" to uploaderLabel,
+                "votes" to 0,
+            )
+            pushRef.setValue(metadata).await()
+            metadataSaved = true
+
+            Result.success(downloadUrl)
+        } finally {
+            if (!metadataSaved) {
+                runCatching { storageRef.delete().await() }
+            }
         }
-        uploadTask.await()
-
-        // Get download URL
-        val downloadUrl = storageRef.downloadUrl.await().toString()
-
-        // Write metadata to RTDB
-        val pushRef = uploadsRefInstance.push()
-        val metadata = mapOf(
-            "name" to sanitizedName,
-            "category" to category,
-            "tags" to tags,
-            "downloadUrl" to downloadUrl,
-            "fileType" to uploadInfo.mimeType,
-            "originalFileName" to uploadInfo.originalFileName,
-            "uploadedAt" to timestamp,
-            "uploaderId" to uploaderId,
-            "uploaderLabel" to uploaderLabel,
-            "votes" to 0,
-        )
-        pushRef.setValue(metadata).await()
-
-        Result.success(downloadUrl)
     } catch (e: Exception) {
+        e.rethrowIfCancelled()
         Result.failure(e)
     }
 
@@ -138,6 +164,9 @@ class UploadRepository @Inject constructor(
 
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
+                val votesByKey = snapshot.children.associate { child ->
+                    (child.key ?: "") to (child.child("votes").getValue(Int::class.java) ?: 0)
+                }
                 val sounds = snapshot.children.mapNotNull { child ->
                     val key = child.key ?: return@mapNotNull null
                     val nameVal = child.child("name").getValue(String::class.java) ?: return@mapNotNull null
@@ -163,9 +192,7 @@ class UploadRepository @Inject constructor(
                         sourcePageUrl = "",
                     )
                 }.sortedByDescending { sound ->
-                    // Sort by votes (stored in description temporarily as category)
-                    snapshot.children.firstOrNull { "cu_${it.key}" == sound.id }
-                        ?.child("votes")?.getValue(Int::class.java) ?: 0
+                    votesByKey[sound.id.removePrefix("cu_")] ?: 0
                 }.take(limit)
 
                 trySend(sounds)
@@ -192,15 +219,18 @@ class UploadRepository @Inject constructor(
             }
             ?: (localUri.lastPathSegment?.substringAfterLast('/') ?: fallbackName)
 
-        val mimeType = resolver.getType(localUri)
-            ?.takeIf { it.isNotBlank() }
-            ?: MimeTypeMap.getSingleton()
-                .getMimeTypeFromExtension(originalFileName.substringAfterLast('.', ""))
-            ?: "audio/mpeg"
-
-        val extension = originalFileName.substringAfterLast('.', "")
+        val inferredExtension = originalFileName.substringAfterLast('.', "")
             .lowercase(java.util.Locale.ROOT)
             .takeIf { it.isNotBlank() }
+        val mimeType = resolver.getType(localUri)
+            ?.takeIf { it.isNotBlank() }
+            ?.lowercase(java.util.Locale.ROOT)
+            ?: inferredExtension
+                ?.let(MimeTypeMap.getSingleton()::getMimeTypeFromExtension)
+                ?.lowercase(java.util.Locale.ROOT)
+            ?: ""
+
+        val extension = inferredExtension
             ?: MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
             ?: defaultExtensionForMimeType(mimeType)
 
@@ -218,6 +248,37 @@ class UploadRepository @Inject constructor(
         )
     }
 
+    private fun resolveUploadSize(localUri: Uri): Long? {
+        val resolver = context.contentResolver
+        val descriptorSize = resolver.openAssetFileDescriptor(localUri, "r")?.use { descriptor ->
+            descriptor.length.takeIf { it >= 0 } ?: descriptor.parcelFileDescriptor?.statSize?.takeIf { it >= 0 }
+        }
+        if (descriptorSize != null) return descriptorSize
+
+        return resolver.query(localUri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+            }
+    }
+
+    private fun validateUploadSize(fileSize: Long?) {
+        when {
+            fileSize == 0L -> throw IllegalArgumentException("Selected audio file is empty")
+            fileSize != null && fileSize > MAX_AUDIO_UPLOAD_BYTES -> {
+                throw IllegalArgumentException("File too large (max 20MB)")
+            }
+        }
+    }
+
+    private fun ensureReadableUpload(localUri: Uri) {
+        val firstByte = context.contentResolver.openInputStream(localUri)?.use { input ->
+            input.read()
+        } ?: -1
+        if (firstByte == -1) {
+            throw IllegalArgumentException("Selected audio file is empty or unreadable")
+        }
+    }
+
     private fun defaultExtensionForMimeType(mimeType: String): String = when (mimeType.lowercase(java.util.Locale.ROOT)) {
         "audio/ogg" -> "ogg"
         "audio/wav", "audio/x-wav" -> "wav"
@@ -225,4 +286,36 @@ class UploadRepository @Inject constructor(
         "audio/mp4", "audio/aac" -> "m4a"
         else -> "mp3"
     }
+}
+
+internal fun normalizeUploadCategory(category: String): String {
+    val normalized = category.trim().lowercase(java.util.Locale.ROOT)
+    require(normalized in ALLOWED_UPLOAD_CATEGORIES) { "Invalid sound category" }
+    return normalized
+}
+
+internal fun sanitizeUploadTags(tags: List<String>): List<String> =
+    tags.asSequence()
+        .map { tag ->
+            tag.trim()
+                .lowercase(java.util.Locale.ROOT)
+                .replace(UPLOAD_TAG_SANITIZE_REGEX, "")
+                .replace(Regex("\\s+"), " ")
+        }
+        .filter { it.length in 2..MAX_UPLOAD_TAG_LENGTH }
+        .distinct()
+        .take(MAX_UPLOAD_TAGS)
+        .toList()
+
+internal fun isSupportedAudioUploadMime(mimeType: String): Boolean =
+    mimeType.lowercase(java.util.Locale.ROOT) in ALLOWED_UPLOAD_AUDIO_MIMES
+
+internal fun sanitizeUploadStorageSegment(segment: String): String =
+    segment.trim()
+        .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        .trim('_')
+        .ifBlank { "user" }
+
+private fun Throwable.rethrowIfCancelled() {
+    if (this is CancellationException) throw this
 }

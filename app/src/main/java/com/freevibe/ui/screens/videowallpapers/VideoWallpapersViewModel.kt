@@ -9,11 +9,16 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.data.repository.VoteRepository
+import com.freevibe.service.VideoWallpaperSelectionResult
+import com.freevibe.service.VideoWallpaperStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -25,7 +30,6 @@ import okhttp3.Request
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
-import java.io.File
 import javax.inject.Inject
 
 internal data class VideoLoadProgress(
@@ -72,11 +76,14 @@ class VideoWallpapersViewModel @Inject constructor(
     private val pixabayApi: com.freevibe.data.remote.pixabay.PixabayApi,
     private val prefs: PreferencesManager,
     private val okHttpClient: OkHttpClient,
+    private val videoWallpaperStorage: VideoWallpaperStorage,
     val voteRepo: VoteRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VideoWallpapersState())
     val state = _state.asStateFlow()
+    private val _gallerySelectionResult = MutableStateFlow<VideoWallpaperSelectionResult?>(null)
+    val gallerySelectionResult = _gallerySelectionResult.asStateFlow()
 
     // Cache of resolved video stream URLs
     // Bounded cache — evict oldest when exceeding 200 entries
@@ -205,6 +212,20 @@ class VideoWallpapersViewModel @Inject constructor(
 
     fun upvote(id: String) { viewModelScope.launch { voteRepo.upvote(id) } }
     fun downvote(id: String) { viewModelScope.launch { voteRepo.downvote(id) } }
+    fun clearGallerySelectionResult() { _gallerySelectionResult.value = null }
+
+    fun prepareGalleryVideoWallpaper(uri: android.net.Uri) {
+        viewModelScope.launch {
+            _gallerySelectionResult.value = VideoWallpaperSelectionResult.Preparing
+            val result = videoWallpaperStorage.prepareFromUri(uri)
+            _gallerySelectionResult.value = result.fold(
+                onSuccess = { VideoWallpaperSelectionResult.Ready },
+                onFailure = {
+                    VideoWallpaperSelectionResult.Failure(it.message ?: "Could not prepare video")
+                },
+            )
+        }
+    }
 
     fun applyVideoWallpaper(item: VideoWallpaperItem) {
         viewModelScope.launch {
@@ -227,8 +248,7 @@ class VideoWallpapersViewModel @Inject constructor(
                 }
 
                 if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Downloading video (source: ${item.source})...")
-                val file = withContext(Dispatchers.IO) {
-                    val cacheFile = File(context.filesDir, "live_wallpaper.mp4")
+                val file = videoWallpaperStorage.prepareDownloadedVideo(extension = "mp4") { cacheFile ->
                     if (item.source == "YouTube" && item.videoId.isNotEmpty()) {
                         // YouTube: use yt-dlp for download
                         try {
@@ -244,6 +264,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
                                 val body = resp.body ?: throw Exception("Empty response body")
                                 body.byteStream().use { input ->
+                                    cacheFile.parentFile?.mkdirs()
                                     cacheFile.outputStream().use { output -> input.copyTo(output) }
                                 }
                             }
@@ -254,20 +275,18 @@ class VideoWallpapersViewModel @Inject constructor(
                             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
                             val body = resp.body ?: throw Exception("Empty response body")
                             body.byteStream().use { input ->
+                                cacheFile.parentFile?.mkdirs()
                                 cacheFile.outputStream().use { output -> input.copyTo(output) }
                             }
                         }
                     }
-                    if (cacheFile.length() < 1024) {
-                        throw Exception("Downloaded file too small (${cacheFile.length()} bytes) — likely an error page")
-                    }
                     if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
-                    cacheFile
-                }
+                }.getOrElse { throw it }
 
                 launchOrExportVideoWallpaper(context, file)
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Apply failed", e)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -327,6 +346,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Throwable) {
+                        e.rethrowIfCancelled()
                         failedSources += "Pexels"
                         if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pexels: ${e.message}")
                         emptyList()
@@ -380,7 +400,11 @@ class VideoWallpapersViewModel @Inject constructor(
                                     _resolvedIds.update { it + item.id }
                                 }
                             }
-                        } catch (e: Throwable) { if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Reddit $sub: ${e.message}"); continue }
+                        } catch (e: Throwable) {
+                            e.rethrowIfCancelled()
+                            if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Reddit $sub: ${e.message}")
+                            continue
+                        }
                     }
                     if (!redditReached) failedSources += "Reddit"
                     items
@@ -420,6 +444,7 @@ class VideoWallpapersViewModel @Inject constructor(
                                 VideoWallpaperItem(id = "yt_$vid", title = item.name, thumbnailUrl = thumb?.url ?: "", source = "YouTube", duration = item.duration, uploaderName = item.uploaderName ?: "", videoId = vid, popularity = item.viewCount, videoWidth = tw, videoHeight = th)
                             }
                     } catch (e: Throwable) {
+                        e.rethrowIfCancelled()
                         failedSources += "YouTube"
                         if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "YouTube: ${e.message}")
                         emptyList()
@@ -460,6 +485,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Throwable) {
+                        e.rethrowIfCancelled()
                         failedSources += "Pixabay"
                         if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "Pixabay: ${e.message}")
                         emptyList()
@@ -498,6 +524,7 @@ class VideoWallpapersViewModel @Inject constructor(
             val allAttemptedFailed = attemptedCount > 0 && sourceFailures.size == attemptedCount
             val preserveCurrentFeed = !loadMore && mixed.isEmpty() && s.items.isNotEmpty()
 
+            currentCoroutineContext().ensureActive()
             _state.update {
                 it.copy(
                     items = when {
@@ -530,7 +557,16 @@ class VideoWallpapersViewModel @Inject constructor(
                 ytItems.forEach { item ->
                     launch {
                         sem.acquire()
-                        try { youtubeRepo.getVideoStreamUrl(item.videoId)?.let { streamUrls[item.id] = it; _resolvedIds.update { it + item.id } } } catch (_: Throwable) {} finally { sem.release() }
+                        try {
+                            youtubeRepo.getVideoStreamUrl(item.videoId)?.let {
+                                streamUrls[item.id] = it
+                                _resolvedIds.update { ids -> ids + item.id }
+                            }
+                        } catch (t: Throwable) {
+                            t.rethrowIfCancelled()
+                        } finally {
+                            sem.release()
+                        }
                     }
                 }
             }
@@ -550,4 +586,8 @@ class VideoWallpapersViewModel @Inject constructor(
         private val REDDIT_WIDTH_REGEX = Regex(""""reddit_video"\s*:\s*\{[^}]*"width"\s*:\s*(\d+)""")
         private val REDDIT_HEIGHT_REGEX = Regex(""""reddit_video"\s*:\s*\{[^}]*"height"\s*:\s*(\d+)""")
     }
+}
+
+internal fun Throwable.rethrowIfCancelled() {
+    if (this is CancellationException) throw this
 }

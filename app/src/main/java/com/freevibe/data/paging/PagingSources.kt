@@ -6,6 +6,7 @@ import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
+import kotlinx.coroutines.CancellationException
 
 /**
  * Generic PagingSource that wraps any wallpaper API call with caching.
@@ -27,19 +28,43 @@ class WallpaperPagingSource(
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Wallpaper> {
         val page = params.key ?: 1
         val cacheKey = "${cacheKeyPrefix}_$page"
+        val prevKey = if (page == 1) null else page - 1
 
         return try {
             // Check cache first
             val cached = cacheManager.getCached(cacheKey, source)
             if (cached != null && cached.isNotEmpty()) {
-                // Check if the next page is also cached; if not, go to network for proper hasMore
+                // Check if the next page is also cached; if not, refresh this page so pagination
+                // can keep moving instead of getting stuck on the cached boundary forever.
                 val nextCacheKey = "${cacheKeyPrefix}_${page + 1}"
                 val nextCached = cacheManager.getCached(nextCacheKey, source)
-                return LoadResult.Page(
-                    data = cached,
-                    prevKey = if (page == 1) null else page - 1,
-                    nextKey = if (nextCached != null && nextCached.isNotEmpty()) page + 1 else null,
-                )
+                if (nextCached != null && nextCached.isNotEmpty()) {
+                    return LoadResult.Page(
+                        data = cached,
+                        prevKey = prevKey,
+                        nextKey = page + 1,
+                    )
+                }
+
+                return try {
+                    val refreshed = loader(page)
+                    if (refreshed.items.isNotEmpty()) {
+                        cacheManager.cache(cacheKey, refreshed.items)
+                    }
+                    LoadResult.Page(
+                        data = refreshed.items.ifEmpty { cached },
+                        prevKey = prevKey,
+                        nextKey = if (refreshed.hasMore) page + 1 else null,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    LoadResult.Page(
+                        data = cached,
+                        prevKey = prevKey,
+                        nextKey = null,
+                    )
+                }
             }
 
             // Fetch from network
@@ -52,9 +77,11 @@ class WallpaperPagingSource(
 
             LoadResult.Page(
                 data = result.items,
-                prevKey = if (page == 1) null else page - 1,
+                prevKey = prevKey,
                 nextKey = if (result.hasMore) page + 1 else null,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // On network error, try stale cache as fallback
             val staleCache = try {
@@ -64,7 +91,7 @@ class WallpaperPagingSource(
             if (staleCache != null && staleCache.isNotEmpty()) {
                 LoadResult.Page(
                     data = staleCache,
-                    prevKey = if (page == 1) null else page - 1,
+                    prevKey = prevKey,
                     nextKey = null, // Can't verify pagination state when offline
                 )
             } else {
@@ -97,6 +124,8 @@ class SoundPagingSource<T : Any>(
                 prevKey = if (page == 1) null else page - 1,
                 nextKey = if (result.hasMore) page + 1 else null,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LoadResult.Error(e)
         }

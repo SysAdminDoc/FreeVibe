@@ -10,10 +10,12 @@ import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +27,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -33,9 +37,12 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.service.DailyWallpaperWorker
+import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.VideoWallpaperService
 import com.freevibe.ui.LiveWallpaperLaunchMode
+import com.freevibe.ui.components.GlassCard
+import com.freevibe.ui.components.HighlightPill
 import com.freevibe.ui.launchLiveWallpaperPicker
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -78,6 +85,7 @@ fun SettingsScreen(
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsStateWithLifecycle()
     val freesoundApiKey by viewModel.freesoundApiKey.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
+    val videoWallpaperSelectionResult by viewModel.videoWallpaperSelectionResult.collectAsStateWithLifecycle()
     var dailyWp by remember {
         mutableStateOf(
             context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
@@ -109,26 +117,7 @@ fun SettingsScreen(
     val videoPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            viewModel.setVideoWallpaperPath(it)
-            when (
-                launchLiveWallpaperPicker(
-                    context = context,
-                    serviceComponent = ComponentName(context, VideoWallpaperService::class.java),
-                    tag = "SettingsVideoWallpaper",
-                )
-            ) {
-                LiveWallpaperLaunchMode.DIRECT -> {
-                    Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
-                }
-                LiveWallpaperLaunchMode.CHOOSER -> {
-                    Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
-                }
-                null -> {
-                    Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
+        uri?.let { viewModel.prepareVideoWallpaperFromUri(it) }
     }
     // Gallery picker for parallax-from-user-photo (v6.1.0)
     val parallaxGalleryLauncher = rememberLauncherForActivityResult(
@@ -157,6 +146,35 @@ fun SettingsScreen(
             is com.freevibe.ui.screens.settings.ParallaxGalleryResult.Failure -> {
                 Toast.makeText(context, "Couldn't use that photo: ${result.message}", Toast.LENGTH_LONG).show()
                 viewModel.clearParallaxGalleryResult()
+            }
+            else -> Unit
+        }
+    }
+    LaunchedEffect(videoWallpaperSelectionResult) {
+        when (val result = videoWallpaperSelectionResult) {
+            VideoWallpaperSelectionResult.Ready -> {
+                when (
+                    launchLiveWallpaperPicker(
+                        context = context,
+                        serviceComponent = ComponentName(context, VideoWallpaperService::class.java),
+                        tag = "SettingsVideoWallpaper",
+                    )
+                ) {
+                    LiveWallpaperLaunchMode.DIRECT -> {
+                        Toast.makeText(context, "Aura Video Wallpaper opened. Set wallpaper to finish.", Toast.LENGTH_LONG).show()
+                    }
+                    LiveWallpaperLaunchMode.CHOOSER -> {
+                        Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
+                    }
+                    null -> {
+                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                    }
+                }
+                viewModel.clearVideoWallpaperSelectionResult()
+            }
+            is VideoWallpaperSelectionResult.Failure -> {
+                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                viewModel.clearVideoWallpaperSelectionResult()
             }
             else -> Unit
         }
@@ -192,19 +210,58 @@ fun SettingsScreen(
     var showStylePicker by remember { mutableStateOf(false) }
     var showYtSoundEditor by remember { mutableStateOf(false) }
     var showYtBlockedEditor by remember { mutableStateOf(false) }
+    val selectedStyleCount = remember(userStyles) { countSelectedStyles(userStyles) }
+    val configuredApiKeys = remember(
+        wallhavenApiKey,
+        pexelsApiKey,
+        pixabayApiKey,
+        freesoundApiKey,
+    ) {
+        listOf(wallhavenApiKey, pexelsApiKey, pixabayApiKey, freesoundApiKey).count { it.isNotBlank() }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                    ),
+                ),
+            )
             .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         TopAppBar(
-            title = { Text("Settings") },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.fillMaxWidth(),
+            title = { Text("Settings", style = MaterialTheme.typography.headlineSmall) },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+        )
+
+        SettingsOverviewCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 760.dp)
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            selectedStyleCount = selectedStyleCount,
+            schedulerEnabled = schedulerEnabled,
+            schedulerInterval = schedulerInterval,
+            weatherEffects = weatherEffects,
+            adaptiveTint = adaptiveTint,
+            autoPreview = autoPreview,
+            videoFpsLimit = videoFpsLimit,
+            cacheUsage = cacheUsage,
+            configuredApiKeys = configuredApiKeys,
         )
 
         // Wallpapers
-        SettingsSection("Wallpapers") {
+        SettingsSection(
+            title = "Wallpapers",
+            description = "Tune discovery quality, density, and the overall look of your feed.",
+        ) {
             SettingsToggle(
                 icon = Icons.Default.AutoAwesome,
                 title = "Auto-change wallpaper",
@@ -237,14 +294,20 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.VideoFile,
                 title = "Video wallpaper",
-                subtitle = "Set a video or GIF as live wallpaper",
+                subtitle = "Set a local video clip as live wallpaper",
                 onClick = { videoPickerLauncher.launch("video/*") },
             )
             SettingsItem(
                 icon = Icons.Default.Gif,
                 title = "GIF wallpaper",
-                subtitle = "Set an animated GIF as live wallpaper",
-                onClick = { videoPickerLauncher.launch("image/gif") },
+                subtitle = "Animated GIF import is not supported yet",
+                onClick = {
+                    Toast.makeText(
+                        context,
+                        "Animated GIF wallpapers are not supported yet. Pick a video clip instead.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
             )
             // v6.1.0 — parallax from user photo
             SettingsItem(
@@ -301,7 +364,10 @@ fun SettingsScreen(
         }
 
         // Wallpaper Scheduler
-        SettingsSection("Wallpaper Scheduler") {
+        SettingsSection(
+            title = "Wallpaper Scheduler",
+            description = "Automate rotation across sources, collections, and screen targets.",
+        ) {
             var showSchedulerInterval by remember { mutableStateOf(false) }
             var showSchedulerSource by remember { mutableStateOf(false) }
 
@@ -473,7 +539,10 @@ fun SettingsScreen(
         }
 
         // Smart Features
-        SettingsSection("Smart Features") {
+        SettingsSection(
+            title = "Smart Features",
+            description = "Ambient enhancements that make Aura feel more adaptive and alive.",
+        ) {
             SettingsToggle(
                 icon = Icons.Default.Today,
                 title = "Daily wallpaper",
@@ -563,27 +632,56 @@ fun SettingsScreen(
         }
 
         // Sound settings
-        SettingsSection("Sounds") {
+        SettingsSection(
+            title = "Sounds",
+            description = "Control previews, search quality, and how results are filtered before playback.",
+        ) {
             SettingsToggle(
                 icon = Icons.Default.PlayCircle,
                 title = "Auto-preview sounds",
-                subtitle = "Play sound when opening detail",
+                subtitle = if (autoPreview) "Starts playback when you open sound details" else "Open sound details without autoplay",
                 checked = autoPreview,
                 onCheckedChange = { viewModel.setAutoPreview(it) },
             )
             // Preview volume slider
-            Surface(color = MaterialTheme.colorScheme.surface) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                ),
+                shadowElevation = 2.dp,
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 6.dp),
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    @Suppress("DEPRECATION")
-                    Icon(Icons.Default.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                    ) {
+                        @Suppress("DEPRECATION")
+                        Icon(
+                            Icons.Default.VolumeUp,
+                            null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier
+                                .padding(10.dp)
+                                .size(20.dp),
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Preview volume", style = MaterialTheme.typography.bodyLarge)
+                        Text("Preview volume", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Choose how assertive previews should feel while browsing sounds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Slider(
                             value = previewVolume,
                             onValueChange = { viewModel.setPreviewVolume(it) },
@@ -601,30 +699,33 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.SmartDisplay,
                 title = "YouTube search queries",
-                subtitle = "Customize what YouTube searches for per tab",
+                subtitle = "Refine ringtone, notification, and alarm searches for each tab",
                 onClick = { showYtSoundEditor = true },
             )
             SettingsItem(
                 icon = Icons.Default.Block,
                 title = "Blocked words",
-                subtitle = "${ytBlockedWords.split(",").size} words filtered from results",
+                subtitle = "${ytBlockedWords.split(",").count { it.isNotBlank() }} words filtered from YouTube results",
                 onClick = { showYtBlockedEditor = true },
             )
             SettingsItem(
                 icon = Icons.Default.LibraryMusic,
                 title = "Sound sources",
-                subtitle = "YouTube, Freesound, Openverse, Audius, ccMixter, SoundCloud, community uploads",
+                subtitle = "Review the providers Aura uses for search, downloads, and attributions",
                 onClick = onLicensesClick,
             )
         }
 
         // Video Wallpapers
-        SettingsSection("Video Wallpapers") {
+        SettingsSection(
+            title = "Video Wallpapers",
+            description = "Keep motion smooth without spending battery on unnecessary frames.",
+        ) {
             var showFpsPicker by remember { mutableStateOf(false) }
             SettingsItem(
                 icon = Icons.Default.Speed,
                 title = "FPS limit",
-                subtitle = "Controls battery usage for video wallpapers",
+                subtitle = "$videoFpsLimit FPS • balance smooth motion against battery use",
                 onClick = { showFpsPicker = true },
             )
             if (showFpsPicker) {
@@ -651,7 +752,10 @@ fun SettingsScreen(
         }
 
         // API Keys
-        SettingsSection("API Keys") {
+        SettingsSection(
+            title = "API Keys",
+            description = "Optional provider credentials unlock higher limits, richer search, and advanced filters.",
+        ) {
             var showWallhavenKey by remember { mutableStateOf(false) }
             SettingsItem(
                 icon = Icons.Default.Key,
@@ -790,33 +894,39 @@ fun SettingsScreen(
         }
 
         // Storage
-        SettingsSection("Storage") {
+        SettingsSection(
+            title = "Storage",
+            description = "Keep downloads accessible while trimming temporary media and cached feeds when needed.",
+        ) {
             SettingsItem(
                 icon = Icons.Default.Download,
-                title = "Download history",
-                subtitle = "View and manage downloaded content",
+                title = "Downloads",
+                subtitle = "Review wallpapers, sounds, and videos saved by Aura",
                 onClick = onDownloadsClick,
             )
             SettingsItem(
                 icon = Icons.Default.Folder,
-                title = "Clear cache and offline saves",
+                title = "Free up storage",
                 subtitle = cacheUsageSubtitle(cacheUsage),
                 onClick = { showClearCacheConfirm = true },
             )
         }
 
         // About
-        SettingsSection("About") {
+        SettingsSection(
+            title = "About",
+            description = "Project details, source code, and the open-source building blocks behind Aura.",
+        ) {
             SettingsItem(
                 icon = Icons.Default.Info,
                 title = "Aura",
-                subtitle = "v${com.freevibe.BuildConfig.VERSION_NAME} - Open source device personalization",
+                subtitle = "Version ${com.freevibe.BuildConfig.VERSION_NAME} • Open-source device personalization studio",
                 onClick = {},
             )
             SettingsItem(
                 icon = Icons.Default.Code,
                 title = "Source code",
-                subtitle = "github.com/SysAdminDoc/Aura",
+                subtitle = "Browse the project on GitHub",
                 onClick = {
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SysAdminDoc/Aura")))
@@ -826,7 +936,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.Description,
                 title = "Open source licenses",
-                subtitle = "Libraries and content source attributions",
+                subtitle = "See library licenses and content-source attributions",
                 onClick = onLicensesClick,
             )
         }
@@ -1146,16 +1256,167 @@ private fun IntervalPickerDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.padding(top = 16.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+private fun SettingsOverviewCard(
+    modifier: Modifier = Modifier,
+    selectedStyleCount: Int,
+    schedulerEnabled: Boolean,
+    schedulerInterval: Long,
+    weatherEffects: Boolean,
+    adaptiveTint: Boolean,
+    autoPreview: Boolean,
+    videoFpsLimit: Int,
+    cacheUsage: CacheUsageState,
+    configuredApiKeys: Int,
+) {
+    val setupSummary = remember(
+        selectedStyleCount,
+        schedulerEnabled,
+        schedulerInterval,
+        weatherEffects,
+        adaptiveTint,
+        autoPreview,
+    ) {
+        buildList {
+            if (selectedStyleCount > 0) add("$selectedStyleCount style preferences")
+            if (schedulerEnabled) add("rotation every ${formatInterval(schedulerInterval)}")
+            if (weatherEffects) add("weather overlays")
+            if (adaptiveTint) add("time-of-day tint")
+            if (autoPreview) add("sound previews")
+        }.joinToString(" • ").ifBlank {
+            "Aura is set up with calm defaults. Adjust discovery, automation, and playback here whenever you want."
+        }
+    }
+
+    GlassCard(modifier = modifier) {
+        HighlightPill(
+            label = "Personalization overview",
+            icon = Icons.Default.Tune,
+            tint = MaterialTheme.colorScheme.secondary,
         )
-        content()
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "Make Aura feel intentional",
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = setupSummary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(18.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HighlightPill(
+                label = if (selectedStyleCount == 0) "No style bias yet" else "$selectedStyleCount styles selected",
+                icon = Icons.Default.Wallpaper,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            HighlightPill(
+                label = if (schedulerEnabled) "Rotation on" else "Rotation off",
+                icon = Icons.Default.Schedule,
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+            HighlightPill(
+                label = "$videoFpsLimit FPS video",
+                icon = Icons.Default.VideoLibrary,
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            HighlightPill(
+                label = "$configuredApiKeys provider keys",
+                icon = Icons.Default.Key,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SettingsMetric(
+                modifier = Modifier.weight(1f),
+                label = "Automation",
+                value = if (schedulerEnabled) formatInterval(schedulerInterval) else "Manual",
+                icon = Icons.Default.Schedule,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            SettingsMetric(
+                modifier = Modifier.weight(1f),
+                label = "Storage",
+                value = cacheUsage.fileUsageLabel,
+                icon = Icons.Default.Folder,
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsMetric(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = tint.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(20.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = tint.copy(alpha = 0.14f),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(16.dp),
+                )
+            }
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    description: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 760.dp)
+            .padding(top = 26.dp, start = 20.dp, end = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 
@@ -1166,19 +1427,46 @@ private fun SettingsItem(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        ),
+        shadowElevation = 2.dp,
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+            ) {
+                Icon(
+                    icon,
+                    null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(20.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(2.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            )
         }
     }
 }
@@ -1191,17 +1479,44 @@ private fun SettingsToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Surface(onClick = { onCheckedChange(!checked) }, color = MaterialTheme.colorScheme.surface) {
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        ),
+        shadowElevation = 2.dp,
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 10.dp),
+                .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (checked) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
+                },
+            ) {
+                Icon(
+                    icon,
+                    null,
+                    tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(20.dp),
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(2.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(
@@ -1212,6 +1527,9 @@ private fun SettingsToggle(
         }
     }
 }
+
+private fun countSelectedStyles(raw: String): Int =
+    raw.split(",").count { it.trim().isNotBlank() }
 
 private fun userStylesSummary(raw: String): String {
     val styles = raw.split(",")

@@ -1,6 +1,5 @@
 package com.freevibe.ui.screens.settings
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.local.PreferencesManager
@@ -9,6 +8,8 @@ import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.VideoWallpaperSelectionResult
+import com.freevibe.service.VideoWallpaperStorage
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,12 +40,16 @@ class SettingsViewModel @Inject constructor(
     private val wallpaperCacheManager: WallpaperCacheManager,
     private val collectionRepo: CollectionRepository,
     private val wallpaperApplier: WallpaperApplier,
+    private val videoWallpaperStorage: VideoWallpaperStorage,
 ) : ViewModel() {
 
     private val _parallaxGalleryResult = MutableStateFlow<ParallaxGalleryResult?>(null)
     val parallaxGalleryResult: StateFlow<ParallaxGalleryResult?> = _parallaxGalleryResult.asStateFlow()
+    private val _videoWallpaperSelectionResult = MutableStateFlow<VideoWallpaperSelectionResult?>(null)
+    val videoWallpaperSelectionResult: StateFlow<VideoWallpaperSelectionResult?> = _videoWallpaperSelectionResult.asStateFlow()
 
     fun clearParallaxGalleryResult() { _parallaxGalleryResult.value = null }
+    fun clearVideoWallpaperSelectionResult() { _videoWallpaperSelectionResult.value = null }
 
     /**
      * Turn the user's gallery photo into a parallax live wallpaper. The caller (Settings
@@ -58,6 +63,15 @@ class SettingsViewModel @Inject constructor(
         _parallaxGalleryResult.value = result.fold(
             onSuccess = { ParallaxGalleryResult.Ready },
             onFailure = { ParallaxGalleryResult.Failure(it.message ?: "Could not prepare photo") },
+        )
+    }
+
+    fun prepareVideoWallpaperFromUri(uri: android.net.Uri) = viewModelScope.launch {
+        _videoWallpaperSelectionResult.value = VideoWallpaperSelectionResult.Preparing
+        val result = videoWallpaperStorage.prepareFromUri(uri)
+        _videoWallpaperSelectionResult.value = result.fold(
+            onSuccess = { VideoWallpaperSelectionResult.Ready },
+            onFailure = { VideoWallpaperSelectionResult.Failure(it.message ?: "Could not prepare video") },
         )
     }
 
@@ -211,21 +225,6 @@ class SettingsViewModel @Inject constructor(
     fun setWeatherEffects(enabled: Boolean) = viewModelScope.launch { prefs.setWeatherEffectsEnabled(enabled) }
     fun setAdaptiveTint(enabled: Boolean) = viewModelScope.launch { prefs.setAdaptiveTintEnabled(enabled) }
     fun setDarkModeSwitch(enabled: Boolean) = viewModelScope.launch { prefs.setDarkModeAutoSwitch(enabled) }
-
-    fun setVideoWallpaperPath(uri: Uri) {
-        val path = try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-                ?: return
-            val cacheFile = java.io.File(context.filesDir, "live_wallpaper.mp4")
-            inputStream.use { input ->
-                cacheFile.outputStream().use { output -> input.copyTo(output) }
-            }
-            cacheFile.absolutePath
-        } catch (_: Exception) { null } ?: return
-
-        context.getSharedPreferences("freevibe_live_wp", android.content.Context.MODE_PRIVATE)
-            .edit().putString("video_path", path).apply()
-    }
 
     fun clearCache() = viewModelScope.launch {
         withContext(Dispatchers.IO) {
