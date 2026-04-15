@@ -658,7 +658,10 @@ class SoundsViewModel @Inject constructor(
                 tab = SoundTab.SEARCH,
                 filter = SoundQualityFilter.BEST,
             ).take(10)
-        } catch (_: Exception) { emptyList() }
+        } catch (e: Exception) {
+            e.rethrowIfCancelled()
+            emptyList()
+        }
     }
 
     fun normalizeAudio(inputPath: String, onResult: (Result<String>) -> Unit) {
@@ -675,18 +678,26 @@ class SoundsViewModel @Inject constructor(
     fun upvote(id: String) {
         viewModelScope.launch {
             try { voteRepo.upvote(id) }
-            catch (e: Exception) { _state.update { it.copy(error = e.message ?: "Failed to upvote") } }
+            catch (e: Exception) {
+                e.rethrowIfCancelled()
+                _state.update { it.copy(error = e.message ?: "Failed to upvote") }
+            }
         }
     }
     fun downvote(id: String) {
         viewModelScope.launch {
             try { voteRepo.downvote(id) }
-            catch (e: Exception) { _state.update { it.copy(error = e.message ?: "Failed to downvote") } }
+            catch (e: Exception) {
+                e.rethrowIfCancelled()
+                _state.update { it.copy(error = e.message ?: "Failed to downvote") }
+            }
         }
     }
 
     override fun onCleared() {
-        loadJob?.cancel(); progressJob?.cancel(); communityJob?.cancel()
+        loadJob?.cancel()
+        progressJob?.cancel()
+        communityJob?.cancel()
         audioPlaybackManager.stop()
         super.onCleared()
     }

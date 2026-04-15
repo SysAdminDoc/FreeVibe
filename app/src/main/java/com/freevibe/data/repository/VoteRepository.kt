@@ -155,7 +155,10 @@ class VoteRepository @Inject constructor(
                     votesRef?.child(safeId)?.child("voters")?.child(voterId)?.get()?.await()?.exists() == true ||
                         votersRef?.child(safeId)?.child(voterId)?.get()?.await()?.exists() == true
                 }
-        } catch (_: Exception) { false }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            false
+        }
     }
 
     suspend fun upvote(contentId: String): Boolean {
@@ -243,7 +246,9 @@ class VoteRepository @Inject constructor(
         val safeId = sanitizeKey(contentId)
         try {
             moderationRefInstance.child(safeId).removeValue().await()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+        }
     }
 
     /** Unhide locally */

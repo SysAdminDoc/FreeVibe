@@ -50,7 +50,10 @@ class ColorExtractor @Inject constructor(
                     ?: return@withContext null
                 extractFromBitmap(bitmap).also { bitmap.recycle() }
             }
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
     }
 
     /** Extract color palette from a bitmap */

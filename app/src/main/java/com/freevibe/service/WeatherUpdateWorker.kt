@@ -47,7 +47,8 @@ class WeatherUpdateWorker @AssistedInject constructor(
             Result.success()
         } catch (_: java.io.IOException) {
             Result.retry()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Result.failure()
         }
     }

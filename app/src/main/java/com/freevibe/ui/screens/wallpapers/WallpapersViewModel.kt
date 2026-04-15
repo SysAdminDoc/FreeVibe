@@ -151,6 +151,7 @@ class WallpapersViewModel @Inject constructor(
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.d("WallpapersVM", "Final top voted: ${sorted.size} wallpapers, top=${sorted.firstOrNull()?.let { "${it.first.id}=${it.second}" }}")
                 _topVoted.value = sorted
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("WallpapersVM", "fetchTopVoted failed: ${e.message}", e)
             }
         }
@@ -160,8 +161,16 @@ class WallpapersViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _dailyPick.value = withTimeoutOrNull(5000L) { redditRepo.getDailyTopWallpaper() }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
+    }
+
+    override fun onCleared() {
+        loadJob?.cancel()
+        colorExtractionJob?.cancel()
+        super.onCleared()
     }
 
     fun handleRouteFilters(
@@ -755,7 +764,8 @@ class WallpapersViewModel @Inject constructor(
                     "424153" // Fallback: Catppuccin lavender-ish
                 }
                 searchByColor(hex)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 searchByColor("424153")
             }
         }
