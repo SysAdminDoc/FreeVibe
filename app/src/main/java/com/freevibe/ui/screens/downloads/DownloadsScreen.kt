@@ -40,10 +40,12 @@ fun DownloadsScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val displayList = when (selectedTab) {
-        1 -> allDownloads.filter { it.type == "WALLPAPER" }
-        2 -> allDownloads.filter { it.type == "SOUND" }
-        else -> allDownloads
+    val displayList = remember(allDownloads, selectedTab) {
+        when (selectedTab) {
+            1 -> allDownloads.filter { it.type == "WALLPAPER" }
+            2 -> allDownloads.filter { it.type == "SOUND" }
+            else -> allDownloads
+        }
     }
 
     Scaffold(
@@ -143,7 +145,7 @@ private fun ActiveDownloadCard(dl: DownloadProgress, onDismiss: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Text(dl.fileName, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (dl.isComplete || dl.error != null) {
-                    IconButton(onClick = onDismiss, Modifier.size(20.dp)) { Icon(Icons.Default.Close, null, Modifier.size(14.dp)) }
+                    IconButton(onClick = onDismiss, Modifier.size(36.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(16.dp)) }
                 }
             }
             if (!dl.isComplete && dl.error == null) {
@@ -193,7 +195,7 @@ private fun DownloadHistoryCard(
                     )
                 }
             }
-            IconButton(onClick = onDelete, Modifier.size(28.dp)) {
+            IconButton(onClick = onDelete, Modifier.size(36.dp)) {
                 Icon(Icons.Default.Delete, "Delete", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
             }
         }

@@ -74,8 +74,8 @@ fun CategoriesScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             itemsIndexed(categories, key = { _, cat -> cat.id }) { index, cat ->
-                val animatable = remember { Animatable(0f) }
-                LaunchedEffect(Unit) {
+                val animatable = remember(cat.id) { Animatable(0f) }
+                LaunchedEffect(cat.id) {
                     animatable.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(durationMillis = 350, delayMillis = index * 40),

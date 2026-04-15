@@ -157,6 +157,7 @@ class WallpaperEditorViewModel @Inject constructor(
                 setSourceBitmap(bitmap)
                 _state.update { it.copy(isLoadingImage = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoadingImage = false, error = e.message ?: "Failed to load image") }
             }
         }

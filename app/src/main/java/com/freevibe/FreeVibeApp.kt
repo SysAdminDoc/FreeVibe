@@ -82,9 +82,9 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
             try {
                 com.yausername.youtubedl_android.YoutubeDL.getInstance().init(this@FreeVibeApp)
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(this@FreeVibeApp)
-                Log.d("AuraApp", "yt-dlp + FFmpeg initialized")
+                if (BuildConfig.DEBUG) Log.d("AuraApp", "yt-dlp + FFmpeg initialized")
             } catch (e: Throwable) {
-                Log.e("AuraApp", "yt-dlp init failed: ${e.message}")
+                if (BuildConfig.DEBUG) Log.e("AuraApp", "yt-dlp init failed: ${e.message}")
             }
         }
     }
@@ -135,7 +135,7 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
                 wallpaperCacheManager.evictExpired()
                 offlineFavoritesManager.pruneOrphans()
             } catch (e: Exception) {
-                Log.w("FreeVibeApp", "Cache eviction failed", e)
+                if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "Cache eviction failed", e)
             }
         }
     }

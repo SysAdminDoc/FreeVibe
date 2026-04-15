@@ -166,6 +166,7 @@ class SoundEditorViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = "Failed to load: ${e.message}") }
             }
         }
@@ -210,6 +211,7 @@ class SoundEditorViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = "Failed to load file: ${e.message}") }
             }
         }
@@ -285,6 +287,7 @@ class SoundEditorViewModel @Inject constructor(
                         _state.update { it.copy(isApplying = false, error = e.message) }
                     }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isApplying = false, error = e.message) }
             }
         }

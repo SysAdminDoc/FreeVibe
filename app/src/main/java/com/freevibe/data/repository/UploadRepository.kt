@@ -24,6 +24,8 @@ import javax.inject.Singleton
 
 private val UPLOAD_NAME_SANITIZE_REGEX = Regex("[^a-zA-Z0-9_\\- ]")
 private val UPLOAD_TAG_SANITIZE_REGEX = Regex("[^a-z0-9_\\- ]")
+private val WHITESPACE_REGEX = Regex("\\s+")
+private val STORAGE_SEGMENT_SANITIZE_REGEX = Regex("[^a-zA-Z0-9_-]")
 private val ALLOWED_UPLOAD_AUDIO_MIMES = setOf(
     "audio/mpeg",
     "audio/mp3",
@@ -300,7 +302,7 @@ internal fun sanitizeUploadTags(tags: List<String>): List<String> =
             tag.trim()
                 .lowercase(java.util.Locale.ROOT)
                 .replace(UPLOAD_TAG_SANITIZE_REGEX, "")
-                .replace(Regex("\\s+"), " ")
+                .replace(WHITESPACE_REGEX, " ")
         }
         .filter { it.length in 2..MAX_UPLOAD_TAG_LENGTH }
         .distinct()
@@ -312,7 +314,7 @@ internal fun isSupportedAudioUploadMime(mimeType: String): Boolean =
 
 internal fun sanitizeUploadStorageSegment(segment: String): String =
     segment.trim()
-        .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        .replace(STORAGE_SEGMENT_SANITIZE_REGEX, "_")
         .trim('_')
         .ifBlank { "user" }
 

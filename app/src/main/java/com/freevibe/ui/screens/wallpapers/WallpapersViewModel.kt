@@ -759,7 +759,7 @@ class WallpapersViewModel @Inject constructor(
                 val color = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
                 val hex = if (color) {
                     val accent = context.getColor(android.R.color.system_accent1_500)
-                    String.format("%06x", accent and 0xFFFFFF)
+                    String.format(java.util.Locale.ROOT, "%06x", accent and 0xFFFFFF)
                 } else {
                     "424153" // Fallback: Catppuccin lavender-ish
                 }
