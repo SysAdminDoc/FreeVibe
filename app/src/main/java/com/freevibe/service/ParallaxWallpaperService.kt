@@ -1,7 +1,6 @@
 package com.freevibe.service
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
@@ -55,6 +54,8 @@ class ParallaxWallpaperService : WallpaperService() {
 
         private val handler = Handler(Looper.getMainLooper())
         private var visible = false
+        @Volatile private var destroyed = false
+        private var segmentGeneration = 0L
         private val frameInterval = 33L // ~30 FPS
         private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
@@ -110,6 +111,7 @@ class ParallaxWallpaperService : WallpaperService() {
 
         override fun onDestroy() {
             super.onDestroy()
+            destroyed = true
             handler.removeCallbacks(drawRunner)
             unregisterSensor()
             activeSegmenter?.close()
@@ -153,8 +155,11 @@ class ParallaxWallpaperService : WallpaperService() {
                 try {
                     val file = java.io.File(path)
                     if (!file.exists()) return@Thread
-                    val bmp = BitmapFactory.decodeFile(path) ?: return@Thread
+                    val (targetWidth, targetHeight) = resolveDecodeTarget()
+                    val bmp = BitmapSampling.decodeSampledBitmap(path, targetWidth, targetHeight)
+                        ?: return@Thread
                     handler.post {
+                        if (destroyed) { bmp.recycle(); return@post }
                         synchronized(bitmapLock) {
                             originalBitmap?.recycle()
                             originalBitmap = bmp
@@ -169,8 +174,15 @@ class ParallaxWallpaperService : WallpaperService() {
             }.start()
         }
 
+        private fun resolveDecodeTarget(): Pair<Int, Int> {
+            val padding = (maxOffset * 2).toInt()
+            val width = if (screenWidth > 0) screenWidth else resources.displayMetrics.widthPixels
+            val height = if (screenHeight > 0) screenHeight else resources.displayMetrics.heightPixels
+            return (width + padding).coerceAtLeast(1) to (height + padding).coerceAtLeast(1)
+        }
+
         private fun scaleAndSegment(source: Bitmap) {
-            if (screenWidth <= 0 || screenHeight <= 0) return
+            if (destroyed || screenWidth <= 0 || screenHeight <= 0 || source.isRecycled) return
 
             // Scale with extra padding for parallax movement (add maxOffset on each side)
             val padded = scaleBitmapCenterCrop(
@@ -178,16 +190,18 @@ class ParallaxWallpaperService : WallpaperService() {
                 screenWidth + (maxOffset * 2).toInt(),
                 screenHeight + (maxOffset * 2).toInt(),
             )
-            synchronized(bitmapLock) {
+            val generation = synchronized(bitmapLock) {
                 fallbackBitmap?.recycle()
                 fallbackBitmap = padded
+                segmentGeneration += 1
+                segmentGeneration
             }
 
             // Attempt ML Kit segmentation
-            segmentImage(padded)
+            segmentImage(padded, generation)
         }
 
-        private fun segmentImage(bitmap: Bitmap) {
+        private fun segmentImage(bitmap: Bitmap, generation: Long) {
             try {
                 activeSegmenter?.close()
                 val options = SelfieSegmenterOptions.Builder()
@@ -200,6 +214,7 @@ class ParallaxWallpaperService : WallpaperService() {
                 segmenter.process(inputImage)
                     .addOnSuccessListener { mask ->
                         segmenter.close()
+                        if (destroyed || bitmap.isRecycled) return@addOnSuccessListener
                         try {
                             // Extract pixels under lock to prevent race with recycleBitmaps()
                             val pixels: IntArray
@@ -247,6 +262,11 @@ class ParallaxWallpaperService : WallpaperService() {
                             fgBitmap.setPixels(fgPixels, 0, bmpW, 0, 0, bmpW, bmpH)
 
                             synchronized(bitmapLock) {
+                                if (generation != segmentGeneration) {
+                                    fgBitmap.recycle()
+                                    bgBitmap?.recycle()
+                                    return@addOnSuccessListener
+                                }
                                 val oldFg = foregroundLayer
                                 val oldBg = backgroundLayer
                                 foregroundLayer = fgBitmap
@@ -267,8 +287,10 @@ class ParallaxWallpaperService : WallpaperService() {
                     }
                     .addOnFailureListener { e ->
                         segmenter.close()
+                        if (destroyed) return@addOnFailureListener
                         if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "Segmentation failed, using fallback: ${e.message}")
                         synchronized(bitmapLock) {
+                            if (generation != segmentGeneration) return@addOnFailureListener
                             val oldBg = backgroundLayer
                             val oldFg = foregroundLayer
                             backgroundLayer = null

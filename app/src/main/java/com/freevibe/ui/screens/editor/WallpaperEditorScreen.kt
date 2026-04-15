@@ -164,8 +164,9 @@ fun WallpaperEditorScreen(
                         }
                     }
                     state.editedBitmap != null -> {
+                        val editedBitmap = state.editedBitmap ?: return@Box
                         Image(
-                            bitmap = state.editedBitmap!!.asImageBitmap(),
+                            bitmap = editedBitmap.asImageBitmap(),
                             contentDescription = "Edited wallpaper",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize(),

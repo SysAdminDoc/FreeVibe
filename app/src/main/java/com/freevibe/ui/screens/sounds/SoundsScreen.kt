@@ -93,13 +93,14 @@ fun SoundsScreen(
     ) { uri -> if (uri != null) { selectedAudioUri = uri; showUploadDialog = true } }
 
     // Upload dialog
-    if (showUploadDialog && selectedAudioUri != null) {
+    val uploadUri = selectedAudioUri
+    if (showUploadDialog && uploadUri != null) {
         UploadDialog(
             isUploading = state.isUploading,
             uploadProgress = state.uploadProgress,
             onUpload = { name, category ->
                 awaitingUploadResult = true
-                viewModel.uploadSound(selectedAudioUri!!, name, category)
+                viewModel.uploadSound(uploadUri, name, category)
             },
             onDismiss = {
                 if (!state.isUploading) {
@@ -121,9 +122,10 @@ fun SoundsScreen(
     }
 
     // Quick Apply bottom sheet
-    if (quickApplySound != null) {
+    val currentQuickApplySound = quickApplySound
+    if (currentQuickApplySound != null) {
         QuickApplySheet(
-            sound = quickApplySound!!,
+            sound = currentQuickApplySound,
             canApply = viewModel.canWriteSettings(),
             isApplying = state.isApplying,
             onApply = { sound, type -> viewModel.applySound(sound, type); quickApplySound = null },

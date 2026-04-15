@@ -2,24 +2,22 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- Wave shape 1 -->
-    <path
-        android:fillColor="#7C5CFC"
-        android:pathData="M20,54 C20,35 35,28 54,28 C73,28 88,35 88,54 C88,73 73,80 54,80 C35,80 20,73 20,54Z" />
-
-    <!-- Wave shape 2 (inner glow) -->
-    <path
-        android:fillColor="#9B7DFF"
-        android:pathData="M30,54 C30,41 41,34 54,34 C67,34 78,41 78,54 C78,67 67,74 54,74 C41,74 30,67 30,54Z" />
-
-    <!-- Sound wave bars -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,48 L42,60 M48,44 L48,64 M54,40 L54,68 M60,44 L60,64 M66,48 L66,60"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
-        android:strokeLineCap="round" />
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:rotation="-18" android:pivotX="256" android:pivotY="256"
+        android:scaleX="0.38" android:scaleY="0.38"
+        android:translateX="74"
+        android:translateY="-64"
+        android:alpha="0.88">
+    <path android:pathData="M178 142 H334 V372 L256 326 L178 372 Z" android:fillColor="@android:color/transparent" android:strokeColor="#58A6FF" android:strokeWidth="22" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M214 222 H298" android:fillColor="@android:color/transparent" android:strokeColor="#4ADE80" android:strokeWidth="18" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M214 266 H286" android:fillColor="@android:color/transparent" android:strokeColor="#4ADE80" android:strokeWidth="18" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+    <group
+        android:rotation="4" android:pivotX="256" android:pivotY="256"
+        android:scaleX="0.82" android:scaleY="0.82">
+    <path android:pathData="M316 126 L386 196 L238 344 L168 274 Z" android:fillColor="@android:color/transparent" android:strokeColor="#58A6FF" android:strokeWidth="22" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M160 348 C146 362 146 392 168 414 C190 436 220 436 234 422 L284 372 L210 298 Z" android:fillColor="@android:color/transparent" android:strokeColor="#4ADE80" android:strokeWidth="20" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
 </vector>

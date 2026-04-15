@@ -217,23 +217,23 @@ fun WallpaperCropScreen(
                     FilterChip(
                         selected = false,
                         onClick = {
-                            if (ratio != null && state.bitmap != null && viewportSize != IntSize.Zero) {
-                                val bmp = state.bitmap!!
+                            val bitmap = state.bitmap
+                            if (ratio != null && bitmap != null && viewportSize != IntSize.Zero) {
                                 val vpW = viewportSize.width.toFloat()
                                 val vpH = viewportSize.height.toFloat()
                                 val vpRatio = vpW / vpH
                                 // Scale so the target aspect ratio fills the viewport
-                                val fitScale = if (bmp.width.toFloat() / bmp.height > vpRatio) {
-                                    vpH / bmp.height // image wider than viewport → fit height
+                                val fitScale = if (bitmap.width.toFloat() / bitmap.height > vpRatio) {
+                                    vpH / bitmap.height // image wider than viewport → fit height
                                 } else {
-                                    vpW / bmp.width // image taller → fit width
+                                    vpW / bitmap.width // image taller → fit width
                                 }
                                 val targetScale = if (ratio < vpRatio) {
                                     // Target is taller than viewport: need to show less width → zoom in
-                                    (vpW / ratio) / (bmp.height * fitScale)
+                                    (vpW / ratio) / (bitmap.height * fitScale)
                                 } else {
                                     // Target is wider: need to show less height → zoom in
-                                    (vpH * ratio) / (bmp.width * fitScale)
+                                    (vpH * ratio) / (bitmap.width * fitScale)
                                 }
                                 scale = targetScale.coerceIn(0.5f, 5f)
                                 offsetX = 0f
