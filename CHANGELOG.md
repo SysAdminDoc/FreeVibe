@@ -4,6 +4,7 @@ All notable changes to Aura will be documented in this file.
 
 ## [v5.26.0] - %Y->- (HEAD -> main, origin/main, origin/HEAD)
 
+- v6.5.1 — restore original Aura adaptive vector app icon (reverts the PNG logo changes from v6.2.0)
 - v6.1.0 — video preview, adaptive widget tint, parallax from gallery, collection sharing
 - v6.0.0 — five new features: Undo, Widget preview, Bulk favorites, Preview mode, Collection rotation
 - v5.26.0 — ModifierParameter lint cleanup, CLAUDE.md update
