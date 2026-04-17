@@ -174,7 +174,9 @@ class AutoWallpaperWorker @AssistedInject constructor(
     }
 }
 
-internal fun String.normalizeWallpaperRotationSource(): String = when (lowercase()) {
+internal fun String.normalizeWallpaperRotationSource(): String = when (lowercase(java.util.Locale.ROOT)) {
+    // Locale.ROOT: Turkish locale turns "i" into dotless 'ı', which would desync this
+    // comparison from the hardcoded keys used by the scheduler.
     "", "unsplash" -> "discover"
     else -> this
 }

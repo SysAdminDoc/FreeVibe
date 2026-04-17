@@ -14,7 +14,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val FFMPEG_TIMEOUT_SECONDS = 120L
+private const val FFMPEG_LOG_DRAIN_LIMIT_BYTES = 256 * 1024 // cap stderr-draining to 256 KB so a misbehaving FFmpeg can't OOM us
 private val SANITIZE_REGEX = Regex("[^a-zA-Z0-9_-]")
+
+/**
+ * Drain stdout/stderr from an FFmpeg process without buffering the full stream.
+ * FFmpeg with redirectErrorStream() can emit MBs of progress text per invocation; the
+ * previous `readText()` would store all of it in a String only to throw it away. We
+ * only need to keep the pipe flowing so the process doesn't block on a full pipe buffer.
+ */
+private fun java.io.InputStream.drainBounded(limit: Int = FFMPEG_LOG_DRAIN_LIMIT_BYTES) {
+    use { input ->
+        val buf = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val n = try { input.read(buf) } catch (_: Exception) { -1 }
+            if (n <= 0) break
+            total += n
+            // Keep reading (and discarding) once we pass the log-retention limit so the
+            // process pipe never blocks — we just stop counting.
+            if (total > Int.MAX_VALUE / 2) total = limit
+        }
+    }
+}
 
 @Singleton
 class AudioTrimmer @Inject constructor(
@@ -79,7 +101,7 @@ class AudioTrimmer @Inject constructor(
                     if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
                     val process = pb.start()
                     try {
-                        process.inputStream.bufferedReader().use { it.readText() }
+                        process.inputStream.drainBounded()
                         val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                         val exitCode = if (completed) process.exitValue() else {
                             process.destroyForcibly()
@@ -205,7 +227,7 @@ class AudioTrimmer @Inject constructor(
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
             try {
-                process.inputStream.bufferedReader().use { it.readText() }
+                process.inputStream.drainBounded()
                 val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 if (!completed) {
                     process.destroyForcibly()
@@ -258,7 +280,7 @@ class AudioTrimmer @Inject constructor(
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
             val exitCode = try {
-                process.inputStream.bufferedReader().use { it.readText() }
+                process.inputStream.drainBounded()
                 val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 if (!completed) {
                     process.destroyForcibly()
@@ -303,7 +325,7 @@ class AudioTrimmer @Inject constructor(
             if (ldLibPath.isNotEmpty()) pb.environment()["LD_LIBRARY_PATH"] = ldLibPath
             val process = pb.start()
             val exitCode = try {
-                process.inputStream.bufferedReader().use { it.readText() }
+                process.inputStream.drainBounded()
                 val completed = process.waitFor(FFMPEG_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
                 if (!completed) {
                     process.destroyForcibly()

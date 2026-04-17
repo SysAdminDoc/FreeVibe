@@ -89,8 +89,16 @@ class DualWallpaperService @Inject constructor(
         return response.use { resp ->
             if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
             val body = resp.body ?: throw IllegalStateException("Empty response body")
+            // Reject oversized payloads before allocating the byte[].
+            val advertised = body.contentLength()
+            if (advertised in 1..Long.MAX_VALUE && advertised > MAX_WALLPAPER_BYTES) {
+                throw java.io.IOException("Wallpaper too large: $advertised > $MAX_WALLPAPER_BYTES bytes")
+            }
             val bytes = body.bytes()
             if (bytes.isEmpty()) throw java.io.IOException("Empty response body")
+            if (bytes.size > MAX_WALLPAPER_BYTES) {
+                throw java.io.IOException("Wallpaper too large: ${bytes.size} > $MAX_WALLPAPER_BYTES bytes")
+            }
 
             // Two-pass decode: measure first, then subsample to avoid OOM on 4K+ images
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -109,5 +117,10 @@ class DualWallpaperService @Inject constructor(
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 ?: throw IllegalStateException("Failed to decode image")
         }
+    }
+
+    private companion object {
+        /** Mirrors WallpaperApplier's cap — pair wallpapers go through the same flow. */
+        private const val MAX_WALLPAPER_BYTES = 64L * 1024 * 1024
     }
 }

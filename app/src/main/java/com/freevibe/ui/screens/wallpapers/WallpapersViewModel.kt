@@ -659,6 +659,7 @@ class WallpapersViewModel @Inject constructor(
                     fetchTopVoted(result.items)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 // #5: Source-specific error handling
                 _state.update {
                     it.copy(
@@ -706,6 +707,7 @@ class WallpapersViewModel @Inject constructor(
                 }
                 _state.update { it.copy(wallpapers = results, isLoading = false, hasMore = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }

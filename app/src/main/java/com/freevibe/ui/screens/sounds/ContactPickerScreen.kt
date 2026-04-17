@@ -106,6 +106,7 @@ class ContactPickerViewModel @Inject constructor(
                     else current.copy(contacts = contacts, isLoading = false)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { current ->
                     if (current.query != query) current
                     else current.copy(isLoading = false, error = e.message)
@@ -304,7 +305,7 @@ fun ContactPickerScreen(
                                 val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                     data = android.net.Uri.fromParts("package", context.packageName, null)
                                 }
-                                context.startActivity(intent)
+                                try { context.startActivity(intent) } catch (_: Exception) {}
                             }) {
                                 Text("Open Settings")
                             }

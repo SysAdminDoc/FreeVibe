@@ -344,7 +344,10 @@ class OpenCurrentWallpaperAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val entry = try {
             getEntryPoint(context).wallpaperHistoryManager().mostRecent().first()
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -418,6 +421,7 @@ private suspend fun applyFromSource(context: Context, source: String, target: Wa
                 },
             )
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             withContext(Dispatchers.Main) { Toast.makeText(context, "Failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show() }
             false
         }
@@ -449,6 +453,7 @@ private suspend fun applyRandom(context: Context, target: WallpaperTarget): Bool
                 },
             )
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Shuffle failed: ${e.message?.take(50)}", Toast.LENGTH_SHORT).show()
             }

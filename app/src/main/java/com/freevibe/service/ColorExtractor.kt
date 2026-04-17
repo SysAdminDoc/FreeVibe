@@ -37,7 +37,15 @@ class ColorExtractor @Inject constructor(
             val response = okHttpClient.newCall(request).execute()
             response.use { resp ->
                 if (!resp.isSuccessful) return@use null
-                val bytes = resp.body?.bytes() ?: return@withContext null
+                val body = resp.body ?: return@withContext null
+                // Palette only needs a ~200x200 downsample; cap the buffered payload at 32 MB
+                // so a hostile redirect to a giant image can't explode heap just for tinting.
+                val advertised = body.contentLength()
+                if (advertised in 1..Long.MAX_VALUE && advertised > MAX_COLOR_EXTRACT_BYTES) {
+                    return@withContext null
+                }
+                val bytes = body.bytes()
+                if (bytes.size > MAX_COLOR_EXTRACT_BYTES) return@withContext null
                 // Decode at reduced size for faster palette extraction
                 val options = BitmapFactory.Options().apply {
                     inJustDecodeBounds = true
@@ -76,10 +84,17 @@ class ColorExtractor @Inject constructor(
         if (rawH > reqH || rawW > reqW) {
             val halfH = rawH / 2
             val halfW = rawW / 2
-            while (halfH / sample >= reqH && halfW / sample >= reqW) {
+            // Guard the multiply-by-2: a pathological image with dimensions near Integer.MAX_VALUE
+            // would otherwise overflow `sample` into negatives and break the sub-sampling math.
+            while (halfH / sample >= reqH && halfW / sample >= reqW && sample < (1 shl 28)) {
                 sample *= 2
             }
         }
         return sample
+    }
+
+    private companion object {
+        /** Palette extraction only downsamples to 200x200; 32 MB is plenty for 4K originals. */
+        private const val MAX_COLOR_EXTRACT_BYTES = 32L * 1024 * 1024
     }
 }

@@ -255,10 +255,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private fun formatBytes(bytes: Long): String = when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
-        bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-        else -> "%.1f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+    private fun formatBytes(bytes: Long): String {
+        // Use Locale.ROOT so the decimal separator is always '.' — displaying "1,5 MB" in
+        // German/French locales looks broken for a raw byte label.
+        val root = java.util.Locale.ROOT
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> String.format(root, "%.1f KB", bytes / 1024.0)
+            bytes < 1024L * 1024 * 1024 -> String.format(root, "%.1f MB", bytes / (1024.0 * 1024.0))
+            else -> String.format(root, "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+        }
     }
 }

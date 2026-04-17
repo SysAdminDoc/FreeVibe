@@ -262,7 +262,7 @@ fun VideoCropScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(if (dimensionsReady) "${videoWidth}x${videoHeight}" else "Detecting...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("%.0f%%".format(scale * 100), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(String.format(java.util.Locale.ROOT, "%.0f%%", scale * 100), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
 
             Button(
@@ -340,13 +340,37 @@ private suspend fun cropVideoConstrained(
             sharedHttpClient.newCall(okhttp3.Request.Builder().url(videoUrl).build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 val body = resp.body ?: return@withContext null
+                // Reject oversized video downloads up front — a 4K hour-long video can be
+                // hundreds of MB and we're just cropping a wallpaper. 256 MB is well past
+                // the realistic ceiling for a few-second live wallpaper loop.
+                val advertised = body.contentLength()
+                if (advertised in 1..Long.MAX_VALUE && advertised > MAX_VIDEO_INPUT_BYTES) {
+                    return@withContext null
+                }
                 body.byteStream().use { input ->
-                    cacheFile.outputStream().use { output -> input.copyTo(output) }
+                    cacheFile.outputStream().use { output ->
+                        var copied = 0L
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n <= 0) break
+                            copied += n
+                            if (copied > MAX_VIDEO_INPUT_BYTES) {
+                                try { cacheFile.delete() } catch (_: Exception) {}
+                                return@withContext null
+                            }
+                            output.write(buf, 0, n)
+                        }
+                    }
                 }
             }
             cacheFile
         } else {
-            File(videoUrl)
+            // Local URI / file path — validate existence before handing to FFmpeg, otherwise
+            // we get a cryptic "Invalid data found" error instead of a user-friendly skip.
+            val f = File(videoUrl)
+            if (!f.exists() || !f.canRead()) return@withContext null
+            f
         }
 
         val outputFile = File(context.filesDir, "live_wallpaper.mp4")
@@ -417,18 +441,30 @@ private suspend fun cropVideoConstrained(
                 pb.environment().putAll(env)
                 val process = pb.start()
 
-                val processOutput: String
                 val exitCode: Int
                 try {
-                    processOutput = process.inputStream.bufferedReader().readText()
+                    // Drain FFmpeg's merged stdout/stderr with a bounded buffer instead of
+                    // `readText()` — a chatty run can produce MBs of progress lines we would
+                    // otherwise keep in-memory just to log the last 500 chars.
+                    val tail = StringBuilder()
+                    process.inputStream.bufferedReader().use { reader ->
+                        val chunk = CharArray(4096)
+                        while (true) {
+                            val n = try { reader.read(chunk) } catch (_: Exception) { -1 }
+                            if (n <= 0) break
+                            if (tail.length < 4096) {
+                                tail.append(chunk, 0, n.coerceAtMost(4096 - tail.length))
+                            }
+                        }
+                    }
                     val completed = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
                     exitCode = if (completed) process.exitValue() else { process.destroyForcibly(); -1 }
+                    if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: ${tail.takeLast(500)}")
                 } finally {
                     process.destroy()
                 }
 
                 if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoCrop", "FFmpeg exit=$exitCode, output size=${tempOutput.length() / 1024}KB")
-                if (com.freevibe.BuildConfig.DEBUG && exitCode != 0) Log.e("VideoCrop", "FFmpeg output: ${processOutput.takeLast(500)}")
 
                 if (exitCode == 0 && tempOutput.exists() && tempOutput.length() > 1024) {
                     tempOutput.copyTo(outputFile, overwrite = true)
@@ -440,6 +476,7 @@ private suspend fun cropVideoConstrained(
                     tempOutput.delete()
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "FFmpeg crop failed: ${e.message}")
             }
         } else {
@@ -453,8 +490,11 @@ private suspend fun cropVideoConstrained(
 
         if (cropSucceeded && outputFile.exists() && outputFile.length() > 1024) outputFile else null
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
         if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Crop failed: ${e.message}", e)
         try { File(context.cacheDir, "crop_input.mp4").delete() } catch (_: Exception) {}
         null
     }
 }
+
+private const val MAX_VIDEO_INPUT_BYTES = 256L * 1024 * 1024

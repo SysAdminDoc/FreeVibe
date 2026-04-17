@@ -472,11 +472,14 @@ fun WallpaperDetailScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 onClick = {
                                     val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
+                                    if (shareUrl.isBlank()) return@DetailActionPill
                                     val intent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, shareUrl)
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
+                                    try {
+                                        context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
+                                    } catch (_: Exception) {}
                                 },
                             )
                             if (wp.sourcePageUrl.isNotBlank()) {
@@ -918,10 +921,13 @@ internal fun sourceDisplayName(source: ContentSource): String = when (source) {
     ContentSource.BUNDLED -> "Aura Picks"
 }
 
-internal fun formatCompactCount(value: Int): String = when {
-    value >= 1_000_000 -> "%.1fM".format(value / 1_000_000f)
-    value >= 1_000 -> "%.1fk".format(value / 1_000f)
-    else -> value.toString()
+internal fun formatCompactCount(value: Int): String {
+    val root = java.util.Locale.ROOT
+    return when {
+        value >= 1_000_000 -> String.format(root, "%.1fM", value / 1_000_000f)
+        value >= 1_000 -> String.format(root, "%.1fk", value / 1_000f)
+        else -> value.toString()
+    }
 }
 
 internal fun formatFileTypeLabel(fileType: String): String? {
@@ -931,13 +937,17 @@ internal fun formatFileTypeLabel(fileType: String): String? {
         clean.contains("jpeg", ignoreCase = true) || clean.contains("jpg", ignoreCase = true) -> "JPG"
         clean.contains("png", ignoreCase = true) -> "PNG"
         clean.contains("webp", ignoreCase = true) -> "WEBP"
-        else -> clean.substringAfterLast('/').uppercase()
+        // Locale.ROOT: MIME-type suffix is ASCII; Turkish locale would corrupt the "i" in "gif".
+        else -> clean.substringAfterLast('/').uppercase(java.util.Locale.ROOT)
     }
 }
 
-internal fun formatFileSizeLabel(bytes: Long): String? = when {
-    bytes <= 0L -> null
-    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024f * 1024f))
-    bytes >= 1024L -> "%.0f KB".format(bytes / 1024f)
-    else -> "$bytes B"
+internal fun formatFileSizeLabel(bytes: Long): String? {
+    val root = java.util.Locale.ROOT
+    return when {
+        bytes <= 0L -> null
+        bytes >= 1024L * 1024L -> String.format(root, "%.1f MB", bytes / (1024f * 1024f))
+        bytes >= 1024L -> String.format(root, "%.0f KB", bytes / 1024f)
+        else -> "$bytes B"
+    }
 }

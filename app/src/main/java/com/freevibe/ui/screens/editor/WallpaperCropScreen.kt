@@ -199,7 +199,7 @@ fun WallpaperCropScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "%.0f%%".format(scale * 100),
+                    String.format(java.util.Locale.ROOT, "%.0f%%", scale * 100),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )

@@ -29,6 +29,10 @@ class OfflineFavoritesManager @Inject constructor(
 ) {
     companion object {
         private const val MAX_CACHE_BYTES = 512L * 1024L * 1024L
+
+        /** Max bytes for a single offline-cached favorite (wallpaper or sound). Prevents one
+         *  hostile URL from consuming the entire 512 MB budget in one shot. */
+        private const val MAX_PER_FILE_BYTES = 80L * 1024L * 1024L
     }
 
     private val offlineDir = File(context.filesDir, "offline_favorites").apply { mkdirs() }
@@ -63,11 +67,32 @@ class OfflineFavoritesManager @Inject constructor(
                 response.use { resp ->
                     if (!resp.isSuccessful) return@withContext null
                     val body = resp.body ?: return@withContext null
+                    // Early reject when the server advertises an oversized payload.
+                    val advertised = body.contentLength()
+                    if (advertised in 1..Long.MAX_VALUE && advertised > MAX_PER_FILE_BYTES) {
+                        return@withContext null
+                    }
                     val tmpFile = java.io.File(file.parent, file.name + ".tmp")
+                    var abort = false
                     body.byteStream().use { input ->
                         tmpFile.outputStream().use { output ->
-                            input.copyTo(output)
+                            var copied = 0L
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                copied += n
+                                if (copied > MAX_PER_FILE_BYTES) {
+                                    abort = true
+                                    break
+                                }
+                                output.write(buf, 0, n)
+                            }
                         }
+                    }
+                    if (abort) {
+                        try { tmpFile.delete() } catch (_: Exception) {}
+                        return@withContext null
                     }
                     if (tmpFile.length() > 0) {
                         if (!tmpFile.renameTo(file)) {
@@ -86,6 +111,7 @@ class OfflineFavoritesManager @Inject constructor(
                     file.absolutePath
                 } else null
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (com.freevibe.BuildConfig.DEBUG) android.util.Log.w("OfflineFavMgr", "cacheOffline failed for ${favorite.id}: ${e.message}")
                 null
             }

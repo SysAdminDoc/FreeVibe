@@ -203,7 +203,12 @@ class ParallaxWallpaperService : WallpaperService() {
 
         private fun segmentImage(bitmap: Bitmap, generation: Long) {
             try {
-                activeSegmenter?.close()
+                // Close-and-null BEFORE creating the next segmenter so a lingering
+                // success/failure callback from the previous generation can't race us
+                // into closing the NEW segmenter mid-flight.
+                val previous = activeSegmenter
+                activeSegmenter = null
+                try { previous?.close() } catch (_: Exception) {}
                 val options = SelfieSegmenterOptions.Builder()
                     .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
                     .build()
@@ -213,7 +218,11 @@ class ParallaxWallpaperService : WallpaperService() {
 
                 segmenter.process(inputImage)
                     .addOnSuccessListener { mask ->
-                        segmenter.close()
+                        // Guard against double-close if a newer segmenter already took over
+                        synchronized(bitmapLock) {
+                            if (activeSegmenter === segmenter) activeSegmenter = null
+                        }
+                        try { segmenter.close() } catch (_: Exception) {}
                         if (destroyed || bitmap.isRecycled) return@addOnSuccessListener
                         try {
                             // Extract pixels under lock to prevent race with recycleBitmaps()
@@ -286,7 +295,10 @@ class ParallaxWallpaperService : WallpaperService() {
                         }
                     }
                     .addOnFailureListener { e ->
-                        segmenter.close()
+                        synchronized(bitmapLock) {
+                            if (activeSegmenter === segmenter) activeSegmenter = null
+                        }
+                        try { segmenter.close() } catch (_: Exception) {}
                         if (destroyed) return@addOnFailureListener
                         if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "Segmentation failed, using fallback: ${e.message}")
                         synchronized(bitmapLock) {
@@ -375,9 +387,18 @@ class ParallaxWallpaperService : WallpaperService() {
             val cropW = targetW.coerceAtMost(scaledW - x).coerceAtLeast(1)
             val cropH = targetH.coerceAtMost(scaledH - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
-                Bitmap.createBitmap(scaled, x, y, cropW, cropH).also {
-                    if (scaled !== src) scaled.recycle()
+                // If createBitmap throws (OOM / invalid rect), we still need to recycle
+                // `scaled` or it leaks as a native allocation orphan.
+                val cropped = try {
+                    Bitmap.createBitmap(scaled, x, y, cropW, cropH)
+                } catch (t: Throwable) {
+                    if (scaled !== src) try { scaled.recycle() } catch (_: Throwable) {}
+                    throw t
                 }
+                if (cropped !== scaled && scaled !== src) {
+                    try { scaled.recycle() } catch (_: Throwable) {}
+                }
+                cropped
             } else {
                 if (scaled === src) src.copy(src.config ?: Bitmap.Config.ARGB_8888, false) else scaled
             }

@@ -1,9 +1,5 @@
 package com.freevibe.service
 
-import android.graphics.Canvas
-import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.SurfaceTexture
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.service.wallpaper.WallpaperService
@@ -23,6 +19,7 @@ class VideoWallpaperService : WallpaperService() {
         private var mediaPlayer: MediaPlayer? = null
         private var currentHolder: SurfaceHolder? = null
         private var lastModified: Long = 0
+        private var lastPath: String? = null
         private var screenWidth = 0
         private var screenHeight = 0
 
@@ -84,7 +81,10 @@ class VideoWallpaperService : WallpaperService() {
                 val path = getVideoPath()
                 if (path != null) {
                     val file = java.io.File(path)
-                    if (file.exists() && file.lastModified() != lastModified) {
+                    // Re-init if the user picked a different video OR the same path's
+                    // contents changed. Path comparison guards against rare cases where
+                    // two different files happen to share the same lastModified timestamp.
+                    if (file.exists() && (path != lastPath || file.lastModified() != lastModified)) {
                         currentHolder?.let { initializePlayer(it) }
                         return
                     }
@@ -109,6 +109,7 @@ class VideoWallpaperService : WallpaperService() {
             if (!file.exists()) return
             try {
                 lastModified = file.lastModified()
+                lastPath = path
                 val speed = getPlaybackSpeed()
 
                 // Detect video dimensions before playback for accurate surface sizing

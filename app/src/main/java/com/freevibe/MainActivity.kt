@@ -75,7 +75,12 @@ internal fun buildLaunchNavigation(
 }
 
 private fun isAllowedLaunchUrl(url: String): Boolean {
-    val scheme = android.net.Uri.parse(url).scheme?.lowercase(java.util.Locale.ROOT)
+    // Pure-JVM scheme extraction (avoids android.net.Uri so this helper is unit-testable
+    // without Robolectric). HTTPS only — blocks file://, content://, javascript:, etc.
+    val trimmed = url.trim()
+    val colonIdx = trimmed.indexOf(':')
+    if (colonIdx <= 0) return false
+    val scheme = trimmed.substring(0, colonIdx).lowercase(java.util.Locale.ROOT)
     return scheme == "https"
 }
 
