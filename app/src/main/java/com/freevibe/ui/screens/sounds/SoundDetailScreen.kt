@@ -263,8 +263,12 @@ fun SoundDetailScreen(
                 IconButton(onClick = { onContactPicker(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, "Assign to contact", Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, "Save sound", Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
                 IconButton(onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, s.sourcePageUrl.ifEmpty { s.downloadUrl }); putExtra(Intent.EXTRA_SUBJECT, s.name) }
-                    context.startActivity(Intent.createChooser(intent, "Share sound"))
+                    val shareBody = s.sourcePageUrl.ifEmpty { s.downloadUrl }
+                    // Don't open a share sheet with an empty body — it renders an empty "Share"
+                    // dialog that lets the user pick a target only to paste nothing.
+                    if (shareBody.isBlank()) return@IconButton
+                    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareBody); putExtra(Intent.EXTRA_SUBJECT, s.name) }
+                    try { context.startActivity(Intent.createChooser(intent, "Share sound")) } catch (_: Exception) {}
                 }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Share, "Share sound", Modifier.size(22.dp)); Text("Share", style = MaterialTheme.typography.labelSmall) } }
             }
 

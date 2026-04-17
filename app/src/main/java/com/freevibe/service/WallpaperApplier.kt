@@ -158,8 +158,18 @@ class WallpaperApplier @Inject constructor(
         response.use { resp ->
             if (!resp.isSuccessful) throw java.io.IOException("Download failed: ${resp.code}")
             val body = resp.body ?: throw java.io.IOException("Empty response body")
+            // Reject oversized payloads up front so a hostile or misbehaving CDN can't make us
+            // allocate a huge byte[] just to OOM during decode. 64 MB is larger than any real
+            // 8K JPG/PNG/WEBP wallpaper.
+            val advertised = body.contentLength()
+            if (advertised in 1..Long.MAX_VALUE && advertised > MAX_WALLPAPER_BYTES) {
+                throw java.io.IOException("Wallpaper too large: $advertised > $MAX_WALLPAPER_BYTES bytes")
+            }
             val bytes = body.bytes()
             if (bytes.isEmpty()) throw java.io.IOException("Empty response body")
+            if (bytes.size > MAX_WALLPAPER_BYTES) {
+                throw java.io.IOException("Wallpaper too large: ${bytes.size} > $MAX_WALLPAPER_BYTES bytes")
+            }
 
             // First pass: get image dimensions without allocating pixels
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -187,5 +197,10 @@ class WallpaperApplier @Inject constructor(
             val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         }
+    }
+
+    private companion object {
+        /** Hard cap on single-wallpaper downloads — mirrors DownloadManager's ceiling. */
+        private const val MAX_WALLPAPER_BYTES = 64L * 1024 * 1024
     }
 }

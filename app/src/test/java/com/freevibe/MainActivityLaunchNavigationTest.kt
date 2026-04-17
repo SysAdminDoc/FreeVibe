@@ -41,4 +41,24 @@ class MainActivityLaunchNavigationTest {
         assertFalse(shouldHandleInitialLaunchNavigation(Bundle()))
         assertTrue(shouldHandleInitialLaunchNavigation(null))
     }
+
+    @Test
+    fun `buildLaunchWallpaper drops non-https urls from notification extras`() {
+        // v6.5.0 HTTPS-only policy for deep-linked wallpaper URLs — cleartext or local
+        // file URIs smuggled through a notification intent must not be rehydrated.
+        listOf(
+            "http://example.com/full.jpg",
+            "file:///sdcard/payload.jpg",
+            "content://media/external/images/1",
+            "javascript:alert(1)",
+        ).forEach { unsafe ->
+            val wallpaper = buildLaunchWallpaper(
+                wallpaperId = "reddit_123",
+                fullUrl = unsafe,
+                thumbnailUrl = "https://example.com/thumb.jpg",
+                sourceName = ContentSource.REDDIT.name,
+            )
+            assertNull("Expected null for unsafe URL $unsafe", wallpaper)
+        }
+    }
 }

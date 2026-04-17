@@ -84,6 +84,9 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
                 com.yausername.ffmpeg.FFmpeg.getInstance().init(this@FreeVibeApp)
                 if (BuildConfig.DEBUG) Log.d("AuraApp", "yt-dlp + FFmpeg initialized")
             } catch (e: Throwable) {
+                // Must catch CancellationException-as-Throwable here? Throwable catches it, but
+                // we never cancel appScope before process death, so swallowing is OK. We do NOT
+                // rethrow: init-failure of yt-dlp should degrade the YouTube tab, not kill the app.
                 if (BuildConfig.DEBUG) Log.e("AuraApp", "yt-dlp init failed: ${e.message}")
             }
         }
@@ -142,7 +145,15 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     private fun warmCommunityIdentity() {
         appScope.launch {
-            communityIdentityProvider.ensureSignedIn()
+            try {
+                communityIdentityProvider.ensureSignedIn()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                // Firebase auth can fail at launch (airplane mode, cold-start network race, etc).
+                // Swallow + log — community features degrade gracefully when unsigned; this must
+                // not crash the app at startup or it'll hit the uncaught-handler we just wired up.
+                if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "Community warm-up failed", e)
+            }
         }
     }
 }

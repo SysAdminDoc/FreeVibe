@@ -480,5 +480,7 @@ private fun formatMs(ms: Long): String {
     val min = totalSec / 60
     val sec = totalSec % 60
     val frac = (ms % 1000) / 100
-    return "%d:%02d.%d".format(min, sec, frac)
+    // Locale.ROOT: this is a mm:ss.f timestamp, not a localized number — keep '.' as separator
+    // so Arabic/Persian locales don't substitute Eastern-Arabic digits and confuse layout math.
+    return String.format(java.util.Locale.ROOT, "%d:%02d.%d", min, sec, frac)
 }

@@ -121,6 +121,7 @@ class FavoritesExporter @Inject constructor(
         return try {
             listAdapter.fromJson(json) ?: throw IllegalStateException("Invalid JSON format")
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             throw IllegalStateException("Invalid favorites file: ${e.message}")
         }
     }

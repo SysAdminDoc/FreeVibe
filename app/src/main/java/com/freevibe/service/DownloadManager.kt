@@ -60,6 +60,7 @@ class DownloadManager @Inject constructor(
             relativePath = Environment.DIRECTORY_PICTURES + "/Aura",
             collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             contentType = contentType,
+            maxBytes = MAX_IMAGE_DOWNLOAD_BYTES,
         )
     }
 
@@ -87,6 +88,7 @@ class DownloadManager @Inject constructor(
             relativePath = relativePath,
             collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             contentType = contentType,
+            maxBytes = MAX_AUDIO_DOWNLOAD_BYTES,
         )
     }
 
@@ -99,6 +101,7 @@ class DownloadManager @Inject constructor(
         relativePath: String,
         collection: Uri,
         contentType: String,
+        maxBytes: Long,
     ): Result<Uri> = try {
         updateProgress(historyId, DownloadProgress(historyId, fileName, 0f, 0, 0))
 
@@ -112,6 +115,13 @@ class DownloadManager @Inject constructor(
             val body = resp.body
                 ?: throw IllegalStateException("Empty response body")
             val totalBytes = body.contentLength().let { if (it <= 0) 0L else it }
+            // Reject oversized downloads up front when the server advertises a size, so we
+            // don't allocate a MediaStore entry we're immediately going to delete.
+            if (totalBytes in 1..Long.MAX_VALUE && totalBytes > maxBytes) {
+                throw IllegalStateException(
+                    "Download exceeds size limit (${totalBytes} > ${maxBytes})"
+                )
+            }
 
             // Create MediaStore entry
             val values = ContentValues().apply {
@@ -141,6 +151,13 @@ class DownloadManager @Inject constructor(
                         val buffer = ByteArray(8192)
                         var bytesRead: Int
                         while (input.read(buffer).also { bytesRead = it } != -1) {
+                            // Abort before writing if a malicious/broken server exceeds the
+                            // advertised content length (or never sends Content-Length).
+                            if (downloadedBytes + bytesRead > maxBytes) {
+                                throw IllegalStateException(
+                                    "Download exceeds size limit ($maxBytes bytes)"
+                                )
+                            }
                             output.write(buffer, 0, bytesRead)
                             downloadedBytes += bytesRead
                             val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
@@ -303,6 +320,12 @@ class DownloadManager @Inject constructor(
         }
     }
 }
+
+/** Hard cap on wallpaper downloads — ~64 MB covers any realistic 8K JPG/PNG/WEBP. */
+private const val MAX_IMAGE_DOWNLOAD_BYTES = 64L * 1024 * 1024
+
+/** Hard cap on audio downloads — matches the 20 MB community upload ceiling + headroom. */
+private const val MAX_AUDIO_DOWNLOAD_BYTES = 64L * 1024 * 1024
 
 private val AURA_MEDIA_DIRECTORIES = listOfNotNull(
     Environment.DIRECTORY_PICTURES,

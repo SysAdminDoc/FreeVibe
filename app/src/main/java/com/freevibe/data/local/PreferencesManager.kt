@@ -134,16 +134,19 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setVideoFpsLimit(fps: Int) {
         val sanitized = sanitizeVideoFpsLimit(fps)
-        set(Keys.VIDEO_FPS_LIMIT, sanitized)
+        // Write SharedPreferences FIRST so VideoWallpaperService (which reads SP) always sees
+        // the new value even if the suspending DataStore write gets cancelled mid-flight.
+        // If cancellation happens between, DataStore catches up on the next successful write.
         context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
             .edit().putInt("video_fps_limit", sanitized).apply()
+        set(Keys.VIDEO_FPS_LIMIT, sanitized)
     }
     suspend fun setVideoPlaybackSpeed(speed: Float) {
-        set(Keys.VIDEO_PLAYBACK_SPEED, speed)
-        // Also write to SharedPreferences so VideoWallpaperService can read it
-        // (WallpaperService cannot easily access DataStore)
+        // SharedPreferences first — same rationale as setVideoFpsLimit. WallpaperService
+        // cannot easily subscribe to DataStore, so SP is the source of truth for the runtime.
         context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
             .edit().putFloat("video_playback_speed", speed).apply()
+        set(Keys.VIDEO_PLAYBACK_SPEED, speed)
     }
 
     // ── Effects / adaptive settings ─────────────────────────────

@@ -235,6 +235,7 @@ class VoteRepository @Inject constructor(
             moderationRefInstance.child(safeId).setValue(true).await()
             if (com.freevibe.BuildConfig.DEBUG) Log.d("VoteRepo", "Admin moderated OK: $contentId")
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (com.freevibe.BuildConfig.DEBUG) Log.e("VoteRepo", "Moderation FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
             hideLocally(contentId)
         }
@@ -301,6 +302,7 @@ class VoteRepository @Inject constructor(
                 if (upvotes > 0) key to upvotes else null
             }.sortedByDescending { it.second }.take(limit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("VoteRepo", "getTopVotedIds failed: ${e.message}")
             emptyList()
         }

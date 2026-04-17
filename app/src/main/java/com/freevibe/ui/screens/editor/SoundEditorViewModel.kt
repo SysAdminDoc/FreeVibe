@@ -368,8 +368,26 @@ class SoundEditorViewModel @Inject constructor(
                 okHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw Exception("Download failed: HTTP ${response.code}")
                     val body = response.body ?: throw Exception("Empty response body")
+                    // Editing is for short clips — cap at 96 MB so a hostile/misresolved YT
+                    // URL can't fill cacheDir while the user waits on the editor.
+                    val advertised = body.contentLength()
+                    if (advertised in 1..Long.MAX_VALUE && advertised > MAX_EDIT_DOWNLOAD_BYTES) {
+                        throw Exception("Audio file too large (${advertised / (1024 * 1024)} MB)")
+                    }
                     body.byteStream().use { input ->
-                        FileOutputStream(tmpFile).use { output -> input.copyTo(output) }
+                        FileOutputStream(tmpFile).use { output ->
+                            var copied = 0L
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n <= 0) break
+                                copied += n
+                                if (copied > MAX_EDIT_DOWNLOAD_BYTES) {
+                                    throw Exception("Audio file too large (${copied / (1024 * 1024)} MB)")
+                                }
+                                output.write(buf, 0, n)
+                            }
+                        }
                     }
                 }
                 if (tmpFile.length() > 0) {
@@ -384,6 +402,11 @@ class SoundEditorViewModel @Inject constructor(
             }
         }
         file
+    }
+
+    private companion object {
+        /** Max size for an audio file downloaded into the editor's cache. */
+        private const val MAX_EDIT_DOWNLOAD_BYTES = 96L * 1024 * 1024
     }
 
     private suspend fun copyUriToCache(uri: Uri): File = withContext(Dispatchers.IO) {

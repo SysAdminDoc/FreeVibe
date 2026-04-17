@@ -131,7 +131,7 @@ internal fun soundSourceLabel(source: ContentSource): String = when (source) {
     ContentSource.CCMIXTER -> "ccMixter"
     ContentSource.SOUNDCLOUD -> "SoundCloud"
     ContentSource.COMMUNITY -> "Community"
-    else -> source.name.lowercase().replaceFirstChar { it.titlecase() }
+    else -> source.name.lowercase(java.util.Locale.ROOT).replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
     }
 
 private fun applySoundQualityFloor(

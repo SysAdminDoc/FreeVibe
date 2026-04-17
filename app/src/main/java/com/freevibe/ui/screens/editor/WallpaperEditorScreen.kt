@@ -243,7 +243,7 @@ fun WallpaperEditorScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(active.name, style = MaterialTheme.typography.labelMedium)
-                        Text("%.1f".format(active.value), style = MaterialTheme.typography.labelSmall)
+                        Text(String.format(java.util.Locale.ROOT, "%.1f", active.value), style = MaterialTheme.typography.labelSmall)
                     }
                     Slider(
                         value = active.value,

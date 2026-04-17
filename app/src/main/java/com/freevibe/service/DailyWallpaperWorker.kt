@@ -69,9 +69,19 @@ class DailyWallpaperWorker @AssistedInject constructor(
             val bitmap = withContext(Dispatchers.IO) {
                 try {
                     okHttpClient.newCall(Request.Builder().url(thumbUrl).build()).execute().use { resp ->
-                        resp.body?.bytes()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                        val body = resp.body ?: return@use null
+                        // Notification thumbs should be tiny; cap at 4 MB so a compromised feed
+                        // can't force a giant byte[] + bitmap into a background worker.
+                        val advertised = body.contentLength()
+                        if (advertised in 1..Long.MAX_VALUE && advertised > 4L * 1024 * 1024) return@use null
+                        val bytes = body.bytes()
+                        if (bytes.isEmpty() || bytes.size > 4 * 1024 * 1024) return@use null
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                     }
-                } catch (_: Exception) { null }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    null
+                }
             }
 
             try {

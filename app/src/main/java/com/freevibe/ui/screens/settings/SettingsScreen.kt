@@ -110,7 +110,19 @@ fun SettingsScreen(
         val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
             putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            // Some OEM Android builds (e.g. custom MIUI/EMUI skins without the stock settings
+            // activity) don't handle ACTION_APP_NOTIFICATION_SETTINGS and crash with ANFE.
+            // Fall back to the app-details page which every Android install ships.
+            try {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.fromParts("package", context.packageName, null))
+                )
+            } catch (_: Exception) {}
+        } catch (_: Exception) {}
     }
 
     // Video wallpaper picker

@@ -188,10 +188,33 @@ class SoundApplier @Inject constructor(
                 throw IllegalStateException("Download failed: HTTP ${resp.code}")
             }
             val body = resp.body ?: throw IllegalStateException("Empty response body")
+            // Bound the download — ringtones/notifications/alarms are short clips. A hostile
+            // or misresolved URL returning an endless stream would otherwise write into
+            // MediaStore until the user's storage fills. Matches DownloadManager's ceiling.
+            val advertised = body.contentLength()
+            if (advertised in 1..Long.MAX_VALUE && advertised > MAX_APPLY_BYTES) {
+                throw IllegalStateException("Sound file too large (${advertised / (1024 * 1024)} MB)")
+            }
             saveToMediaStore(fileName, mimeType, type) { output ->
-                body.byteStream().use { input -> input.copyTo(output) }
+                body.byteStream().use { input ->
+                    var copied = 0L
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        copied += n
+                        if (copied > MAX_APPLY_BYTES) {
+                            throw IllegalStateException("Sound file too large (${copied / (1024 * 1024)} MB)")
+                        }
+                        output.write(buf, 0, n)
+                    }
+                }
             }
         }
+    }
+
+    private companion object {
+        private const val MAX_APPLY_BYTES = 64L * 1024 * 1024
     }
 
     private fun saveLocalFileToMediaStore(

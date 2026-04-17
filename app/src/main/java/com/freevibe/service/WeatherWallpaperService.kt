@@ -193,18 +193,25 @@ class WeatherWallpaperService : WallpaperService() {
             val scaleY = targetH.toFloat() / src.height
             val scale = maxOf(scaleX, scaleY) // Fill (crop to fit)
             val matrix = Matrix().apply { setScale(scale, scale) }
-            val scaledW = (src.width * scale).toInt()
-            val scaledH = (src.height * scale).toInt()
             val scaled = Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
             // Center crop
-            val x = ((scaledW - targetW) / 2).coerceAtLeast(0)
-            val y = ((scaledH - targetH) / 2).coerceAtLeast(0)
+            val x = ((scaled.width - targetW) / 2).coerceAtLeast(0)
+            val y = ((scaled.height - targetH) / 2).coerceAtLeast(0)
             val cropW = targetW.coerceAtMost(scaled.width - x).coerceAtLeast(1)
             val cropH = targetH.coerceAtMost(scaled.height - y).coerceAtLeast(1)
             return if (x > 0 || y > 0) {
-                Bitmap.createBitmap(scaled, x, y, cropW, cropH).also {
-                    if (scaled !== src) scaled.recycle()
+                // If Bitmap.createBitmap throws (OOM / invalid rect), recycle `scaled` so we
+                // don't leak its native allocation — mirrors the fix in ParallaxWallpaperService.
+                val cropped = try {
+                    Bitmap.createBitmap(scaled, x, y, cropW, cropH)
+                } catch (t: Throwable) {
+                    if (scaled !== src) try { scaled.recycle() } catch (_: Throwable) {}
+                    throw t
                 }
+                if (cropped !== scaled && scaled !== src) {
+                    try { scaled.recycle() } catch (_: Throwable) {}
+                }
+                cropped
             } else scaled
         }
     }

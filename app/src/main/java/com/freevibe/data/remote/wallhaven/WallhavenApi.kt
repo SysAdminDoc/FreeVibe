@@ -58,8 +58,10 @@ data class WallhavenTagResponse(
 
 @JsonClass(generateAdapter = true)
 data class WallhavenWallpaper(
-    @Json(name = "id") val id: String,
-    @Json(name = "url") val url: String,
+    // Defaults on id/url so a rare malformed Wallhaven response (null field) doesn't kill the
+    // whole search result via a JsonDataException. Downstream mappers already filter blank ids.
+    @Json(name = "id") val id: String = "",
+    @Json(name = "url") val url: String = "",
     @Json(name = "short_url") val shortUrl: String = "",
     @Json(name = "views") val views: Int = 0,
     @Json(name = "favorites") val favorites: Int = 0,
