@@ -69,7 +69,15 @@ class WallpaperCropViewModel @Inject constructor(
                     val request = Request.Builder().url(url).build()
                     okHttpClient.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                        val bytes = response.body?.bytes() ?: throw Exception("Empty body")
+                        val body = response.body ?: throw Exception("Empty body")
+                        val advertised = body.contentLength()
+                        if (advertised in 1..Long.MAX_VALUE && advertised > MAX_CROP_BYTES) {
+                            throw Exception("Image too large to crop")
+                        }
+                        val bytes = body.bytes()
+                        if (bytes.size.toLong() > MAX_CROP_BYTES) {
+                            throw Exception("Image too large to crop")
+                        }
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             ?: throw Exception("Failed to decode image")
                     }
@@ -155,5 +163,10 @@ class WallpaperCropViewModel @Inject constructor(
             srcRight - srcLeft,
             srcBottom - srcTop,
         )
+    }
+
+    private companion object {
+        /** Max bytes accepted when downloading a wallpaper for cropping. */
+        private const val MAX_CROP_BYTES = 64L * 1024 * 1024
     }
 }

@@ -138,6 +138,7 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
                 wallpaperCacheManager.evictExpired()
                 offlineFavoritesManager.pruneOrphans()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "Cache eviction failed", e)
             }
         }

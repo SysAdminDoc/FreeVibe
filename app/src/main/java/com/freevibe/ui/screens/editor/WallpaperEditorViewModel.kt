@@ -149,7 +149,15 @@ class WallpaperEditorViewModel @Inject constructor(
                     val request = okhttp3.Request.Builder().url(url).build()
                     okHttpClient.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                        val bytes = response.body?.bytes() ?: throw Exception("Empty response body")
+                        val body = response.body ?: throw Exception("Empty response body")
+                        val advertised = body.contentLength()
+                        if (advertised in 1..Long.MAX_VALUE && advertised > MAX_EDIT_BYTES) {
+                            throw Exception("Image too large to edit")
+                        }
+                        val bytes = body.bytes()
+                        if (bytes.size.toLong() > MAX_EDIT_BYTES) {
+                            throw Exception("Image too large to edit")
+                        }
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             ?: throw Exception("Failed to decode image")
                     }
@@ -336,5 +344,10 @@ class WallpaperEditorViewModel @Inject constructor(
         }
         result.setPixels(pixels, 0, result.width, 0, 0, result.width, result.height)
         return result
+    }
+
+    private companion object {
+        /** Max bytes accepted when downloading a wallpaper for editing. */
+        private const val MAX_EDIT_BYTES = 64L * 1024 * 1024
     }
 }
