@@ -391,7 +391,13 @@ class SoundEditorViewModel @Inject constructor(
                     }
                 }
                 if (tmpFile.length() > 0) {
-                    tmpFile.renameTo(file)
+                    if (!tmpFile.renameTo(file)) {
+                        if (!tmpFile.copyRecursively(file, overwrite = true)) {
+                            tmpFile.delete()
+                            throw Exception("Failed to finalize downloaded audio file")
+                        }
+                        tmpFile.delete()
+                    }
                 } else {
                     tmpFile.delete()
                     throw Exception("Download produced empty file")

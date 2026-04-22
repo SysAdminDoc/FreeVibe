@@ -330,7 +330,7 @@ class OpenFavoritesAction : ActionCallback {
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.putExtra("navigate_to", "favorites")
-            context.startActivity(intent)
+            try { context.startActivity(intent) } catch (_: Exception) {}
         }
     }
 }
@@ -359,7 +359,7 @@ class OpenCurrentWallpaperAction : ActionCallback {
             intent.putExtra("daily_wallpaper_width", entry.width)
             intent.putExtra("daily_wallpaper_height", entry.height)
         }
-        context.startActivity(intent)
+        try { context.startActivity(intent) } catch (_: Exception) {}
     }
 }
 
@@ -385,7 +385,7 @@ class OpenAppAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            try { context.startActivity(intent) } catch (_: Exception) {}
         }
     }
 }
