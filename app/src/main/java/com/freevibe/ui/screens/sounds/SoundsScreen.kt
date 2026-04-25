@@ -51,7 +51,7 @@ import kotlin.math.sin
 @Composable
 fun SoundsScreen(
     onSoundClick: (Sound) -> Unit,
-    onCreateRingtone: () -> Unit = {},
+    onCreateRingtone: (Uri) -> Unit = {},
     initialQuery: String? = null,
     viewModel: SoundsViewModel = hiltViewModel(),
 ) {
@@ -88,9 +88,12 @@ fun SoundsScreen(
     var showUploadDialog by remember { mutableStateOf(false) }
     var selectedAudioUri by remember { mutableStateOf<Uri?>(null) }
     var awaitingUploadResult by remember { mutableStateOf(false) }
-    val audioPickerLauncher = rememberLauncherForActivityResult(
+    val uploadAudioPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> if (uri != null) { selectedAudioUri = uri; showUploadDialog = true } }
+    val createAudioPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let(onCreateRingtone) }
 
     // Upload dialog
     val uploadUri = selectedAudioUri
@@ -154,16 +157,16 @@ fun SoundsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SmallFloatingActionButton(
-                    onClick = { audioPickerLauncher.launch("audio/*") },
+                    onClick = { uploadAudioPickerLauncher.launch("audio/*") },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                 ) {
-                    Icon(Icons.Default.Upload, "Upload Sound", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Upload, "Upload community sound", modifier = Modifier.size(20.dp))
                 }
                 SmallFloatingActionButton(
-                    onClick = onCreateRingtone,
+                    onClick = { createAudioPickerLauncher.launch("audio/*") },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                 ) {
-                    Icon(Icons.Default.ContentCut, "Create Sound", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.ContentCut, "Create from music", modifier = Modifier.size(20.dp))
                 }
             }
         },

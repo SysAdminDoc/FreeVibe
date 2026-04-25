@@ -1,6 +1,7 @@
 package com.freevibe.ui
 
 import android.content.Context
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -389,8 +390,8 @@ fun FreeVibeRoot(
                     onSoundClick = { sound ->
                         navController.navigate(Screen.SoundDetail.createRoute(sound)) { launchSingleTop = true }
                     },
-                    onCreateRingtone = {
-                        navController.navigate(Screen.SoundEditor.createRoute()) { launchSingleTop = true }
+                    onCreateRingtone = { uri ->
+                        navController.navigate(Screen.SoundEditor.createLocalRoute(uri)) { launchSingleTop = true }
                     },
                     initialQuery = backStackEntry.arguments?.getString("query")?.ifBlank { null },
                 )
@@ -787,10 +788,16 @@ fun FreeVibeRoot(
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("localUri") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
                 val soundId = backStackEntry.arguments?.getString("soundId").orEmpty().ifBlank { null }
+                val localUri = backStackEntry.arguments?.getString("localUri").orEmpty().ifBlank { null }
                 val fallbackSound = soundId?.let { id ->
                     backStackEntry.arguments?.getString("name")
                         ?.takeIf { it.isNotBlank() }
@@ -812,6 +819,7 @@ fun FreeVibeRoot(
                 SoundEditorScreen(
                     soundId = soundId,
                     fallbackSound = fallbackSound,
+                    initialLocalUri = localUri?.let(Uri::parse),
                     onBack = { navController.popBackStack() },
                 )
             }

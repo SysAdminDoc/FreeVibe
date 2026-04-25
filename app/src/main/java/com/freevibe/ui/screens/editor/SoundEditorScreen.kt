@@ -36,6 +36,7 @@ import kotlin.math.max
 fun SoundEditorScreen(
     soundId: String? = null,
     fallbackSound: Sound? = null,
+    initialLocalUri: Uri? = null,
     onBack: () -> Unit,
     recoveryViewModel: com.freevibe.ui.screens.sounds.SoundsViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     viewModel: SoundEditorViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
@@ -43,12 +44,13 @@ fun SoundEditorScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val currentSelectedSound by recoveryViewModel.selectedSound.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val editorIdentityKey = remember(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl) {
+    val editorIdentityKey = remember(soundId, fallbackSound?.source, fallbackSound?.previewUrl, fallbackSound?.downloadUrl, initialLocalUri) {
         listOf(
             soundId.orEmpty(),
             fallbackSound?.source?.name.orEmpty(),
             fallbackSound?.previewUrl.orEmpty(),
             fallbackSound?.downloadUrl.orEmpty(),
+            initialLocalUri?.toString().orEmpty(),
         ).joinToString("|")
     }
     var selectionResolved by remember(editorIdentityKey) {
@@ -60,6 +62,10 @@ fun SoundEditorScreen(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadFromLocalUri(it) }
+    }
+
+    LaunchedEffect(initialLocalUri) {
+        initialLocalUri?.let { viewModel.loadFromLocalUri(it) }
     }
 
     LaunchedEffect(state.success) {
@@ -83,8 +89,8 @@ fun SoundEditorScreen(
             selectionResolved = sound?.let { viewModel.loadSound(it) } ?: false
         }
     }
-    LaunchedEffect(soundId, currentSelectedSound?.stableKey()) {
-        if (soundId == null) {
+    LaunchedEffect(soundId, currentSelectedSound?.stableKey(), initialLocalUri) {
+        if (soundId == null && initialLocalUri == null) {
             currentSelectedSound?.let { viewModel.loadSound(it) }
         }
     }
@@ -93,7 +99,7 @@ fun SoundEditorScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Edit Sound") },
+                title = { Text(if (soundId == null) "Create Sound" else "Edit Sound") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },

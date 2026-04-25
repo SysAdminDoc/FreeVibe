@@ -173,7 +173,11 @@ class SoundEditorViewModel @Inject constructor(
     }
 
     fun loadFromLocalUri(uri: Uri) {
-        loadedSoundKey = buildLocalAudioEditorIdentity(uri.toString())
+        val localKey = buildLocalAudioEditorIdentity(uri.toString())
+        if (shouldReuseLoadedLocalUri(loadedSoundKey, localKey, _state.value)) {
+            return
+        }
+        loadedSoundKey = localKey
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             stopPlayback()
@@ -504,6 +508,15 @@ internal fun shouldReuseLoadedSound(
 ): Boolean =
     loadedSoundKey == requestedSoundKey &&
         !state.isLocalFile &&
+        (state.localFilePath != null || state.isLoading)
+
+internal fun shouldReuseLoadedLocalUri(
+    loadedSoundKey: String?,
+    requestedLocalKey: String,
+    state: SoundEditorState,
+): Boolean =
+    loadedSoundKey == requestedLocalKey &&
+        state.isLocalFile &&
         (state.localFilePath != null || state.isLoading)
 
 internal fun buildRemoteAudioCacheFileName(name: String, cacheIdentity: String, url: String): String {
