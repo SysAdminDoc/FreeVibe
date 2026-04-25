@@ -331,3 +331,99 @@
 | **P3** | 6.1-6.5 Smart Features | Already partially implemented | Varies |
 | **P3** | 7.2-7.5 Infrastructure | Technical health | Varies |
 | **P4** | 8.1-8.4 Stretch Goals | Future vision | Large |
+
+## Open-Source Research (Round 2)
+
+### Related OSS Projects
+- **Paperize (Anthonyy232/Paperize)** — https://github.com/Anthonyy232/Paperize — fully-offline dynamic wallpaper changer; Kotlin/Compose/Material 3 + MVVM; rotation schedules
+- **WallFlow (ammargitham/WallFlow)** — https://github.com/ammargitham/WallFlow — GPLv3 Compose wallpaper app; multi-source (Wallhaven, Reddit), favorites, auto-change; plans KMP Windows support
+- **WallCraft (Rahul-999-alpha/WallCraft)** — https://github.com/Rahul-999-alpha/WallCraft — AI-generated wallpapers (Stability AI/SDXL), Pexels+Unsplash sources, multi-res download (480p to 4K), AMOLED theme, WorkManager auto-changer
+- **WallPap (hamzaazizofficial/WallPap)** — https://github.com/hamzaazizofficial/WallPap — Firebase backend, custom editor, saturation/opacity adjust, Google Drive save
+- **Wallum** — https://github.com/Ink-sumo/wallum — lightweight Compose wallpaper; Retrofit/Hilt/Paging3
+- **Darklify** — https://github.com/tasshack/darklify — dark/light dynamic switch based on system theme; Compose + Material 3
+- **Livewallpaper samples (android-live-wallpaper topic)** — https://github.com/topics/android-live-wallpaper — GLSurfaceView/OpenGL ES reference implementations
+- **Muzei** — https://github.com/muzei/muzei — classic wallpaper ecosystem with plugin "sources" — inspiration for an open Aura plugin API
+
+### Features to Borrow
+- Multi-source feed composition (Wallhaven + Reddit + Pexels + Unsplash) with per-source API key and SafeSearch toggles (WallFlow, WallCraft)
+- AI-generated wallpaper tab using on-device Stable Diffusion XL or server-side proxy (WallCraft)
+- WorkManager-backed auto-rotation with per-album schedules and charge-only / Wi-Fi-only constraints (Paperize, WallCraft)
+- Custom editor: crop, saturation, opacity, blur, brightness before apply (WallPap)
+- Google Drive / local-folder save-target option in addition to DCIM (WallPap)
+- Plugin/source API so third parties can add sources without forking (Muzei sources)
+- "Set on home / lock / both" three-way switch with per-target image choice (every modern Compose app)
+- Darklify-style automatic day/night variant pairs (Darklify)
+- Kotlin Multiplatform compose target for Windows live-paper app sharing (WallFlow KMP plan)
+- Paging 3 + Coil caching for infinite scroll with thumbnail disk cache ceiling (Wallum)
+- Favorites with cloud-backup-optional via Drive/Dropbox (WallCraft)
+
+### Patterns & Architectures Worth Studying
+- Muzei's "sources" plugin API — IPC-based, versioned ABI, each source a separate APK — lets community add wallpaper providers without shipping their keys (Muzei)
+- WorkManager + periodic task for wallpaper rotation with constraint batching to preserve battery (Paperize)
+- Clean MVVM + Repository + UseCase stack with StateFlow as single source-of-truth (Paperize)
+- Per-source API key stored in EncryptedSharedPreferences — avoids shipping keys in the APK (WallCraft)
+- Compose Material 3 dynamic color theming derived from the currently-set wallpaper's palette (general Material You reference)
+
+## Implementation Deep Dive (Round 3)
+
+### Reference Implementations to Study
+- **rahulshah456/LiveSlider/app/src/main/java/com/rahulshah/liveslider/LiveWallpaperRenderer.kt** — https://github.com/rahulshah456/LiveSlider — OpenGL ES parallax renderer applying calculated X/Y offsets to texture coords from `WallpaperService.Engine.onOffsetsChanged`. Direct reference for replacing the current Canvas-based `ParallaxWallpaperService`.
+- **GLWallpaperService/GLWallpaperService** — https://github.com/GLWallpaperService/GLWallpaperService — Apache-2.0 `GLEngine` base class that wires EGL context + rendering thread + WallpaperService lifecycle. Drop in as `app/src/main/java/com/freevibe/wallpaper/gl/`.
+- **shubham0204/MLKit_Selfie_Segmentation_Android/app/src/main/java/com/ml/quaterion/facenetdetection/model/FrameAnalyser.kt** — https://github.com/shubham0204/MLKit_Selfie_Segmentation_Android — STREAM_MODE segmenter with proper close-on-destroy. Template for fixing segmenter lifecycle in `ParallaxWallpaperService` (already noted in v5.9.0 but single-source-of-truth reference).
+- **Anthonyy232/Paperize/app/src/main/java/com/anthonyla/paperize/feature/wallpaper/wallpaper_service/WallpaperService.kt** — https://github.com/Anthonyy232/Paperize — WorkManager + constraint-batched rotation reference; compare against `AutoWallpaperWorker.kt` to spot missing constraints (charging-only, Wi-Fi-only).
+- **ammargitham/WallFlow/app/src/main/java/com/ammar/wallflow/data/network/retrofit/wallhaven/RetrofitWallhavenNetwork.kt** — https://github.com/ammargitham/WallFlow — Wallhaven + Reddit multi-source Retrofit adapters with Paging 3; cleaner than Aura's per-source repository split.
+- **muzei/muzei/muzei-api/src/main/java/com/google/android/apps/muzei/api/provider/MuzeiArtProvider.java** — https://github.com/muzei/muzei/blob/main/muzei-api/src/main/java/com/google/android/apps/muzei/api/provider/MuzeiArtProvider.java — IPC-based plugin-source API for third-party wallpaper providers. Template for a future Aura plugin ABI.
+- **google/oboe/samples/LiveEffect/src/main/cpp/LiveEffect.cpp** — https://github.com/google/oboe/blob/main/samples/LiveEffect/src/main/cpp/LiveEffect.cpp — low-latency Oboe audio callback, useful if Aura upgrades the sound preview loop from ExoPlayer single-instance to Oboe for ringtone A/B previews.
+- **airbnb/lottie-android/lottie/src/main/java/com/airbnb/lottie/LottieAnimationView.java** — https://github.com/airbnb/lottie-android — animated-wallpaper-template path via `LottieDrawable.draw(Canvas)` into a `WallpaperService.Engine` surface. Lets Aura ship "live wallpaper templates" without bundling per-template APKs.
+
+### Known Pitfalls from Similar Projects
+- **`SurfaceView` RGB_565 vs `WallpaperService` RGBX_8888 default pixel format** — Learn OpenGL ES article — switching `GLSurfaceView` into a live wallpaper without calling `setEGLConfigChooser(8,8,8,0,0,0)` produces banding. https://www.learnopengles.com/how-to-use-opengl-es-2-in-an-android-live-wallpaper/
+- **ML Kit Selfie Segmenter adds ~4.5MB but `libxeno_native.so` can spike +50MB** — googlesamples/mlkit#386 — check APK size post-dependency bump. https://github.com/googlesamples/mlkit/issues/386
+- **Selfie segmenter <10 fps on low-end at 360p** — googlesamples/mlkit#436 — always pre-downsample to 256×256 in STREAM_MODE before feeding `InputImage.fromBitmap`. https://github.com/googlesamples/mlkit/issues/436
+- **ML Kit face-detector memory-leak class of bug** — googlesamples/mlkit#137 — if a new frame lands while detector is running, drop it; do not queue. Aura already does this for wallpapers but re-verify for sound waveforms. https://github.com/googlesamples/mlkit/issues/137
+- **NewPipe-extractor API keeps breaking on YouTube backend changes** — NewPipe maintainers ship patches monthly; Aura must track the extractor version (not the app) and bump on every release. https://github.com/TeamNewPipe/NewPipeExtractor
+- **Freesound v2 API token-bucket rate limiter — 60 req/min per IP** — Aura must back off with `Retry-After` handling; currently silent. https://freesound.org/docs/api/overview.html#rate-limiting
+- **FFmpeg `libffmpeg.so` loaded via reflection from yt-dlp library** — fragile; on yt-dlp library upgrade the JNI symbol path can shift. Pin yt-dlp version + add a startup self-test that runs `ffmpeg -version` and disables video wallpapers if it fails.
+- **Muzei plugin IPC requires API-versioning — breaking changes are silent** — Muzei 1.x → 2.x broke every third-party source. If Aura ships a plugin ABI, version it from day one. https://github.com/muzei/muzei/wiki/Changelog
+- **Palette API colors unreliable on cartoon/solid-color images** — single dominant color from Palette can read as dark gray. Use `getDominantSwatch()` → fall back to `getVibrantSwatch()` → `getMutedSwatch()` before using for Material You accent. https://developer.android.com/reference/androidx/palette/graphics/Palette
+- **Firebase Realtime Database quota on free tier (100 concurrent, 10GB/mo transfer)** — VoteRepository already uses ConcurrentHashMap, but a viral wallpaper can saturate quota. Shard community votes by hash or migrate to Firestore for better quota model.
+
+### Library Integration Checklist
+- **GLWallpaperService (OpenGL live wallpapers)** — no Maven coords; vendor `GLWallpaperService.java` + `GLEngine` + `RenderThread` into `com.freevibe.wallpaper.gl/`. Entry: `class ParallaxGlService : GLWallpaperService() { override onCreateEngine() = GLEngine().also { it.setEGLContextClientVersion(2); it.setRenderer(ParallaxRenderer()) } }`. Gotcha: `WallpaperService.Engine.onVisibilityChanged(false)` must pause the GLSurfaceView's render thread or battery drain doubles.
+- **NewPipeExtractor (YouTube search + stream resolve)** — `com.github.TeamNewPipe:NewPipeExtractor:0.24.x` (pin to exact version, breaking changes every ~6 weeks). Entry: `NewPipe.init(DownloaderImpl.init(null)); val info = StreamInfo.getInfo(url)`. Gotcha: `DownloaderImpl` ships a buggy stream leak — use `InputStream.use { }` explicitly and wrap `BufferedReader` in `use` (Aura already fixed this in v5.8 but re-verify on every upstream bump).
+- **ML Kit Selfie Segmentation** — `com.google.mlkit:segmentation-selfie:16.0.0-beta6` — entry: `Segmentation.getClient(SelfieSegmenterOptions.Builder().setDetectorMode(STREAM_MODE).enableRawSizeMask().build())`. Gotcha: `Segmenter.close()` must be called on `WallpaperService.Engine.onDestroy()` and the outstanding `Task` must complete or be observed; dropping it leaks ~7MB per engine lifecycle.
+
+
+## Implementation Deep Dive (Round 3)
+
+### Reference Implementations to Study
+- **Freesound APIv2 docs** — https://freesound.org/docs/api/resources_apiv2.html — canonical endpoint reference; `GET /apiv2/search/text/` with `filter=license:"Creative Commons 0" duration:[1.0 TO 30.0]` and `sort=rating_desc` is the right shape for each content category
+- **MTG/freesound-python** — https://github.com/MTG/freesound-python — official Freesound reference client (Python); port the field masks, auth header (`Authorization: Token <key>`), and pagination cursor to the Kotlin/Retrofit layer
+- **AlynxZhou/alynx-live-wallpaper** — https://github.com/AlynxZhou/alynx-live-wallpaper — the cleanest ExoPlayer + OpenGL ES center-crop video wallpaper reference; adopt its `GLWallpaperService` engine wholesale for video wallpaper support
+- **cyunrei/Video-Live-Wallpaper** — https://github.com/cyunrei/Video-Live-Wallpaper — minimal-memory variant, good for low-end device path
+- **google/ExoPlayer / androidx.media3** — https://github.com/androidx/media — current home of Media3; the roadmap's "preview player" should track media3 1.9.x like NovaCut
+- **Android Ringtone API reference** — https://developer.android.com/reference/android/media/RingtoneManager — `RingtoneManager.setActualDefaultRingtoneUri` + `MediaStore.Audio.Media.IS_RINGTONE` metadata; the only approved path to set system ringtone on API 26+
+- **opensource.creativecommons.org Freesound intro** — https://opensource.creativecommons.org/blog/entries/freesound-intro/ — license compliance walkthrough, CC0 redistribution rules for the bundled "Aura Collection"
+- **Openverse** — https://api.openverse.engineering — the source the roadmap calls out as losing quality signals; keep as secondary fallback, not primary
+
+### Known Pitfalls from Similar Projects
+- **Freesound `/apiv1/search/text/` deprecated Nov 2025** — https://freesound.org/docs/api/resources_apiv2.html — v1 endpoints redirect but will eventually 410; hard-code v2 paths from day one
+- **API token vs OAuth2** — https://freesound.org/help/developers/ — download of full (non-preview) audio requires OAuth2, not the simple API token; the token only gets you metadata + 128kbps previews
+- **Previews are MP3, not original** — Freesound API ref — `previews.preview-hq-mp3` is re-encoded and may not match the original's loudness; normalize bundled originals separately
+- **MediaStore ringtone write permission** — https://developer.android.com/training/data-storage/shared/media — on Android 11+ `WRITE_EXTERNAL_STORAGE` no longer works; must use `MediaStore.createPendingInsert` + `Ringtone` URI flip — many OSS apps still fail silently here
+- **ExoPlayer holds audio focus by default** — AlynxZhou README above — must call `.setAudioAttributes(null, false)` or live wallpaper steals audio from music apps
+- **H.264 wallpaper burns battery** — XDA analysis linked above — prefer MPEG-4/DivX re-encode or cap 480p@20fps; H.265 is usually worse for wallpaper due to decode overhead not being offset by bitrate savings
+- **`onVisibilityChanged(false)` must pause** — https://android-developers.googleblog.com/2010/02/live-wallpapers.html — apps that don't release the decoder on invisibility drain battery even when the user is in another app
+- **CC0 does not protect against DMCA re-uploads** — community cautionary threads — verify each bundled file's uploader-claimed CC0 against Freesound's moderation flag before shipping; keep a sha256 manifest for retroactive removal
+
+### Library Integration Checklist
+- **Retrofit 2.11 + OkHttp 4.12** — `@GET("apiv2/search/text/") fun search(@Query("query") q: String, @Query("filter") f: String, @Query("fields") fs: String, @Query("page_size") ps: Int): Response<SearchResponse>`; header interceptor adds `Authorization: Token ${BuildConfig.FREESOUND_TOKEN}`; gotcha: `filter` must be URL-encoded incl. the quotes around license names
+- **kotlinx.serialization 1.7** — for `SearchResponse` models; gotcha: Freesound fields can be null in unexpected places (`avg_rating=0` for unrated) — mark all rating fields nullable
+- **androidx.media3 1.9.2** (ExoPlayer) — match NovaCut's pin; `ExoPlayer.Builder(context).setAudioAttributes(AudioAttributes.DEFAULT, false).build()`; gotcha: handle `Player.STATE_ENDED` by re-seeking to 0 for looping wallpapers — `setRepeatMode(REPEAT_MODE_ONE)` is cheaper than manual seek
+- **OpenGL ES 2.0 renderer** for video wallpaper — port from alynx-live-wallpaper; shader program with `SurfaceTexture` → fragment shader `samplerExternalOES`; gotcha: Samsung devices re-create the GL context when wallpaper picker previews, handle `onSurfaceCreated` idempotently
+- **androidx.work 2.10** — for "Aura Originals" asset-pack download on first launch; `OneTimeWorkRequest` with network constraint; gotcha: large blob downloads need `setExpedited(OUT_OF_QUOTA_POLICY.RUN_AS_NON_EXPEDITED_WORK_REQUEST)`
+- **androidx.datastore-preferences 1.1** — for token + user prefs; do NOT store Freesound OAuth refresh token in SharedPreferences (plaintext); use EncryptedSharedPreferences with MasterKey
+- **coil 2.7** (not Glide) — for artwork thumbnails in the browser grid; already AMOLED-friendly, matches FreeVibe/Aura's existing Compose stack
+- **Room 2.7** — `ContentSource.LOCAL_BUNDLED` enum value in the existing sound DB; schema migration needs an `is_bundled` flag + `sha256` column for the retroactive-removal path
+- **Room FTS4 virtual table** — for tag search; gotcha: FTS doesn't like the `-` in `Creative-Commons-0`; tokenize on spaces and strip punctuation in the insert trigger
+
