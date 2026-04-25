@@ -17,7 +17,9 @@
 
 - [x] Completed the P0 1.5 app-level entry: Sounds > Create from music now opens the system audio picker and routes the selected local file straight into SoundEditorScreen's waveform loader.
 - [x] Product polish: the editor opens in Create Sound mode for local files, avoids stale selected remote sounds, and skips redundant local URI reloads after recomposition/configuration changes.
-- [ ] Remaining candidate: add ringtone-specific trim guidance/defaults for the 8-30s target and verify the flow on a physical device or emulator with real audio files.
+- [x] Ringtone trim polish: long clips now default to a 30s selection, and the editor surfaces 8-30s guidance without blocking notification/alarm use cases.
+- [x] Emulator smoke: generated local WAV opens in Create Sound mode with waveform, trim timing, guidance, fade controls, and ringtone/notification/alarm actions visible.
+- [ ] Remaining candidate: repeat create-from-music QA through the system picker on a physical device with real user music files.
 
 ## Phase 1 — Content Foundation
 
@@ -64,7 +66,7 @@
 - [x] "Create from Music" button on Sounds tab
 - [x] File picker: `ActivityResultContracts.GetContent("audio/*")`
 - [x] Load into SoundEditorScreen with waveform
-- [ ] Add ringtone-specific 8-30s trim guidance/defaults; existing editor already supports manual trim and fade controls
+- [x] Add ringtone-specific 8-30s trim guidance/defaults; existing editor already supports manual trim and fade controls
 - [x] One-tap set as ringtone/notification/alarm
 - This alone is the #1 feature on ringtone apps (Ringtone Maker has 100M+ downloads)
 
