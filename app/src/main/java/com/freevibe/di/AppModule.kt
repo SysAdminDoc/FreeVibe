@@ -10,6 +10,7 @@ import com.freevibe.data.local.FreeVibeDatabase
 import com.freevibe.data.local.SearchHistoryDao
 import com.freevibe.data.local.WallpaperCacheDao
 import com.freevibe.data.local.WallpaperHistoryDao
+import com.freevibe.data.remote.RateLimitInterceptor
 import com.freevibe.data.remote.audius.AudiusApi
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.ccmixter.CcMixterApi
@@ -59,6 +60,9 @@ object AppModule {
                 .build()
             chain.proceed(request)
         }
+        // Bounded 429-aware retry for the rate-limited Freesound API.
+        // Other hosts pass through unchanged.
+        .addInterceptor(RateLimitInterceptor(hostSuffixes = setOf("freesound.org")))
         .build()
 
     @Provides
