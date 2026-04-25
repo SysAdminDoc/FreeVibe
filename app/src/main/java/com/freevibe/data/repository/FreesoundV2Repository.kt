@@ -15,6 +15,7 @@ import javax.inject.Singleton
 class FreesoundV2Repository @Inject constructor(
     private val api: FreesoundV2Api,
     private val prefs: PreferencesManager,
+    private val sourceMetrics: com.freevibe.service.SourceMetrics,
 ) {
     private suspend fun apiKey(): String = prefs.freesoundApiKey.first().ifBlank { BuildConfig.FREESOUND_API_KEY }
 
@@ -30,25 +31,33 @@ class FreesoundV2Repository @Inject constructor(
             return SearchResult(items = emptyList(), totalCount = 0, currentPage = page, hasMore = false)
         }
 
-        val filter = "duration:[$minDuration TO $maxDuration]"
-        val response = api.search(
-            query = query,
-            filter = filter,
-            page = page,
-            sort = sort,
-            token = key
-        )
+        val startedAt = System.currentTimeMillis()
+        return try {
+            val filter = "duration:[$minDuration TO $maxDuration]"
+            val response = api.search(
+                query = query,
+                filter = filter,
+                page = page,
+                sort = sort,
+                token = key
+            )
 
-        val sounds = response.results
-            .filter { it.duration > 0 && it.previews.previewHqMp3.isNotBlank() }
-            .map { it.toDomain() }
+            val sounds = response.results
+                .filter { it.duration > 0 && it.previews.previewHqMp3.isNotBlank() }
+                .map { it.toDomain() }
 
-        return SearchResult(
-            items = sounds,
-            totalCount = response.count,
-            currentPage = page,
-            hasMore = response.next != null,
-        )
+            val result = SearchResult(
+                items = sounds,
+                totalCount = response.count,
+                currentPage = page,
+                hasMore = response.next != null,
+            )
+            sourceMetrics.recordSuccess("freesound", System.currentTimeMillis() - startedAt)
+            result
+        } catch (e: Throwable) {
+            sourceMetrics.recordFailure("freesound", e)
+            throw e
+        }
     }
 
     suspend fun getRingtones(page: Int = 1): SearchResult<Sound> =
