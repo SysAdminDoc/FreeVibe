@@ -10,6 +10,7 @@ import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.remote.pixabay.PixabayApi
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.data.remote.wallhaven.WallhavenApi
+import com.freevibe.service.SourceMetrics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -75,6 +76,11 @@ private fun Throwable.rethrowIfCancelled() {
 private const val DISCOVER_PER_SOURCE_TIMEOUT_MS = 4_500L
 private const val DISCOVER_SECONDARY_SOURCE_BUDGET_MS = 1_200L
 private const val DISCOVER_PAGE_SIZE = 60
+private const val SOURCE_BING = "bing"
+private const val SOURCE_DISCOVER = "discover"
+private const val SOURCE_PEXELS = "pexels"
+private const val SOURCE_PIXABAY = "pixabay"
+private const val SOURCE_WALLHAVEN = "wallhaven"
 
 /**
  * Wallhaven purity bitfield: bit0=SFW, bit1=Sketchy, bit2=NSFW (string of three '0'/'1').
@@ -105,7 +111,7 @@ class WallpaperRepository @Inject constructor(
     private val pexelsApi: PexelsApi,
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
-    private val sourceMetrics: com.freevibe.service.SourceMetrics,
+    private val sourceMetrics: SourceMetrics,
 ) {
     private suspend fun wallhavenApiKey(): String = prefs.wallhavenApiKey.first()
     private suspend fun pixabayApiKey(): String = prefs.pixabayApiKey.first()
@@ -128,9 +134,8 @@ class WallpaperRepository @Inject constructor(
         topRange: String = "1M",
     ): SearchResult<Wallpaper> {
         val cacheKey = if (query.isBlank()) "wallhaven_toplist_${topRange}_$page" else "wallhaven_search_${query.hashCode()}_$page"
-        val startedAt = System.currentTimeMillis()
-        return try {
-            val result = withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
+        return withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
+            sourceMetrics.measure(SOURCE_WALLHAVEN) {
                 val sorting = if (query.isBlank()) "toplist" else "relevance"
                 val apiKey = wallhavenApiKey()
                 val response = wallhavenApi.search(
@@ -150,12 +155,6 @@ class WallpaperRepository @Inject constructor(
                     hasMore = response.meta.currentPage < response.meta.lastPage,
                 )
             }
-            sourceMetrics.recordSuccess("wallhaven", System.currentTimeMillis() - startedAt)
-            result
-        } catch (e: Throwable) {
-            // Cancellation passes through unrecorded (see SourceMetrics.recordFailure).
-            sourceMetrics.recordFailure("wallhaven", e)
-            throw e
         }
     }
 
@@ -167,7 +166,7 @@ class WallpaperRepository @Inject constructor(
         getWallhaven(query = "like:$wallhavenId", page = page)
 
     /** Get random wallpapers from Wallhaven */
-    suspend fun getRandomWallhaven(): SearchResult<Wallpaper> {
+    suspend fun getRandomWallhaven(): SearchResult<Wallpaper> = sourceMetrics.measure(SOURCE_WALLHAVEN) {
         val apiKey = wallhavenApiKey()
         val response = wallhavenApi.search(
             sorting = "random",
@@ -176,7 +175,7 @@ class WallpaperRepository @Inject constructor(
             minResolution = wallhavenMinRes(),
             apiKey = apiKey,
         )
-        return SearchResult(
+        SearchResult(
             items = response.data.map { it.toWallpaper() },
             totalCount = response.meta.total,
             currentPage = 1,
@@ -240,21 +239,23 @@ class WallpaperRepository @Inject constructor(
     suspend fun searchByColor(color: String, page: Int = 1): SearchResult<Wallpaper> {
         val mapped = nearestWallhavenColor(color)
         return withCacheFallback("wallhaven_color_${mapped}_$page", ContentSource.WALLHAVEN) {
-            val response = wallhavenApi.search(
-                query = "",
-                sorting = "relevance",
-                categories = "111",
-                purity = wallhavenPurity(),
-                page = page,
-                apiKey = wallhavenApiKey(),
-                colors = mapped,
-            )
-            SearchResult(
-                items = response.data.map { it.toWallpaper() },
-                totalCount = response.meta.total,
-                currentPage = response.meta.currentPage,
-                hasMore = response.meta.currentPage < response.meta.lastPage,
-            )
+            sourceMetrics.measure(SOURCE_WALLHAVEN) {
+                val response = wallhavenApi.search(
+                    query = "",
+                    sorting = "relevance",
+                    categories = "111",
+                    purity = wallhavenPurity(),
+                    page = page,
+                    apiKey = wallhavenApiKey(),
+                    colors = mapped,
+                )
+                SearchResult(
+                    items = response.data.map { it.toWallpaper() },
+                    totalCount = response.meta.total,
+                    currentPage = response.meta.currentPage,
+                    hasMore = response.meta.currentPage < response.meta.lastPage,
+                )
+            }
         }
     }
 
@@ -262,20 +263,22 @@ class WallpaperRepository @Inject constructor(
 
     suspend fun getBingDaily(page: Int = 1): SearchResult<Wallpaper> =
         withCacheFallback("bing_$page", ContentSource.BING) {
-            val marketsCount = BingDailyApi.MARKETS.size
-            val idx = (page - 1) / marketsCount
-            val marketIndex = (page - 1) % marketsCount
-            val market = BingDailyApi.MARKETS[marketIndex]
-            val response = fetchBingImages(
-                idx = (idx * 8).coerceAtMost(7),
-                market = market,
-            )
-            SearchResult(
-                items = response.images.map { it.toWallpaper() },
-                totalCount = marketsCount * 8,
-                currentPage = page,
-                hasMore = page < marketsCount,
-            )
+            sourceMetrics.measure(SOURCE_BING) {
+                val marketsCount = BingDailyApi.MARKETS.size
+                val idx = (page - 1) / marketsCount
+                val marketIndex = (page - 1) % marketsCount
+                val market = BingDailyApi.MARKETS[marketIndex]
+                val response = fetchBingImages(
+                    idx = (idx * 8).coerceAtMost(7),
+                    market = market,
+                )
+                SearchResult(
+                    items = response.images.map { it.toWallpaper() },
+                    totalCount = marketsCount * 8,
+                    currentPage = page,
+                    hasMore = page < marketsCount,
+                )
+            }
         }
 
     // -- Pixabay --
@@ -284,18 +287,20 @@ class WallpaperRepository @Inject constructor(
         val key = pixabayApiKey()
         if (key.isBlank()) return SearchResult(emptyList(), 0, 1, false)
         return withCacheFallback("pixabay_${query.hashCode()}_$page", ContentSource.PIXABAY) {
-            val response = pixabayApi.searchPhotos(
-                apiKey = key,
-                query = query.ifBlank { "wallpaper" },
-                page = page,
-                editorsChoice = query.isBlank(),
-            )
-            SearchResult(
-                items = response.hits.map { it.toWallpaper() },
-                totalCount = response.totalHits,
-                currentPage = page,
-                hasMore = page * 30 < response.totalHits,
-            )
+            sourceMetrics.measure(SOURCE_PIXABAY) {
+                val response = pixabayApi.searchPhotos(
+                    apiKey = key,
+                    query = query.ifBlank { "wallpaper" },
+                    page = page,
+                    editorsChoice = query.isBlank(),
+                )
+                SearchResult(
+                    items = response.hits.map { it.toWallpaper() },
+                    totalCount = response.totalHits,
+                    currentPage = page,
+                    hasMore = page * 30 < response.totalHits,
+                )
+            }
         }
     }
 
@@ -308,24 +313,26 @@ class WallpaperRepository @Inject constructor(
         val key = pexelsApiKey()
         if (key.isBlank()) return SearchResult(emptyList(), 0, 1, false)
         return withCacheFallback("pexels_curated_$page", ContentSource.PEXELS) {
-            val response = pexelsApi.curatedPhotos(apiKey = key, page = page)
-            SearchResult(
-                items = response.photos.map { photo ->
-                    Wallpaper(
-                        id = "px_${photo.id}",
-                        source = ContentSource.PEXELS,
-                        thumbnailUrl = photo.src.medium,
-                        fullUrl = photo.src.original,
-                        width = photo.width,
-                        height = photo.height,
-                        sourcePageUrl = photo.url,
-                        uploaderName = photo.photographer,
-                    )
-                },
-                totalCount = response.totalResults,
-                currentPage = response.page,
-                hasMore = response.nextPage != null,
-            )
+            sourceMetrics.measure(SOURCE_PEXELS) {
+                val response = pexelsApi.curatedPhotos(apiKey = key, page = page)
+                SearchResult(
+                    items = response.photos.map { photo ->
+                        Wallpaper(
+                            id = "px_${photo.id}",
+                            source = ContentSource.PEXELS,
+                            thumbnailUrl = photo.src.medium,
+                            fullUrl = photo.src.original,
+                            width = photo.width,
+                            height = photo.height,
+                            sourcePageUrl = photo.url,
+                            uploaderName = photo.photographer,
+                        )
+                    },
+                    totalCount = response.totalResults,
+                    currentPage = response.page,
+                    hasMore = response.nextPage != null,
+                )
+            }
         }
     }
 
@@ -336,36 +343,39 @@ class WallpaperRepository @Inject constructor(
         return cacheManager.getStaleCached("discover_$page")
     }
 
-    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null): SearchResult<Wallpaper> = supervisorScope {
-        val primarySources = mutableListOf(
-            async { loadSourceSafely { getWallhaven(page = page) } },
-            async { loadSourceSafely { getPixabay(page = page) } },
-            async { loadSourceSafely { getPexelsCurated(page = page) } },
-        )
-        if (redditRepo != null) {
-            primarySources.add(async { loadSourceSafely { redditRepo.getMultiSubreddit() } })
+    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null): SearchResult<Wallpaper> =
+        sourceMetrics.measure(SOURCE_DISCOVER) {
+            supervisorScope {
+                val primarySources = mutableListOf(
+                    async { loadSourceSafely { getWallhaven(page = page) } },
+                    async { loadSourceSafely { getPixabay(page = page) } },
+                    async { loadSourceSafely { getPexelsCurated(page = page) } },
+                )
+                if (redditRepo != null) {
+                    primarySources.add(async { loadSourceSafely { redditRepo.getMultiSubreddit() } })
+                }
+                val secondarySources = listOf(
+                    async { loadSourceSafely { getBingDaily(page = page) } },
+                )
+
+                val primaryResults = primarySources.awaitAll()
+                val secondaryResults = withTimeoutOrNull(DISCOVER_SECONDARY_SOURCE_BUDGET_MS) {
+                    secondarySources.awaitAll()
+                } ?: emptyList()
+                val merged = mergeDiscoverResults(
+                    results = primaryResults + secondaryResults,
+                    page = page,
+                    maxItems = DISCOVER_PAGE_SIZE,
+                )
+
+                // Cache combined discover result for instant startup next time
+                if (merged.items.isNotEmpty()) {
+                    cacheManager.cache("discover_$page", merged.items)
+                }
+
+                merged
+            }
         }
-        val secondarySources = listOf(
-            async { loadSourceSafely { getBingDaily(page = page) } },
-        )
-
-        val primaryResults = primarySources.awaitAll()
-        val secondaryResults = withTimeoutOrNull(DISCOVER_SECONDARY_SOURCE_BUDGET_MS) {
-            secondarySources.awaitAll()
-        } ?: emptyList()
-        val merged = mergeDiscoverResults(
-            results = primaryResults + secondaryResults,
-            page = page,
-            maxItems = DISCOVER_PAGE_SIZE,
-        )
-
-        // Cache combined discover result for instant startup next time
-        if (merged.items.isNotEmpty()) {
-            cacheManager.cache("discover_$page", merged.items)
-        }
-
-        merged
-    }
 
     // -- Error handling with cache fallback --
 

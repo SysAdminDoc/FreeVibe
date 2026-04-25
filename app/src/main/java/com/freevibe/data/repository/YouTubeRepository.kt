@@ -4,6 +4,7 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.BuildConfig
+import com.freevibe.service.SourceMetrics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +19,9 @@ import javax.inject.Singleton
  * Scrapes YouTube directly — no API key, no Piped instances, no quotas.
  */
 @Singleton
-class YouTubeRepository @Inject constructor() {
+class YouTubeRepository @Inject constructor(
+    private val sourceMetrics: SourceMetrics,
+) {
 
     // Cache resolved stream URLs with TTL to avoid stale URLs (YouTube tokens expire)
     private data class CachedStream(val url: String, val cachedAt: Long)
@@ -28,6 +31,7 @@ class YouTubeRepository @Inject constructor() {
         }
     )
     private val STREAM_TTL_MS = 6 * 60 * 60 * 1000L // 6 hours (YouTube tokens last ~6h)
+    private val sourceName = "youtube"
 
     /** Check if a video's audio URL is cached and fresh */
     fun isCached(videoId: String): Boolean {
@@ -64,30 +68,32 @@ class YouTubeRepository @Inject constructor() {
         blockedWords: List<String> = emptyList(),
     ): SearchResult<Sound> = withContext(Dispatchers.IO) {
         try {
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Searching YouTube for: $query")
-            val service = NewPipe.getService(ServiceList.YouTube.serviceId)
-            val searchExtractor = service.getSearchExtractor(query)
-            searchExtractor.fetchPage()
+            sourceMetrics.measure(sourceName) {
+                if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Searching YouTube for: $query")
+                val service = NewPipe.getService(ServiceList.YouTube.serviceId)
+                val searchExtractor = service.getSearchExtractor(query)
+                searchExtractor.fetchPage()
 
-            // Combine hardcoded + user-provided blocked words
-            val allBlocked = junkPatterns + blockedWords
-                .filter { it.isNotBlank() }
-                .map { Regex(Regex.escape(it.trim()), RegexOption.IGNORE_CASE) }
+                // Combine hardcoded + user-provided blocked words
+                val allBlocked = junkPatterns + blockedWords
+                    .filter { it.isNotBlank() }
+                    .map { Regex(Regex.escape(it.trim()), RegexOption.IGNORE_CASE) }
 
-            val sounds = searchExtractor.initialPage.items
-                .filterIsInstance<StreamInfoItem>()
-                .filter { it.duration > 0 }
-                .filter { it.duration in minDuration.toLong()..maxDuration.toLong() }
-                .filter { item -> allBlocked.none { it.containsMatchIn(item.name) } }
-                .filter { !it.name.contains("#") }
-                .map { it.toSound() }
+                val sounds = searchExtractor.initialPage.items
+                    .filterIsInstance<StreamInfoItem>()
+                    .filter { it.duration > 0 }
+                    .filter { it.duration in minDuration.toLong()..maxDuration.toLong() }
+                    .filter { item -> allBlocked.none { it.containsMatchIn(item.name) } }
+                    .filter { !it.name.contains("#") }
+                    .map { it.toSound() }
 
-            SearchResult(
-                items = sounds,
-                totalCount = sounds.size,
-                currentPage = 1,
-                hasMore = searchExtractor.initialPage.hasNextPage(),
-            )
+                SearchResult(
+                    items = sounds,
+                    totalCount = sounds.size,
+                    currentPage = 1,
+                    hasMore = searchExtractor.initialPage.hasNextPage(),
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -103,15 +109,17 @@ class YouTubeRepository @Inject constructor() {
             streamCache.remove(videoId)
         }
         try {
-            val url = "https://www.youtube.com/watch?v=$videoId"
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
-            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
-            request.addOption("-f", "worstaudio") // Fastest to resolve + smallest to buffer
-            request.addOption("--get-url")
-            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
-            streamUrl?.also { streamCache[videoId] = CachedStream(it, System.currentTimeMillis()) }
+            sourceMetrics.measure(sourceName) {
+                val url = "https://www.youtube.com/watch?v=$videoId"
+                if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting preview audio via yt-dlp for $videoId")
+                val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+                request.addOption("-f", "worstaudio") // Fastest to resolve + smallest to buffer
+                request.addOption("--get-url")
+                val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                val streamUrl = response.out?.trim()?.takeIf { it.isNotBlank() }
+                if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "yt-dlp preview result: ${streamUrl?.take(80) ?: "NULL"}")
+                streamUrl?.also { streamCache[videoId] = CachedStream(it, System.currentTimeMillis()) }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -123,14 +131,16 @@ class YouTubeRepository @Inject constructor() {
     /** High quality URL for download/apply — uses bestaudio */
     suspend fun getAudioStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = "https://www.youtube.com/watch?v=$videoId"
-            if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting best audio via yt-dlp for $videoId")
-            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
-            request.addOption("-f", "bestaudio")
-            request.addOption("--get-url")
-            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            val streamUrl = response.out?.trim()
-            if (streamUrl.isNullOrBlank()) null else streamUrl
+            sourceMetrics.measure(sourceName) {
+                val url = "https://www.youtube.com/watch?v=$videoId"
+                if (BuildConfig.DEBUG) android.util.Log.d("YouTubeRepo", "Extracting best audio via yt-dlp for $videoId")
+                val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+                request.addOption("-f", "bestaudio")
+                request.addOption("--get-url")
+                val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                val streamUrl = response.out?.trim()
+                if (streamUrl.isNullOrBlank()) null else streamUrl
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -141,13 +151,15 @@ class YouTubeRepository @Inject constructor() {
 
     suspend fun getVideoStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = "https://www.youtube.com/watch?v=$videoId"
-            val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
-            request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
-            request.addOption("--get-url")
-            val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
-            val streamUrl = response.out?.trim()?.lines()?.firstOrNull()
-            if (streamUrl.isNullOrBlank()) null else streamUrl
+            sourceMetrics.measure(sourceName) {
+                val url = "https://www.youtube.com/watch?v=$videoId"
+                val request = com.yausername.youtubedl_android.YoutubeDLRequest(url)
+                request.addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                request.addOption("--get-url")
+                val response = com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
+                val streamUrl = response.out?.trim()?.lines()?.firstOrNull()
+                if (streamUrl.isNullOrBlank()) null else streamUrl
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) { null }

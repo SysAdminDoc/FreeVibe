@@ -1,5 +1,9 @@
 package com.freevibe.service
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -62,6 +66,20 @@ class SourceMetrics @Inject constructor() {
     }
 
     private val entries = ConcurrentHashMap<String, MutableEntry>()
+    private val _version = MutableStateFlow(0L)
+    val version: StateFlow<Long> = _version.asStateFlow()
+
+    suspend fun <T> measure(source: String, block: suspend () -> T): T {
+        val startedAt = System.currentTimeMillis()
+        return try {
+            val result = block()
+            recordSuccess(source, System.currentTimeMillis() - startedAt)
+            result
+        } catch (e: Throwable) {
+            recordFailure(source, e)
+            throw e
+        }
+    }
 
     /**
      * Record a successful call. [latencyMs] is the elapsed wall-clock time;
@@ -77,6 +95,7 @@ class SourceMetrics @Inject constructor() {
             e.latencies.addLast(latencyMs.coerceAtLeast(0L))
             while (e.latencies.size > MAX_LATENCY_SAMPLES) e.latencies.pollFirst()
         }
+        _version.update { it + 1 }
     }
 
     fun recordFailure(source: String, error: Throwable) {
@@ -90,6 +109,7 @@ class SourceMetrics @Inject constructor() {
         e.lastErrorClass = error.javaClass.simpleName
         e.lastErrorMessage = error.message?.take(200)
         e.lastFailureAtMs = System.currentTimeMillis()
+        _version.update { it + 1 }
     }
 
     /** Atomic-ish snapshot of one source. Returns null if never seen. */
@@ -120,6 +140,7 @@ class SourceMetrics @Inject constructor() {
     /** Forget all recorded stats (developer-facing reset). */
     fun reset() {
         entries.clear()
+        _version.update { it + 1 }
     }
 
     private companion object {

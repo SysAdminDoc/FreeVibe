@@ -1,5 +1,6 @@
 package com.freevibe.service
 
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -105,6 +106,37 @@ class SourceMetricsTest {
         val m = SourceMetrics()
         m.recordSuccess("", 100L)
         m.recordFailure("   ", IOException("x"))
+        assertTrue(m.snapshotAll().isEmpty())
+    }
+
+    @Test
+    fun `measure records success and live update tick`() = runTest {
+        val m = SourceMetrics()
+        val result = m.measure("youtube") { "ok" }
+        assertEquals("ok", result)
+        assertEquals(1L, m.version.value)
+        assertEquals(1L, m.snapshot("youtube")!!.successCount)
+    }
+
+    @Test
+    fun `measure records failure and rethrows`() = runTest {
+        val m = SourceMetrics()
+        try {
+            m.measure("youtube") { throw IOException("offline") }
+        } catch (e: IOException) {
+            assertEquals("offline", e.message)
+        }
+        assertEquals(1L, m.version.value)
+        assertEquals(1L, m.snapshot("youtube")!!.failureCount)
+    }
+
+    @Test
+    fun `reset publishes live update tick`() {
+        val m = SourceMetrics()
+        m.recordSuccess("wallhaven", 100L)
+        assertEquals(1L, m.version.value)
+        m.reset()
+        assertEquals(2L, m.version.value)
         assertTrue(m.snapshotAll().isEmpty())
     }
 }

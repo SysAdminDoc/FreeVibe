@@ -5,6 +5,14 @@
 
 ---
 
+## Implementation Pass - 2026-04-25 Diagnostics Follow-Up
+
+- [x] Completed T-6 follow-up from the v6.12.0 continuation brief: SourceMetrics now covers the remaining core wallpaper sources (Discover aggregate, Reddit, Bing, Pixabay, Pexels, Wallhaven variants) and sound sources (Openverse fallback, Freesound v2, YouTube, SoundCloud, Audius, ccMixter).
+- [x] Diagnostics polish: Settings > Diagnostics now observes live in-session source updates, keeps Reset in-place, and shows summary chips plus per-source health rows instead of a static one-time snapshot.
+- [x] Test coverage: SourceMetrics now has focused tests for the reusable measurement wrapper and live update tick.
+- [ ] Remaining candidate: decide whether source diagnostics should add persisted export/report sharing. Keep it deferred until user reports need post-session debugging.
+- [ ] Still deferred: T-8 plugin/source ABI, T-9 GLWallpaperService migration, and T-10 Firebase RTDB to Firestore migration remain large follow-ups requiring separate scoping.
+
 ## Phase 1 — Content Foundation
 
 *Problem: Aura is a search engine pretending to be a curated library. Fix the content first.*
@@ -426,4 +434,3 @@
 - **coil 2.7** (not Glide) — for artwork thumbnails in the browser grid; already AMOLED-friendly, matches FreeVibe/Aura's existing Compose stack
 - **Room 2.7** — `ContentSource.LOCAL_BUNDLED` enum value in the existing sound DB; schema migration needs an `is_bundled` flag + `sha256` column for the retroactive-removal path
 - **Room FTS4 virtual table** — for tag search; gotcha: FTS doesn't like the `-` in `Creative-Commons-0`; tokenize on spaces and strip punctuation in the insert trigger
-
