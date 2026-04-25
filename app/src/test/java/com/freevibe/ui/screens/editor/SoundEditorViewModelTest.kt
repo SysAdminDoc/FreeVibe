@@ -50,6 +50,36 @@ class SoundEditorViewModelTest {
     }
 
     @Test
+    fun `shouldReuseLoadedLocalUri reuses active local editor state`() {
+        val key = buildLocalAudioEditorIdentity("content://audio/1")
+        val shouldReuse = shouldReuseLoadedLocalUri(
+            loadedSoundKey = key,
+            requestedLocalKey = key,
+            state = SoundEditorState(
+                localFilePath = "C:/cache/audio.mp3",
+                isLocalFile = true,
+            ),
+        )
+
+        assertTrue(shouldReuse)
+    }
+
+    @Test
+    fun `shouldReuseLoadedLocalUri ignores remote editor state`() {
+        val key = buildLocalAudioEditorIdentity("content://audio/1")
+        val shouldReuse = shouldReuseLoadedLocalUri(
+            loadedSoundKey = key,
+            requestedLocalKey = key,
+            state = SoundEditorState(
+                localFilePath = "C:/cache/audio.mp3",
+                isLocalFile = false,
+            ),
+        )
+
+        assertFalse(shouldReuse)
+    }
+
+    @Test
     fun `local audio editor identity is scoped to uri`() {
         val first = buildLocalAudioEditorIdentity("content://audio/1")
         val second = buildLocalAudioEditorIdentity("content://audio/2")

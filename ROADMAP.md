@@ -13,6 +13,12 @@
 - [ ] Remaining candidate: decide whether source diagnostics should add persisted export/report sharing. Keep it deferred until user reports need post-session debugging.
 - [ ] Still deferred: T-8 plugin/source ABI, T-9 GLWallpaperService migration, and T-10 Firebase RTDB to Firestore migration remain large follow-ups requiring separate scoping.
 
+## Implementation Pass - 2026-04-25 Create From Music
+
+- [x] Completed the P0 1.5 app-level entry: Sounds > Create from music now opens the system audio picker and routes the selected local file straight into SoundEditorScreen's waveform loader.
+- [x] Product polish: the editor opens in Create Sound mode for local files, avoids stale selected remote sounds, and skips redundant local URI reloads after recomposition/configuration changes.
+- [ ] Remaining candidate: add ringtone-specific trim guidance/defaults for the 8-30s target and verify the flow on a physical device or emulator with real audio files.
+
 ## Phase 1 — Content Foundation
 
 *Problem: Aura is a search engine pretending to be a curated library. Fix the content first.*
@@ -55,11 +61,11 @@
 - Massive simplification of `loadSounds()` — no more semaphores, mutexes, streaming callbacks
 
 ### 1.5 Ringtone Maker from Device Music
-- "Create from Music" button on Sounds tab
-- File picker: `ActivityResultContracts.GetContent("audio/*")`
-- Load into SoundEditorScreen with waveform
-- User trims to 8-30s, applies fade in/out
-- One-tap set as ringtone/notification/alarm
+- [x] "Create from Music" button on Sounds tab
+- [x] File picker: `ActivityResultContracts.GetContent("audio/*")`
+- [x] Load into SoundEditorScreen with waveform
+- [ ] Add ringtone-specific 8-30s trim guidance/defaults; existing editor already supports manual trim and fade controls
+- [x] One-tap set as ringtone/notification/alarm
 - This alone is the #1 feature on ringtone apps (Ringtone Maker has 100M+ downloads)
 
 ---
