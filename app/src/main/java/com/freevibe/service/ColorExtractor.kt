@@ -2,6 +2,7 @@ package com.freevibe.service
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.ColorUtils
 import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,6 +29,18 @@ class ColorExtractor @Inject constructor(
         val mutedDark: Int = 0,
         val mutedLight: Int = 0,
         val dominantSwatch: Palette.Swatch? = null,
+        /**
+         * Best accent for Material You preview.
+         *
+         * Falls back through the ladder when [dominantColor] would render as
+         * dim gray on cartoon / solid-color images: dominant (if HSL passes
+         * the quality gate) → darkVibrant → vibrant → lightVibrant →
+         * mutedDark → muted → mutedLight → dominant. See
+         * [ColorAccentSelector.selectAccent] for the gate logic.
+         *
+         * Always non-zero when ANY swatch is non-zero.
+         */
+        val bestAccentColor: Int = 0,
     )
 
     /** Extract color palette from a wallpaper URL */
@@ -67,15 +80,36 @@ class ColorExtractor @Inject constructor(
     /** Extract color palette from a bitmap */
     fun extractFromBitmap(bitmap: Bitmap): WallpaperPalette {
         val palette = Palette.from(bitmap).maximumColorCount(16).generate()
+        val dominant = palette.getDominantColor(0)
+        val vibrant = palette.getVibrantColor(0)
+        val vibrantDark = palette.getDarkVibrantColor(0)
+        val vibrantLight = palette.getLightVibrantColor(0)
+        val muted = palette.getMutedColor(0)
+        val mutedDark = palette.getDarkMutedColor(0)
+        val mutedLight = palette.getLightMutedColor(0)
         return WallpaperPalette(
-            dominantColor = palette.getDominantColor(0),
-            vibrantColor = palette.getVibrantColor(0),
-            vibrantDark = palette.getDarkVibrantColor(0),
-            vibrantLight = palette.getLightVibrantColor(0),
-            mutedColor = palette.getMutedColor(0),
-            mutedDark = palette.getDarkMutedColor(0),
-            mutedLight = palette.getLightMutedColor(0),
+            dominantColor = dominant,
+            vibrantColor = vibrant,
+            vibrantDark = vibrantDark,
+            vibrantLight = vibrantLight,
+            mutedColor = muted,
+            mutedDark = mutedDark,
+            mutedLight = mutedLight,
             dominantSwatch = palette.dominantSwatch,
+            bestAccentColor = ColorAccentSelector.selectAccent(
+                dominant = dominant,
+                vibrantDark = vibrantDark,
+                vibrant = vibrant,
+                vibrantLight = vibrantLight,
+                mutedDark = mutedDark,
+                muted = muted,
+                mutedLight = mutedLight,
+                hslOf = { color ->
+                    val hsl = FloatArray(3)
+                    ColorUtils.colorToHSL(color, hsl)
+                    hsl
+                },
+            ),
         )
     }
 
