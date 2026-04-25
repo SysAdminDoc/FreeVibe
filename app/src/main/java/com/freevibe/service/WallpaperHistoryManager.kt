@@ -64,9 +64,14 @@ class WallpaperHistoryManager @Inject constructor(
                     .putInt("tint_vibrant_light", palette.vibrantLight)
                     .putInt("tint_dominant", palette.dominantColor)
                     .putInt("tint_muted", palette.mutedColor)
+                    .putInt("tint_accent", palette.bestAccentColor)
                     .apply()
             }
-        } catch (_: Throwable) { /* tinting is optional */ }
+        } catch (e: Throwable) {
+            // tinting is optional, but cancellation must still propagate so
+            // the apply coroutine tears down cleanly.
+            if (e is kotlinx.coroutines.CancellationException) throw e
+        }
 
         // Refresh the home-screen widget so its background thumbnail reflects the new
         // "current" wallpaper. Swallow errors — the widget is a nice-to-have, a failure
@@ -77,7 +82,9 @@ class WallpaperHistoryManager @Inject constructor(
                     .getGlanceIds(com.freevibe.widget.FreeVibeWidget::class.java)
                     .forEach { id -> update(context, id) }
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+        }
     }
 
     /**

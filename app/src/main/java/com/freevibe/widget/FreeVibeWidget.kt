@@ -81,8 +81,14 @@ class FreeVibeWidget : GlanceAppWidget() {
         // (= no palette cached yet).
         val tintVibrant = prefs.getInt("tint_vibrant", 0)
             .takeIf { it != 0 }?.let { ColorProvider(Color(it)) } ?: Primary
-        val tintAccent = prefs.getInt("tint_vibrant_light", 0)
-            .takeIf { it != 0 }?.let { ColorProvider(Color(it)) } ?: Secondary
+        // Prefer the smart-fallback accent (added v6.11.0) — guards against
+        // dim/gray vibrant_light on cartoon images. Falls back to the legacy
+        // vibrant_light key for wallpapers cached before the upgrade, then
+        // Secondary for first-launch / no-palette state.
+        val tintAccent = (prefs.getInt("tint_accent", 0)
+            .takeIf { it != 0 }
+            ?: prefs.getInt("tint_vibrant_light", 0).takeIf { it != 0 })
+            ?.let { ColorProvider(Color(it)) } ?: Secondary
 
         provideContent {
             WidgetContent(
