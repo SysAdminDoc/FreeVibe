@@ -239,6 +239,8 @@ fun SoundEditorScreen(
                     )
                 }
 
+                TrimGuidance(trimDurationMs = state.trimDurationMs)
+
                 // Playback controls
                 Row(
                     Modifier.fillMaxWidth(),
@@ -322,6 +324,51 @@ fun SoundEditorScreen(
                         viewModel.applyTrimmed(ContentType.ALARM)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrimGuidance(trimDurationMs: Long) {
+    val isIdealRingtoneLength = trimDurationMs in MIN_RINGTONE_TRIM_MS..MAX_RINGTONE_TRIM_MS
+    val isVeryShort = trimDurationMs in 1 until MIN_RINGTONE_TRIM_MS
+    val containerColor = when {
+        isIdealRingtoneLength -> MaterialTheme.colorScheme.primaryContainer
+        isVeryShort -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.errorContainer
+    }
+    val contentColor = when {
+        isIdealRingtoneLength -> MaterialTheme.colorScheme.onPrimaryContainer
+        isVeryShort -> MaterialTheme.colorScheme.onTertiaryContainer
+        else -> MaterialTheme.colorScheme.onErrorContainer
+    }
+    val title = when {
+        isIdealRingtoneLength -> "Ready for ringtone"
+        isVeryShort -> "Better for notifications"
+        else -> "Shorten the selection"
+    }
+    val body = when {
+        isIdealRingtoneLength -> "Ringtones usually work best at 8-30s. Fine-tune the handles, then preview before applying."
+        isVeryShort -> "This clip is under 8s. It can still work well as a notification or alarm."
+        else -> "Keep custom ringtones at 30s or less for a cleaner loop and faster apply."
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(22.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.labelLarge)
+                Text(body, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

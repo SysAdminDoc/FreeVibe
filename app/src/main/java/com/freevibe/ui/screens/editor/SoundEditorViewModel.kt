@@ -157,12 +157,15 @@ class SoundEditorViewModel @Inject constructor(
                 val file = withContext(Dispatchers.IO) { loader() }
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
                 val duration = withContext(Dispatchers.IO) { getAudioDuration(file.absolutePath) }
+                val defaultTrimEnd = defaultRingtoneTrimEndFraction(duration)
                 _state.update {
                     it.copy(
                         isLoading = false,
                         waveform = waveform,
                         durationMs = duration,
                         localFilePath = file.absolutePath,
+                        trimStartFraction = 0f,
+                        trimEndFraction = defaultTrimEnd,
                     )
                 }
             } catch (e: Exception) {
@@ -203,6 +206,7 @@ class SoundEditorViewModel @Inject constructor(
                 val name = file.nameWithoutExtension
                 val waveform = withContext(Dispatchers.Default) { extractWaveform(file.absolutePath) }
                 val duration = withContext(Dispatchers.IO) { getAudioDuration(file.absolutePath) }
+                val defaultTrimEnd = defaultRingtoneTrimEndFraction(duration)
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -211,7 +215,7 @@ class SoundEditorViewModel @Inject constructor(
                         durationMs = duration,
                         localFilePath = file.absolutePath,
                         trimStartFraction = 0f,
-                        trimEndFraction = 1f,
+                        trimEndFraction = defaultTrimEnd,
                     )
                 }
             } catch (e: Exception) {
@@ -500,6 +504,16 @@ class SoundEditorViewModel @Inject constructor(
 internal fun buildRemoteAudioCacheIdentity(url: String, name: String): String = "$name::$url"
 
 internal fun buildLocalAudioEditorIdentity(uri: String): String = "local::$uri"
+
+internal const val MIN_RINGTONE_TRIM_MS: Long = 8_000L
+internal const val MAX_RINGTONE_TRIM_MS: Long = 30_000L
+
+internal fun defaultRingtoneTrimEndFraction(durationMs: Long): Float =
+    when {
+        durationMs <= 0L -> 1f
+        durationMs <= MAX_RINGTONE_TRIM_MS -> 1f
+        else -> (MAX_RINGTONE_TRIM_MS.toFloat() / durationMs).coerceIn(0.02f, 1f)
+    }
 
 internal fun shouldReuseLoadedSound(
     loadedSoundKey: String?,

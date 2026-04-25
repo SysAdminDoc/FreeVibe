@@ -80,6 +80,21 @@ class SoundEditorViewModelTest {
     }
 
     @Test
+    fun `default ringtone trim keeps short clips selected`() {
+        assertEquals(1f, defaultRingtoneTrimEndFraction(20_000L), 0.0001f)
+    }
+
+    @Test
+    fun `default ringtone trim caps long clips at thirty seconds`() {
+        assertEquals(0.5f, defaultRingtoneTrimEndFraction(60_000L), 0.0001f)
+    }
+
+    @Test
+    fun `default ringtone trim keeps unknown durations selected`() {
+        assertEquals(1f, defaultRingtoneTrimEndFraction(0L), 0.0001f)
+    }
+
+    @Test
     fun `local audio editor identity is scoped to uri`() {
         val first = buildLocalAudioEditorIdentity("content://audio/1")
         val second = buildLocalAudioEditorIdentity("content://audio/2")
