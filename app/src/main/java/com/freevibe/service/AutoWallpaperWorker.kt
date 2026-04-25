@@ -142,12 +142,31 @@ class AutoWallpaperWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "auto_wallpaper"
 
-        /** Schedule with minute-based intervals (minimum 15 min due to WorkManager) */
+        /**
+         * Schedule with minute-based intervals (minimum 15 min, WorkManager floor).
+         *
+         * Reads constraint prefs synchronously from a worker-local snapshot via
+         * runBlocking on a non-suspend caller path. Constraints flow through to
+         * WorkManager which gates execution: a worker fires only when ALL
+         * constraints satisfy. Off-by-default for charging / Wi-Fi / idle so
+         * existing users keep current behavior on upgrade; opt-in via Settings.
+         */
         fun schedule(context: Context, intervalMinutes: Long = 360) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .setRequiresBatteryNotLow(true)
-                .build()
+            val prefs = PreferencesManager(context)
+            val requiresCharging = kotlinx.coroutines.runBlocking {
+                prefs.autoWallpaperRequiresCharging.first()
+            }
+            val requiresWiFiOnly = kotlinx.coroutines.runBlocking {
+                prefs.autoWallpaperRequiresWiFiOnly.first()
+            }
+            val requiresIdle = kotlinx.coroutines.runBlocking {
+                prefs.autoWallpaperRequiresIdle.first()
+            }
+            val constraints = buildAutoWallpaperConstraints(
+                requiresCharging = requiresCharging,
+                requiresWiFiOnly = requiresWiFiOnly,
+                requiresIdle = requiresIdle,
+            )
 
             val request = PeriodicWorkRequestBuilder<AutoWallpaperWorker>(
                 intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES,
@@ -172,6 +191,30 @@ class AutoWallpaperWorker @AssistedInject constructor(
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
         }
     }
+}
+
+/**
+ * Pure builder for AutoWallpaper rotation constraints. Always sets
+ * battery-not-low (energy-floor — was already the default, kept). Network type
+ * defaults to CONNECTED but tightens to UNMETERED when [requiresWiFiOnly] is
+ * set so cellular billed users aren't charged for background fetches. Charging
+ * + idle are pure-additive opt-ins.
+ *
+ * Visible for unit testing.
+ */
+internal fun buildAutoWallpaperConstraints(
+    requiresCharging: Boolean,
+    requiresWiFiOnly: Boolean,
+    requiresIdle: Boolean,
+): Constraints {
+    val builder = Constraints.Builder()
+        .setRequiredNetworkType(
+            if (requiresWiFiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED,
+        )
+        .setRequiresBatteryNotLow(true)
+    if (requiresCharging) builder.setRequiresCharging(true)
+    if (requiresIdle) builder.setRequiresDeviceIdle(true)
+    return builder.build()
 }
 
 internal fun String.normalizeWallpaperRotationSource(): String = when (lowercase(java.util.Locale.ROOT)) {
