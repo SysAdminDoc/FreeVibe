@@ -41,6 +41,7 @@ class SettingsViewModel @Inject constructor(
     private val collectionRepo: CollectionRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val videoWallpaperStorage: VideoWallpaperStorage,
+    private val sourceMetrics: com.freevibe.service.SourceMetrics,
 ) : ViewModel() {
 
     private val _parallaxGalleryResult = MutableStateFlow<ParallaxGalleryResult?>(null)
@@ -78,6 +79,9 @@ class SettingsViewModel @Inject constructor(
     val autoWpEnabled = prefs.autoWallpaperEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpInterval = prefs.autoWallpaperInterval.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12L)
     val autoWpSource = prefs.autoWallpaperSource.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "wallhaven")
+    val autoWpRequiresCharging = prefs.autoWallpaperRequiresCharging.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val autoWpRequiresWiFi = prefs.autoWallpaperRequiresWiFiOnly.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val autoWpRequiresIdle = prefs.autoWallpaperRequiresIdle.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     // Enhanced scheduler
     val schedulerEnabled = prefs.schedulerEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val schedulerInterval = prefs.schedulerIntervalMinutes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 360L)
@@ -103,6 +107,11 @@ class SettingsViewModel @Inject constructor(
     val pexelsApiKey = prefs.pexelsApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pixabayApiKey = prefs.pixabayApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val freesoundApiKey = prefs.freesoundApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val showSketchyContent = prefs.showSketchyContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val showNsfwContent = prefs.showNsfwContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setShowSketchy(show: Boolean) = viewModelScope.launch { prefs.setShowSketchy(show) }
+    fun setShowNsfw(show: Boolean) = viewModelScope.launch { prefs.setShowNsfw(show) }
 
     fun setYtRingtonesQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryRingtones(q) }
     fun setYtNotificationsQuery(q: String) = viewModelScope.launch { prefs.setYtSoundQueryNotifications(q) }
@@ -140,6 +149,27 @@ class SettingsViewModel @Inject constructor(
     fun setAutoWpSource(source: String) = viewModelScope.launch {
         prefs.setAutoWallpaperSource(source)
     }
+
+    // T-7: Auto-wallpaper rotation constraints. Re-schedule on toggle so the
+    // running worker picks up the new constraint set without waiting for the
+    // next interval boundary.
+    fun setAutoWallpaperRequiresCharging(v: Boolean) = viewModelScope.launch {
+        prefs.setAutoWallpaperRequiresCharging(v)
+        if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
+    }
+    fun setAutoWallpaperRequiresWiFiOnly(v: Boolean) = viewModelScope.launch {
+        prefs.setAutoWallpaperRequiresWiFiOnly(v)
+        if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
+    }
+    fun setAutoWallpaperRequiresIdle(v: Boolean) = viewModelScope.launch {
+        prefs.setAutoWallpaperRequiresIdle(v)
+        if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
+    }
+
+    // T-6: Source diagnostics. Snapshot on demand (taken when the dialog opens).
+    fun diagnosticsSnapshot(): List<com.freevibe.service.SourceMetrics.SourceStats> =
+        sourceMetrics.snapshotAll()
+    fun resetDiagnostics() = sourceMetrics.reset()
 
     fun clearWallpaperHistory() = viewModelScope.launch {
         historyManager.clearAll()

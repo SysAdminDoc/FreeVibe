@@ -181,6 +181,7 @@ class SettingsViewModelTest {
             collectionRepo = collectionRepo,
             wallpaperApplier = wallpaperApplier,
             videoWallpaperStorage = videoWallpaperStorage,
+            sourceMetrics = com.freevibe.service.SourceMetrics(),
         )
     }
 
@@ -214,6 +215,11 @@ class SettingsViewModelTest {
             every { prefs.pixabayApiKey } returns flowOf("")
             every { prefs.freesoundApiKey } returns flowOf("")
             every { prefs.schedulerCollectionId } returns flowOf(-1L)
+            every { prefs.showSketchyContent } returns flowOf(false)
+            every { prefs.showNsfwContent } returns flowOf(false)
+            every { prefs.autoWallpaperRequiresCharging } returns flowOf(false)
+            every { prefs.autoWallpaperRequiresWiFiOnly } returns flowOf(false)
+            every { prefs.autoWallpaperRequiresIdle } returns flowOf(false)
         }
 
     private fun waitForIdle(
