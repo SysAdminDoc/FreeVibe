@@ -61,11 +61,20 @@ class PreferencesManager @Inject constructor(
     val autoWallpaperInterval: Flow<Long> = get(Keys.AUTO_WP_INTERVAL, 12L)
     val autoWallpaperSource: Flow<String> = get(Keys.AUTO_WP_SOURCE, "wallhaven")
     val autoWallpaperTarget: Flow<String> = get(Keys.AUTO_WP_TARGET, "BOTH")
+    /** Hold rotation until the device is plugged in (battery-friendly). */
+    val autoWallpaperRequiresCharging: Flow<Boolean> = get(Keys.AUTO_WP_REQUIRES_CHARGING, false)
+    /** Hold rotation until on Wi-Fi / unmetered (data-cap-friendly). */
+    val autoWallpaperRequiresWiFiOnly: Flow<Boolean> = get(Keys.AUTO_WP_REQUIRES_WIFI, false)
+    /** Hold rotation until the device is idle (no active foreground use). */
+    val autoWallpaperRequiresIdle: Flow<Boolean> = get(Keys.AUTO_WP_REQUIRES_IDLE, false)
 
     suspend fun setAutoWallpaperEnabled(enabled: Boolean) = set(Keys.AUTO_WP_ENABLED, enabled)
     suspend fun setAutoWallpaperInterval(hours: Long) = set(Keys.AUTO_WP_INTERVAL, hours)
     suspend fun setAutoWallpaperSource(source: String) = set(Keys.AUTO_WP_SOURCE, source)
     suspend fun setAutoWallpaperTarget(target: String) = set(Keys.AUTO_WP_TARGET, target)
+    suspend fun setAutoWallpaperRequiresCharging(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_CHARGING, v)
+    suspend fun setAutoWallpaperRequiresWiFiOnly(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_WIFI, v)
+    suspend fun setAutoWallpaperRequiresIdle(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_IDLE, v)
 
     // ── Sound settings ────────────────────────────────────────────
 
@@ -79,10 +88,17 @@ class PreferencesManager @Inject constructor(
 
     val wallpaperGridColumns: Flow<Int> = get(Keys.GRID_COLUMNS, 2)
     val showNsfwContent: Flow<Boolean> = get(Keys.SHOW_NSFW, false)
+    /**
+     * Wallhaven "sketchy" tier — suggestive imagery short of explicit nudity.
+     * Independent of NSFW; both still require an API key set on Wallhaven's side.
+     * Default false (SFW only) per safe-by-default principle.
+     */
+    val showSketchyContent: Flow<Boolean> = get(Keys.SHOW_SKETCHY, false)
     val preferredResolution: Flow<String> = get(Keys.PREF_RESOLUTION, "")
 
     suspend fun setGridColumns(columns: Int) = set(Keys.GRID_COLUMNS, columns)
     suspend fun setShowNsfw(show: Boolean) = set(Keys.SHOW_NSFW, show)
+    suspend fun setShowSketchy(show: Boolean) = set(Keys.SHOW_SKETCHY, show)
     suspend fun setPreferredResolution(res: String) = set(Keys.PREF_RESOLUTION, res)
 
     // ── Reddit settings ───────────────────────────────────────────
@@ -198,6 +214,10 @@ class PreferencesManager @Inject constructor(
         val PREVIEW_VOLUME = floatPreferencesKey("preview_volume")
         val GRID_COLUMNS = intPreferencesKey("grid_columns")
         val SHOW_NSFW = booleanPreferencesKey("show_nsfw")
+        val SHOW_SKETCHY = booleanPreferencesKey("show_sketchy")
+        val AUTO_WP_REQUIRES_CHARGING = booleanPreferencesKey("auto_wp_requires_charging")
+        val AUTO_WP_REQUIRES_WIFI = booleanPreferencesKey("auto_wp_requires_wifi")
+        val AUTO_WP_REQUIRES_IDLE = booleanPreferencesKey("auto_wp_requires_idle")
         val PREF_RESOLUTION = stringPreferencesKey("pref_resolution")
         val REDDIT_SUBS = stringPreferencesKey("reddit_subreddits")
         val REDDIT_VIDEO_SUBS = stringPreferencesKey("reddit_video_subreddits")

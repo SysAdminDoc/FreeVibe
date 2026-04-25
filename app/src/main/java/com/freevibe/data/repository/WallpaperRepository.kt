@@ -76,6 +76,27 @@ private const val DISCOVER_PER_SOURCE_TIMEOUT_MS = 4_500L
 private const val DISCOVER_SECONDARY_SOURCE_BUDGET_MS = 1_200L
 private const val DISCOVER_PAGE_SIZE = 60
 
+/**
+ * Wallhaven purity bitfield: bit0=SFW, bit1=Sketchy, bit2=NSFW (string of three '0'/'1').
+ * Wallhaven enforces: any non-SFW request requires an authenticated API key. Without a
+ * key the user's sketchy/nsfw opt-ins are coerced to SFW-only — the API would reject
+ * "110"/"111" without auth and we'd serve no wallpapers.
+ *
+ * Visible for unit testing.
+ */
+internal fun computeWallhavenPurity(
+    hasApiKey: Boolean,
+    sketchyOptIn: Boolean,
+    nsfwOptIn: Boolean,
+): String {
+    if (!hasApiKey) return "100"
+    return when {
+        nsfwOptIn -> "111" // user wants everything: SFW + Sketchy + NSFW
+        sketchyOptIn -> "110" // sketchy but stay clear of explicit nudity
+        else -> "100" // SFW only
+    }
+}
+
 @Singleton
 class WallpaperRepository @Inject constructor(
     private val wallhavenApi: WallhavenApi,
@@ -84,16 +105,18 @@ class WallpaperRepository @Inject constructor(
     private val pexelsApi: PexelsApi,
     private val cacheManager: WallpaperCacheManager,
     private val prefs: PreferencesManager,
+    private val sourceMetrics: com.freevibe.service.SourceMetrics,
 ) {
     private suspend fun wallhavenApiKey(): String = prefs.wallhavenApiKey.first()
     private suspend fun pixabayApiKey(): String = prefs.pixabayApiKey.first()
     private suspend fun pexelsApiKey(): String = prefs.pexelsApiKey.first()
 
-    private suspend fun wallhavenPurity(): String {
-        val key = wallhavenApiKey()
-        val nsfw = prefs.showNsfwContent.first()
-        return if (key.isNotBlank() && nsfw) "111" else "100" // SFW+Sketchy+NSFW with key, SFW only without
-    }
+    private suspend fun wallhavenPurity(): String =
+        computeWallhavenPurity(
+            hasApiKey = wallhavenApiKey().isNotBlank(),
+            sketchyOptIn = prefs.showSketchyContent.first(),
+            nsfwOptIn = prefs.showNsfwContent.first(),
+        )
 
     private suspend fun wallhavenMinRes(): String = prefs.preferredResolution.first()
 
@@ -105,25 +128,34 @@ class WallpaperRepository @Inject constructor(
         topRange: String = "1M",
     ): SearchResult<Wallpaper> {
         val cacheKey = if (query.isBlank()) "wallhaven_toplist_${topRange}_$page" else "wallhaven_search_${query.hashCode()}_$page"
-        return withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
-            val sorting = if (query.isBlank()) "toplist" else "relevance"
-            val apiKey = wallhavenApiKey()
-            val response = wallhavenApi.search(
-                query = query,
-                sorting = sorting,
-                topRange = topRange,
-                categories = "111",
-                purity = wallhavenPurity(),
-                minResolution = wallhavenMinRes(),
-                page = page,
-                apiKey = apiKey,
-            )
-            SearchResult(
-                items = response.data.map { it.toWallpaper() },
-                totalCount = response.meta.total,
-                currentPage = response.meta.currentPage,
-                hasMore = response.meta.currentPage < response.meta.lastPage,
-            )
+        val startedAt = System.currentTimeMillis()
+        return try {
+            val result = withCacheFallback(cacheKey, ContentSource.WALLHAVEN) {
+                val sorting = if (query.isBlank()) "toplist" else "relevance"
+                val apiKey = wallhavenApiKey()
+                val response = wallhavenApi.search(
+                    query = query,
+                    sorting = sorting,
+                    topRange = topRange,
+                    categories = "111",
+                    purity = wallhavenPurity(),
+                    minResolution = wallhavenMinRes(),
+                    page = page,
+                    apiKey = apiKey,
+                )
+                SearchResult(
+                    items = response.data.map { it.toWallpaper() },
+                    totalCount = response.meta.total,
+                    currentPage = response.meta.currentPage,
+                    hasMore = response.meta.currentPage < response.meta.lastPage,
+                )
+            }
+            sourceMetrics.recordSuccess("wallhaven", System.currentTimeMillis() - startedAt)
+            result
+        } catch (e: Throwable) {
+            // Cancellation passes through unrecorded (see SourceMetrics.recordFailure).
+            sourceMetrics.recordFailure("wallhaven", e)
+            throw e
         }
     }
 
