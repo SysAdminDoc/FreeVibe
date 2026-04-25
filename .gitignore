@@ -16,3 +16,6 @@ local.properties
 freevibe.jks
 CLAUDE.md
 CODEX_CHANGELOG.md
+.claude/
+.factory/
+*.bak
