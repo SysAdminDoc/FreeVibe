@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.service.DailyWallpaperWorker
+import com.freevibe.service.SourceMetrics
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.VideoWallpaperService
@@ -90,6 +92,7 @@ fun SettingsScreen(
     val showSketchyContent by viewModel.showSketchyContent.collectAsStateWithLifecycle()
     val showNsfwContent by viewModel.showNsfwContent.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
+    val diagnostics by viewModel.diagnostics.collectAsStateWithLifecycle()
     val videoWallpaperSelectionResult by viewModel.videoWallpaperSelectionResult.collectAsStateWithLifecycle()
     var dailyWp by remember {
         mutableStateOf(
@@ -987,42 +990,38 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.MonitorHeart,
                 title = "Source diagnostics",
-                subtitle = "View success ratio, p50/p95 latency, and last error per content source",
+                subtitle = if (diagnostics.isEmpty()) {
+                    "Live provider health appears here after browsing"
+                } else {
+                    "${diagnostics.size} active sources tracked this session"
+                },
                 onClick = { showDiagnostics = true },
             )
         }
         if (showDiagnostics) {
-            val snapshots = viewModel.diagnosticsSnapshot()
+            val snapshots = diagnostics
             AlertDialog(
                 onDismissRequest = { showDiagnostics = false },
                 title = { Text("Source diagnostics") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            "Live in-session health for wallpaper, video, and sound providers. Cached results can still keep browsing usable when a source fails.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         if (snapshots.isEmpty()) {
-                            Text(
-                                "No source activity recorded yet — open the Wallpapers or Sounds tab to populate stats.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            SourceDiagnosticsEmptyState()
                         } else {
+                            SourceDiagnosticsSummary(snapshots)
                             snapshots.forEach { stat ->
-                                Column {
-                                    Text(stat.source.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleSmall)
-                                    val pct = (stat.successRatio * 100).toInt()
-                                    val latency = if (stat.p50Ms != null) "p50 ${stat.p50Ms}ms / p95 ${stat.p95Ms}ms" else "no latency yet"
-                                    Text(
-                                        "${stat.totalRequests} requests • $pct% success • $latency",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    if (stat.lastErrorClass != null) {
-                                        Text(
-                                            "Last error: ${stat.lastErrorClass} — ${stat.lastErrorMessage ?: "no detail"}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                }
+                                SourceDiagnosticRow(stat)
                             }
                         }
                     }
@@ -1031,7 +1030,6 @@ fun SettingsScreen(
                 dismissButton = {
                     TextButton(onClick = {
                         viewModel.resetDiagnostics()
-                        showDiagnostics = false
                     }) { Text("Reset") }
                 },
             )
@@ -1652,6 +1650,146 @@ private fun SettingsToggle(
         }
     }
 }
+
+@Composable
+private fun SourceDiagnosticsEmptyState() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.76f),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("No activity yet", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Open Wallpapers, Videos, or Sounds to record provider health for this app session.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun SourceDiagnosticsSummary(snapshots: List<SourceMetrics.SourceStats>) {
+    val totalRequests = remember(snapshots) { snapshots.sumOf { it.totalRequests } }
+    val failures = remember(snapshots) { snapshots.sumOf { it.failureCount } }
+    val activeSources = remember(snapshots) { snapshots.count { it.totalRequests > 0L } }
+    val p95Worst = remember(snapshots) { snapshots.mapNotNull { it.p95Ms }.maxOrNull() }
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DiagnosticMetricPill("Sources", activeSources.toString(), MaterialTheme.colorScheme.primary)
+        DiagnosticMetricPill("Requests", totalRequests.toString(), MaterialTheme.colorScheme.secondary)
+        DiagnosticMetricPill("Failures", failures.toString(), if (failures > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary)
+        DiagnosticMetricPill("Worst p95", p95Worst?.let { "${it}ms" } ?: "n/a", MaterialTheme.colorScheme.tertiary)
+    }
+}
+
+@Composable
+private fun DiagnosticMetricPill(
+    label: String,
+    value: String,
+    tint: Color,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = tint.copy(alpha = 0.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.16f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleSmall, color = tint)
+        }
+    }
+}
+
+@Composable
+private fun SourceDiagnosticRow(stat: SourceMetrics.SourceStats) {
+    val successPercent = (stat.successRatio * 100).toInt().coerceIn(0, 100)
+    val hasFailure = stat.failureCount > 0L
+    val tint = if (hasFailure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val latency = if (stat.p50Ms != null) {
+        "p50 ${stat.p50Ms}ms / p95 ${stat.p95Ms}ms"
+    } else {
+        "No latency yet"
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.24f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(sourceDisplayName(stat.source), style = MaterialTheme.typography.titleSmall)
+                HighlightPill(
+                    label = if (hasFailure) "Needs attention" else "Healthy",
+                    icon = if (hasFailure) Icons.Default.Error else Icons.Default.CheckCircle,
+                    tint = tint,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { stat.successRatio.toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp)),
+                color = tint,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            )
+            Text(
+                "${stat.totalRequests} requests • $successPercent% success • $latency",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (stat.lastErrorClass != null) {
+                Text(
+                    "Last error: ${stat.lastErrorClass} — ${stat.lastErrorMessage ?: "no detail"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+private fun sourceDisplayName(source: String): String =
+    source.split('_', '-')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { part ->
+            part.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+        .ifBlank { source }
 
 private fun countSelectedStyles(raw: String): Int =
     raw.split(",").count { it.trim().isNotBlank() }

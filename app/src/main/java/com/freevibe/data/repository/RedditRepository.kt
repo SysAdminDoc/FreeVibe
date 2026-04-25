@@ -4,15 +4,19 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.remote.reddit.RedditApi
 import com.freevibe.data.remote.toWallpaper
+import com.freevibe.service.SourceMetrics
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val SOURCE_REDDIT = "reddit"
+
 @Singleton
 class RedditRepository @Inject constructor(
     private val redditApi: RedditApi,
+    private val sourceMetrics: SourceMetrics,
 ) {
     // Per-subreddit pagination tokens (thread-safe)
     private val afterTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -23,12 +27,14 @@ class RedditRepository @Inject constructor(
         timeRange: String = "week",
         after: String? = null,
     ): SearchResult<Wallpaper> {
-        val response = redditApi.getSubredditPosts(
-            subreddit = subreddit,
-            sort = sort,
-            timeRange = timeRange,
-            after = after ?: afterTokens[subreddit],
-        )
+        val response = sourceMetrics.measure(SOURCE_REDDIT) {
+            redditApi.getSubredditPosts(
+                subreddit = subreddit,
+                sort = sort,
+                timeRange = timeRange,
+                after = after ?: afterTokens[subreddit],
+            )
+        }
         val nextAfter = response.data.after
         if (nextAfter != null) afterTokens[subreddit] = nextAfter else afterTokens.remove(subreddit)
 
@@ -50,11 +56,13 @@ class RedditRepository @Inject constructor(
         query: String,
         after: String? = null,
     ): SearchResult<Wallpaper> {
-        val response = redditApi.searchSubreddit(
-            subreddit = subreddit,
-            query = query,
-            after = after,
-        )
+        val response = sourceMetrics.measure(SOURCE_REDDIT) {
+            redditApi.searchSubreddit(
+                subreddit = subreddit,
+                query = query,
+                after = after,
+            )
+        }
 
         val wallpapers = response.data.children
             .map { it.data }
@@ -102,9 +110,11 @@ class RedditRepository @Inject constructor(
         val subs = listOf("wallpapers", "MobileWallpaper")
         return subs.flatMap { sub ->
             try {
-                redditApi.getSubredditPosts(
-                    subreddit = sub, sort = "top", timeRange = "day", limit = 5,
-                ).data.children.map { it.data }
+                sourceMetrics.measure(SOURCE_REDDIT) {
+                    redditApi.getSubredditPosts(
+                        subreddit = sub, sort = "top", timeRange = "day", limit = 5,
+                    )
+                }.data.children.map { it.data }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 emptyList()

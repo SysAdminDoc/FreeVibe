@@ -7,15 +7,18 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.freesound.FreesoundV2Api
 import com.freevibe.data.remote.freesound.FreesoundV2Sound
+import com.freevibe.service.SourceMetrics
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val SOURCE_FREESOUND = "freesound"
 
 @Singleton
 class FreesoundV2Repository @Inject constructor(
     private val api: FreesoundV2Api,
     private val prefs: PreferencesManager,
-    private val sourceMetrics: com.freevibe.service.SourceMetrics,
+    private val sourceMetrics: SourceMetrics,
 ) {
     private suspend fun apiKey(): String = prefs.freesoundApiKey.first().ifBlank { BuildConfig.FREESOUND_API_KEY }
 
@@ -31,8 +34,7 @@ class FreesoundV2Repository @Inject constructor(
             return SearchResult(items = emptyList(), totalCount = 0, currentPage = page, hasMore = false)
         }
 
-        val startedAt = System.currentTimeMillis()
-        return try {
+        return sourceMetrics.measure(SOURCE_FREESOUND) {
             val filter = "duration:[$minDuration TO $maxDuration]"
             val response = api.search(
                 query = query,
@@ -52,11 +54,7 @@ class FreesoundV2Repository @Inject constructor(
                 currentPage = page,
                 hasMore = response.next != null,
             )
-            sourceMetrics.recordSuccess("freesound", System.currentTimeMillis() - startedAt)
             result
-        } catch (e: Throwable) {
-            sourceMetrics.recordFailure("freesound", e)
-            throw e
         }
     }
 

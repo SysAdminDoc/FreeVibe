@@ -6,6 +6,7 @@ import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.ccmixter.CcMixterApi
 import com.freevibe.data.remote.ccmixter.CcMixterFile
 import com.freevibe.data.remote.ccmixter.CcMixterUpload
+import com.freevibe.service.SourceMetrics
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import okhttp3.HttpUrl
@@ -18,10 +19,13 @@ import javax.net.ssl.SSLException
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val SOURCE_CCMIXTER = "ccmixter"
+
 @Singleton
 class CcMixterRepository @Inject constructor(
     private val api: CcMixterApi,
     private val okHttpClient: OkHttpClient,
+    private val sourceMetrics: SourceMetrics,
     moshi: Moshi,
 ) {
     private val uploadsAdapter = moshi.adapter<List<CcMixterUpload>>(
@@ -34,7 +38,9 @@ class CcMixterRepository @Inject constructor(
         maxDuration: Double = 180.0,
         limit: Int = 20,
     ): SearchResult<Sound> {
-        val uploads = fetchUploads(query = query, limit = limit)
+        val uploads = sourceMetrics.measure(SOURCE_CCMIXTER) {
+            fetchUploads(query = query, limit = limit)
+        }
         val sounds = uploads.mapNotNull { upload ->
             upload.toDomain()
                 ?.takeIf { it.duration in minDuration..maxDuration }

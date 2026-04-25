@@ -6,12 +6,16 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.soundcloud.SoundCloudApi
 import com.freevibe.data.remote.soundcloud.SoundCloudTrack
+import com.freevibe.service.SourceMetrics
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val SOURCE_SOUNDCLOUD = "soundcloud"
 
 @Singleton
 class SoundCloudRepository @Inject constructor(
     private val api: SoundCloudApi,
+    private val sourceMetrics: SourceMetrics,
 ) {
     private val clientId: String = BuildConfig.SOUNDCLOUD_CLIENT_ID
 
@@ -26,14 +30,16 @@ class SoundCloudRepository @Inject constructor(
             return SearchResult(items = emptyList(), totalCount = 0, currentPage = 1, hasMore = false)
         }
 
-        val response = api.searchTracks(
-            query = query,
-            minDurationMs = minDurationMs,
-            maxDurationMs = maxDurationMs,
-            limit = limit,
-            offset = offset,
-            clientId = clientId,
-        )
+        val response = sourceMetrics.measure(SOURCE_SOUNDCLOUD) {
+            api.searchTracks(
+                query = query,
+                minDurationMs = minDurationMs,
+                maxDurationMs = maxDurationMs,
+                limit = limit,
+                offset = offset,
+                clientId = clientId,
+            )
+        }
 
         val sounds = response.collection
             .filter { it.duration > 0 }

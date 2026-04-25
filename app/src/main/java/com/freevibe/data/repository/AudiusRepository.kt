@@ -5,12 +5,16 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.audius.AudiusApi
 import com.freevibe.data.remote.audius.AudiusTrack
+import com.freevibe.service.SourceMetrics
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val SOURCE_AUDIUS = "audius"
 
 @Singleton
 class AudiusRepository @Inject constructor(
     private val api: AudiusApi,
+    private val sourceMetrics: SourceMetrics,
 ) {
     suspend fun search(
         query: String,
@@ -18,7 +22,9 @@ class AudiusRepository @Inject constructor(
         maxDuration: Int = 180,
         limit: Int = 20,
     ): SearchResult<Sound> {
-        val response = api.searchTracks(query = query, limit = limit)
+        val response = sourceMetrics.measure(SOURCE_AUDIUS) {
+            api.searchTracks(query = query, limit = limit)
+        }
         val sounds = response.data
             .filter { !it.isDelete }
             .filter { it.duration in minDuration..maxDuration }

@@ -5,9 +5,12 @@ import com.freevibe.data.model.SearchResult
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.freesound.FreesoundApi
 import com.freevibe.data.remote.freesound.OpenverseAudio
+import com.freevibe.service.SourceMetrics
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val SOURCE_OPENVERSE = "openverse"
 
 /**
  * Sound repository backed by Openverse API (aggregates Freesound + Jamendo + Wikimedia Audio).
@@ -16,6 +19,7 @@ import javax.inject.Singleton
 @Singleton
 class FreesoundRepository @Inject constructor(
     private val api: FreesoundApi,
+    private val sourceMetrics: SourceMetrics,
 ) {
     suspend fun search(
         query: String,
@@ -24,7 +28,9 @@ class FreesoundRepository @Inject constructor(
         page: Int = 1,
     ): SearchResult<Sound> {
         // Openverse anonymous limit is page_size=20
-        val response = api.search(query = query, page = page, pageSize = 20)
+        val response = sourceMetrics.measure(SOURCE_OPENVERSE) {
+            api.search(query = query, page = page, pageSize = 20)
+        }
         val filtered = response.results
             .filter { audio ->
                 val durSec = (audio.duration ?: 0) / 1000.0
@@ -35,7 +41,9 @@ class FreesoundRepository @Inject constructor(
         // If heavy duration filtering left very few results and there are more pages, fetch page 2
         val items = if (filtered.size < 5 && page == 1 && response.pageCount > 1) {
             try {
-                val page2 = api.search(query = query, page = 2, pageSize = 20)
+                val page2 = sourceMetrics.measure(SOURCE_OPENVERSE) {
+                    api.search(query = query, page = 2, pageSize = 20)
+                }
                 val extra = page2.results
                     .filter { audio ->
                         val durSec = (audio.duration ?: 0) / 1000.0

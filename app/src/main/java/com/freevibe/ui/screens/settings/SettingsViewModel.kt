@@ -8,6 +8,7 @@ import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.SourceMetrics
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperStorage
 import com.freevibe.service.WallpaperApplier
@@ -41,7 +42,7 @@ class SettingsViewModel @Inject constructor(
     private val collectionRepo: CollectionRepository,
     private val wallpaperApplier: WallpaperApplier,
     private val videoWallpaperStorage: VideoWallpaperStorage,
-    private val sourceMetrics: com.freevibe.service.SourceMetrics,
+    private val sourceMetrics: SourceMetrics,
 ) : ViewModel() {
 
     private val _parallaxGalleryResult = MutableStateFlow<ParallaxGalleryResult?>(null)
@@ -166,9 +167,10 @@ class SettingsViewModel @Inject constructor(
         if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
     }
 
-    // T-6: Source diagnostics. Snapshot on demand (taken when the dialog opens).
-    fun diagnosticsSnapshot(): List<com.freevibe.service.SourceMetrics.SourceStats> =
-        sourceMetrics.snapshotAll()
+    // T-6: Source diagnostics. Emits live snapshots while the dialog is visible.
+    val diagnostics = sourceMetrics.version
+        .map { sourceMetrics.snapshotAll() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), sourceMetrics.snapshotAll())
     fun resetDiagnostics() = sourceMetrics.reset()
 
     fun clearWallpaperHistory() = viewModelScope.launch {
