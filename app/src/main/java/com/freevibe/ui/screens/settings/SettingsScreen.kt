@@ -59,6 +59,9 @@ fun SettingsScreen(
     val autoWpEnabled by viewModel.autoWpEnabled.collectAsStateWithLifecycle()
     val autoWpInterval by viewModel.autoWpInterval.collectAsStateWithLifecycle()
     val autoWpSource by viewModel.autoWpSource.collectAsStateWithLifecycle()
+    val autoWpRequiresCharging by viewModel.autoWpRequiresCharging.collectAsStateWithLifecycle()
+    val autoWpRequiresWiFi by viewModel.autoWpRequiresWiFi.collectAsStateWithLifecycle()
+    val autoWpRequiresIdle by viewModel.autoWpRequiresIdle.collectAsStateWithLifecycle()
     val autoPreview by viewModel.autoPreview.collectAsStateWithLifecycle()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsStateWithLifecycle()
     val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
@@ -84,6 +87,8 @@ fun SettingsScreen(
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsStateWithLifecycle()
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsStateWithLifecycle()
     val freesoundApiKey by viewModel.freesoundApiKey.collectAsStateWithLifecycle()
+    val showSketchyContent by viewModel.showSketchyContent.collectAsStateWithLifecycle()
+    val showNsfwContent by viewModel.showNsfwContent.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
     val videoWallpaperSelectionResult by viewModel.videoWallpaperSelectionResult.collectAsStateWithLifecycle()
     var dailyWp by remember {
@@ -294,6 +299,30 @@ fun SettingsScreen(
                     title = "Wallpaper source",
                     subtitle = autoWpSource.replaceFirstChar { it.uppercase() },
                     onClick = { showSourcePicker = true },
+                )
+                // T-7: Rotation execution constraints. WorkManager gates the worker on
+                // these — toggle on, then the worker only fires when ALL satisfied.
+                // Off-by-default so existing users keep current behavior on upgrade.
+                SettingsToggle(
+                    icon = Icons.Default.BatteryChargingFull,
+                    title = "Charging only",
+                    subtitle = "Hold rotation until the device is plugged in",
+                    checked = autoWpRequiresCharging,
+                    onCheckedChange = { viewModel.setAutoWallpaperRequiresCharging(it) },
+                )
+                SettingsToggle(
+                    icon = Icons.Default.Wifi,
+                    title = "Wi-Fi only",
+                    subtitle = "Skip cellular fetches; honors data-saver",
+                    checked = autoWpRequiresWiFi,
+                    onCheckedChange = { viewModel.setAutoWallpaperRequiresWiFiOnly(it) },
+                )
+                SettingsToggle(
+                    icon = Icons.Default.Bedtime,
+                    title = "Device idle only",
+                    subtitle = "Defer rotation until you're not actively using the phone",
+                    checked = autoWpRequiresIdle,
+                    onCheckedChange = { viewModel.setAutoWallpaperRequiresIdle(it) },
                 )
             }
             // #9: Grid columns
@@ -790,6 +819,30 @@ fun SettingsScreen(
                     dismissButton = { TextButton(onClick = { showWallhavenKey = false }) { Text("Cancel") } },
                 )
             }
+            // Wallhaven SafeSearch toggles. Without an API key both remain UI-visible
+            // but ineffective — Wallhaven rejects non-SFW requests when unauthenticated,
+            // and computeWallhavenPurity coerces back to "100" so the user still sees
+            // results instead of an empty grid.
+            SettingsToggle(
+                icon = Icons.Default.Visibility,
+                title = "Show sketchy wallpapers",
+                subtitle = if (wallhavenApiKey.isBlank())
+                    "Requires a Wallhaven API key to take effect"
+                else
+                    "Suggestive imagery short of explicit nudity",
+                checked = showSketchyContent,
+                onCheckedChange = { viewModel.setShowSketchy(it) },
+            )
+            SettingsToggle(
+                icon = Icons.Default.Warning,
+                title = "Show NSFW wallpapers",
+                subtitle = if (wallhavenApiKey.isBlank())
+                    "Requires a Wallhaven API key to take effect"
+                else
+                    "Explicit content from authenticated Wallhaven account",
+                checked = showNsfwContent,
+                onCheckedChange = { viewModel.setShowNsfw(it) },
+            )
             var showPexelsKey by remember { mutableStateOf(false) }
             SettingsItem(
                 icon = Icons.Default.Key,
@@ -921,6 +974,66 @@ fun SettingsScreen(
                 title = "Free up storage",
                 subtitle = cacheUsageSubtitle(cacheUsage),
                 onClick = { showClearCacheConfirm = true },
+            )
+        }
+
+        // Diagnostics — opt-in surface for "why is X tab loading slowly?".
+        // Reads in-memory metrics collected by SourceMetrics; resets on process death.
+        var showDiagnostics by remember { mutableStateOf(false) }
+        SettingsSection(
+            title = "Diagnostics",
+            description = "Per-source request counts and latency snapshots for this session.",
+        ) {
+            SettingsItem(
+                icon = Icons.Default.MonitorHeart,
+                title = "Source diagnostics",
+                subtitle = "View success ratio, p50/p95 latency, and last error per content source",
+                onClick = { showDiagnostics = true },
+            )
+        }
+        if (showDiagnostics) {
+            val snapshots = viewModel.diagnosticsSnapshot()
+            AlertDialog(
+                onDismissRequest = { showDiagnostics = false },
+                title = { Text("Source diagnostics") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (snapshots.isEmpty()) {
+                            Text(
+                                "No source activity recorded yet — open the Wallpapers or Sounds tab to populate stats.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            snapshots.forEach { stat ->
+                                Column {
+                                    Text(stat.source.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.titleSmall)
+                                    val pct = (stat.successRatio * 100).toInt()
+                                    val latency = if (stat.p50Ms != null) "p50 ${stat.p50Ms}ms / p95 ${stat.p95Ms}ms" else "no latency yet"
+                                    Text(
+                                        "${stat.totalRequests} requests • $pct% success • $latency",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (stat.lastErrorClass != null) {
+                                        Text(
+                                            "Last error: ${stat.lastErrorClass} — ${stat.lastErrorMessage ?: "no detail"}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showDiagnostics = false }) { Text("Close") } },
+                dismissButton = {
+                    TextButton(onClick = {
+                        viewModel.resetDiagnostics()
+                        showDiagnostics = false
+                    }) { Text("Reset") }
+                },
             )
         }
 
