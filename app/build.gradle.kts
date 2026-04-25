@@ -181,6 +181,10 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
 
     // NewPipe Extractor (YouTube search without API key)
+    // PIN: NewPipe ships YouTube-extractor patches monthly. Bumping versions can
+    // introduce subtle stream-handling regressions (DownloaderImpl InputStream leak
+    // historically, fixed in v5.8). Re-verify YouTubeRepository + DownloaderImpl
+    // stream lifecycle on every bump (round-19 audit confirmed clean for v0.24.8).
     implementation("com.github.teamnewpipe:NewPipeExtractor:v0.24.8")
 
     // yt-dlp for Android (YouTube stream URL extraction)
