@@ -744,6 +744,7 @@ class WallpapersViewModel @Inject constructor(
                 val result = wallpaperRepo.getRandomWallhaven()
                 _state.update { it.copy(wallpapers = result.items, isLoading = false, hasMore = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = e.message) }
             }
         }

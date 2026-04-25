@@ -241,6 +241,7 @@ class AudioTrimmer @Inject constructor(
                 try { process.destroy() } catch (_: Exception) {}
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (com.freevibe.BuildConfig.DEBUG) android.util.Log.e("AudioTrimmer", "FFmpeg fade failed: ${e.message}")
         } finally {
             try { tempOut.delete() } catch (_: Exception) {}

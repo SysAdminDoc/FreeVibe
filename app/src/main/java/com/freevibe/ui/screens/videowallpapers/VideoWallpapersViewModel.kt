@@ -259,6 +259,7 @@ class VideoWallpapersViewModel @Inject constructor(
                             request.addOption("--force-overwrites")
                             com.yausername.youtubedl_android.YoutubeDL.getInstance().execute(request)
                         } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                             if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoWP", "yt-dlp download failed: ${e.message}, using stream URL")
                             okHttpClient.newCall(Request.Builder().url(videoUrl).build()).execute().use { resp ->
                                 if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
