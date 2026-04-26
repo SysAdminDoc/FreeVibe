@@ -94,6 +94,8 @@ class SettingsViewModel @Inject constructor(
     val adaptiveTint = prefs.adaptiveTintEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val adaptiveTintIntensity = prefs.adaptiveTintIntensity.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.3f)
     val darkModeSwitch = prefs.darkModeAutoSwitch.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val darkModeWallpaperId = prefs.darkModeWallpaperId.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val lightModeWallpaperId = prefs.lightModeWallpaperId.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
@@ -270,6 +272,8 @@ class SettingsViewModel @Inject constructor(
     }
     fun setStabilityKey(key: String) = viewModelScope.launch { prefs.setStabilityKey(key) }
     fun setDarkModeSwitch(enabled: Boolean) = viewModelScope.launch { prefs.setDarkModeAutoSwitch(enabled) }
+    fun setDarkModeWallpaperId(id: String) = viewModelScope.launch { prefs.setDarkModeWallpaperId(id) }
+    fun setLightModeWallpaperId(id: String) = viewModelScope.launch { prefs.setLightModeWallpaperId(id) }
 
     fun clearCache() = viewModelScope.launch {
         withContext(Dispatchers.IO) {
