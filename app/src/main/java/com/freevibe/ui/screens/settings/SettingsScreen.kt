@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -85,6 +87,8 @@ fun SettingsScreen(
     val adaptiveTint by viewModel.adaptiveTint.collectAsStateWithLifecycle()
     val adaptiveTintIntensity by viewModel.adaptiveTintIntensity.collectAsStateWithLifecycle()
     val darkModeSwitch by viewModel.darkModeSwitch.collectAsStateWithLifecycle()
+    val darkModeWallpaperId by viewModel.darkModeWallpaperId.collectAsStateWithLifecycle()
+    val lightModeWallpaperId by viewModel.lightModeWallpaperId.collectAsStateWithLifecycle()
     val videoFpsLimit by viewModel.videoFpsLimit.collectAsStateWithLifecycle()
     val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsStateWithLifecycle()
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsStateWithLifecycle()
@@ -232,6 +236,8 @@ fun SettingsScreen(
     var showStylePicker by remember { mutableStateOf(false) }
     var showYtSoundEditor by remember { mutableStateOf(false) }
     var showYtBlockedEditor by remember { mutableStateOf(false) }
+    var showDarkModeWallpaperPicker by remember { mutableStateOf(false) }
+    var showLightModeWallpaperPicker by remember { mutableStateOf(false) }
     val selectedStyleCount = remember(userStyles) { countSelectedStyles(userStyles) }
     val configuredApiKeys = remember(
         wallhavenApiKey,
@@ -649,7 +655,62 @@ fun SettingsScreen(
                     }
                 },
             )
-            // Dark/light auto-switch toggle removed — DarkModeReceiver deleted in v5.21.0
+            SettingsToggle(
+                icon = Icons.Default.Brightness4,
+                title = "Auto-switch wallpaper for dark mode",
+                subtitle = "Apply different wallpapers when system theme changes",
+                checked = darkModeSwitch,
+                onCheckedChange = { viewModel.setDarkModeSwitch(it) },
+            )
+            if (darkModeSwitch) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Text("Wallpaper slots", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        // Light mode slot
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                .clickable { showLightModeWallpaperPicker = true }
+                                .padding(12.dp),
+                        ) {
+                            Text("Light mode", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                if (lightModeWallpaperId.isEmpty()) "Not set" else "Set",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // Dark mode slot
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainer)
+                                .clickable { showDarkModeWallpaperPicker = true }
+                                .padding(12.dp),
+                        ) {
+                            Text("Dark mode", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                if (darkModeWallpaperId.isEmpty()) "Not set" else "Set",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Text(
+                        "Tap either slot to choose which wallpaper to apply when the system switches to that theme",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             // VFX particle overlays
             var showVfxPicker by remember { mutableStateOf(false) }
             SettingsItem(
@@ -691,6 +752,75 @@ fun SettingsScreen(
                         }
                     },
                     confirmButton = { TextButton(onClick = { showVfxPicker = false }) { Text("Cancel") } },
+                )
+            }
+            // Dark/light mode wallpaper pickers
+            if (showDarkModeWallpaperPicker && wallpaperHistory.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = { showDarkModeWallpaperPicker = false },
+                    title = { Text("Choose dark mode wallpaper") },
+                    text = {
+                        Column(modifier = Modifier.heightIn(max = 300.dp)) {
+                            LazyColumn {
+                                items(wallpaperHistory.take(10)) { entry ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
+                                                viewModel.setDarkModeWallpaperId(wallpaperId)
+                                                showDarkModeWallpaperPicker = false
+                                            }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(entry.source, style = MaterialTheme.typography.labelMedium)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            entry.wallpaperId.take(20),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showDarkModeWallpaperPicker = false }) { Text("Cancel") } },
+                )
+            }
+            if (showLightModeWallpaperPicker && wallpaperHistory.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = { showLightModeWallpaperPicker = false },
+                    title = { Text("Choose light mode wallpaper") },
+                    text = {
+                        Column(modifier = Modifier.heightIn(max = 300.dp)) {
+                            LazyColumn {
+                                items(wallpaperHistory.take(10)) { entry ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
+                                                viewModel.setLightModeWallpaperId(wallpaperId)
+                                                showLightModeWallpaperPicker = false
+                                            }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(entry.source, style = MaterialTheme.typography.labelMedium)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            entry.wallpaperId.take(20),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showLightModeWallpaperPicker = false }) { Text("Cancel") } },
                 )
             }
         }
