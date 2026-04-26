@@ -45,6 +45,9 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
     @Inject
     lateinit var communityIdentityProvider: CommunityIdentityProvider
 
+    @Inject
+    lateinit var systemThemeListener: com.freevibe.service.SystemThemeListener
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -74,6 +77,7 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
         createMediaNotificationChannel()
         evictStaleCaches()
         warmCommunityIdentity()
+        startSystemThemeListener()
         initYtDlp()
     }
 
@@ -154,6 +158,18 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
                 // Swallow + log — community features degrade gracefully when unsigned; this must
                 // not crash the app at startup or it'll hit the uncaught-handler we just wired up.
                 if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "Community warm-up failed", e)
+            }
+        }
+    }
+
+    private fun startSystemThemeListener() {
+        appScope.launch {
+            try {
+                systemThemeListener.startListening()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                // Dark/light mode auto-switch is optional; never crash on startup
+                if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "System theme listener failed", e)
             }
         }
     }
