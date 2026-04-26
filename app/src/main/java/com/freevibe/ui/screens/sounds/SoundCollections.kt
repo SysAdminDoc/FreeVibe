@@ -1,6 +1,6 @@
 package com.freevibe.ui.screens.sounds
 
-internal enum class SoundCollectionTone { MINIMAL, CALM, RETRO, NATURE, PUNCHY, MELODIC }
+internal enum class SoundCollectionTone { MINIMAL, CALM, RETRO, NATURE, PUNCHY, MELODIC, SEASONAL }
 
 internal data class SoundCollectionSpec(
     val title: String,

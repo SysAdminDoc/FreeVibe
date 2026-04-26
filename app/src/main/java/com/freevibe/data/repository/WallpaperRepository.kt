@@ -343,7 +343,7 @@ class WallpaperRepository @Inject constructor(
         return cacheManager.getStaleCached("discover_$page")
     }
 
-    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null): SearchResult<Wallpaper> =
+    suspend fun getDiscover(page: Int = 1, redditRepo: com.freevibe.data.repository.RedditRepository? = null, userStyles: List<String> = emptyList()): SearchResult<Wallpaper> =
         sourceMetrics.measure(SOURCE_DISCOVER) {
             supervisorScope {
                 val primarySources = mutableListOf(
@@ -351,6 +351,10 @@ class WallpaperRepository @Inject constructor(
                     async { loadSourceSafely { getPixabay(page = page) } },
                     async { loadSourceSafely { getPexelsCurated(page = page) } },
                 )
+                if (userStyles.isNotEmpty()) {
+                    val styleQuery = styleToWallhavenQuery(userStyles)
+                    primarySources.add(async { loadSourceSafely { getWallhaven(query = styleQuery, page = page) } })
+                }
                 if (redditRepo != null) {
                     primarySources.add(async { loadSourceSafely { redditRepo.getMultiSubreddit() } })
                 }
@@ -378,6 +382,26 @@ class WallpaperRepository @Inject constructor(
         }
 
     // -- Error handling with cache fallback --
+
+    /**
+     * Converts the user's onboarding style preferences into a Wallhaven search query
+     * so the Discover feed is biased toward their aesthetics.
+     */
+    private fun styleToWallhavenQuery(styles: List<String>): String {
+        val queryMap = mapOf(
+            "minimal" to "minimal clean",
+            "amoled" to "amoled dark",
+            "nature" to "nature landscape",
+            "space" to "space galaxy",
+            "anime" to "anime art",
+            "abstract" to "abstract colorful",
+            "neon" to "neon cyberpunk",
+            "city" to "city urban",
+            "gradient" to "gradient colorful",
+            "dark" to "dark night",
+        )
+        return styles.mapNotNull { queryMap[it] }.take(3).joinToString(" ")
+    }
 
     private suspend fun withCacheFallback(
         cacheKey: String,

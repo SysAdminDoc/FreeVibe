@@ -48,6 +48,7 @@ import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.favoriteIdentity
 import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.matchesHiddenIds
+import com.freevibe.service.SeasonalTheme
 import com.freevibe.ui.components.CompactSearchField
 import com.freevibe.ui.components.DownloadProgressBar
 import com.freevibe.ui.components.GlassCard
@@ -491,6 +492,7 @@ fun WallpapersScreen(
                                 onSearch = { query -> viewModel.search(query) },
                                 isDiscoverTab = state.selectedTab == WallpaperTab.DISCOVER,
                                 topVoted = visibleSections.topVoted,
+                                seasonalTheme = if (state.selectedTab == WallpaperTab.DISCOVER) viewModel.seasonalTheme else null,
                             )
                         }
                     }
@@ -716,6 +718,7 @@ private fun WallpaperGrid(
     onSearch: ((String) -> Unit)? = null,
     isDiscoverTab: Boolean = false,
     topVoted: List<Pair<Wallpaper, Int>> = emptyList(),
+    seasonalTheme: SeasonalTheme? = null,
 ) {
     val gridState = rememberLazyStaggeredGridState()
 
@@ -821,6 +824,16 @@ private fun WallpaperGrid(
                         )
                     }
                 }
+            }
+        }
+
+        // Seasonal banner — shown in Discover when a seasonal theme is active
+        if (isDiscoverTab && seasonalTheme != null) {
+            item(span = StaggeredGridItemSpan.FullLine, key = "seasonal_banner") {
+                SeasonalBannerCard(
+                    theme = seasonalTheme,
+                    onClick = { onSearch?.invoke(seasonalTheme.wallpaperQuery) },
+                )
             }
         }
 
@@ -1129,6 +1142,73 @@ private fun WallpaperStateCard(
                         Text(action.label)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeasonalBannerCard(
+    theme: SeasonalTheme,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accentColor = Color(0xFFFFCA28) // warm amber-gold
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.36f)),
+        shadowElevation = 4.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accentColor.copy(alpha = 0.18f),
+                modifier = Modifier.size(44.dp),
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Celebration,
+                        contentDescription = theme.label,
+                        modifier = Modifier.size(22.dp),
+                        tint = accentColor,
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    theme.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    theme.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = accentColor.copy(alpha = 0.14f),
+            ) {
+                Text(
+                    "Explore",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accentColor,
+                )
             }
         }
     }

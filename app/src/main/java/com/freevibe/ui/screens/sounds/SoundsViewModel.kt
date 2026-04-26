@@ -25,6 +25,7 @@ import com.freevibe.service.AudioPlaybackManager
 import com.freevibe.service.AudioPreviewCache
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
+import com.freevibe.service.SeasonalContentManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import com.freevibe.service.SoundUrlResolver
@@ -93,10 +94,14 @@ class SoundsViewModel @Inject constructor(
     private val soundCloudRepo: SoundCloudRepository,
     val uploadRepo: UploadRepository,
     private val soundUrlResolver: SoundUrlResolver,
+    private val seasonalContentManager: SeasonalContentManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
     val state = _state.asStateFlow()
+
+    /** Non-null only when a seasonal theme is currently active (holiday, summer, etc.). */
+    val seasonalTheme = seasonalContentManager.currentTheme()
 
     val selectedSound = selectedContent.selectedSound
 

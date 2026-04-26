@@ -315,7 +315,21 @@ fun SoundsScreen(
                             onLoadMore = { viewModel.loadMore() },
                             playbackProgress = playbackProgress,
                             topHits = displayTopHits,
-                            collections = if (state.query.isBlank()) soundCollectionsFor(state.selectedTab) else emptyList(),
+                            collections = if (state.query.isBlank()) {
+                                val base = soundCollectionsFor(state.selectedTab)
+                                val seasonal = viewModel.seasonalTheme
+                                if (seasonal != null && base.isNotEmpty()) {
+                                    val seasonalSpec = SoundCollectionSpec(
+                                        title = seasonal.title,
+                                        subtitle = seasonal.subtitle,
+                                        query = seasonal.soundQuery,
+                                        tone = SoundCollectionTone.SEASONAL,
+                                    )
+                                    listOf(seasonalSpec) + base
+                                } else {
+                                    base
+                                }
+                            } else emptyList(),
                             onCollectionClick = { collection -> viewModel.search(collection.query) },
                         )
                     }
@@ -727,6 +741,7 @@ private fun collectionToneColor(tone: SoundCollectionTone): Color = when (tone) 
     SoundCollectionTone.NATURE -> Color(0xFF66BB6A)
     SoundCollectionTone.PUNCHY -> Color(0xFFFF6B6B)
     SoundCollectionTone.MELODIC -> Color(0xFF64B5F6)
+    SoundCollectionTone.SEASONAL -> Color(0xFFFFCA28) // amber-gold accent
 }
 
 private fun collectionToneIcon(tone: SoundCollectionTone): androidx.compose.ui.graphics.vector.ImageVector = when (tone) {
@@ -736,6 +751,7 @@ private fun collectionToneIcon(tone: SoundCollectionTone): androidx.compose.ui.g
     SoundCollectionTone.NATURE -> Icons.Default.WaterDrop
     SoundCollectionTone.PUNCHY -> Icons.Default.Bolt
     SoundCollectionTone.MELODIC -> Icons.Default.GraphicEq
+    SoundCollectionTone.SEASONAL -> Icons.Default.Celebration
 }
 
 // -- Sound Card --
