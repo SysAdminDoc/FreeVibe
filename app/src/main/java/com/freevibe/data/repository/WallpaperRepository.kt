@@ -336,6 +336,37 @@ class WallpaperRepository @Inject constructor(
         }
     }
 
+    suspend fun getPexels(page: Int = 1, query: String = ""): SearchResult<Wallpaper> {
+        val key = pexelsApiKey()
+        if (key.isBlank()) return SearchResult(emptyList(), 0, 1, false)
+        return withCacheFallback("pexels_${query.hashCode()}_$page", ContentSource.PEXELS) {
+            sourceMetrics.measure(SOURCE_PEXELS) {
+                val response = pexelsApi.searchPhotos(
+                    apiKey = key,
+                    query = query.ifBlank { "wallpaper" },
+                    page = page,
+                )
+                SearchResult(
+                    items = response.photos.map { photo ->
+                        Wallpaper(
+                            id = "px_${photo.id}",
+                            source = ContentSource.PEXELS,
+                            thumbnailUrl = photo.src.medium,
+                            fullUrl = photo.src.original,
+                            width = photo.width,
+                            height = photo.height,
+                            sourcePageUrl = photo.url,
+                            uploaderName = photo.photographer,
+                        )
+                    },
+                    totalCount = response.totalResults,
+                    currentPage = response.page,
+                    hasMore = response.nextPage != null,
+                )
+            }
+        }
+    }
+
     // -- Discover feed (mixed from ALL sources for diversity) --
 
     /** Return cached discover results if available (instant, no network) */
@@ -354,6 +385,9 @@ class WallpaperRepository @Inject constructor(
                 if (userStyles.isNotEmpty()) {
                     val styleQuery = styleToWallhavenQuery(userStyles)
                     primarySources.add(async { loadSourceSafely { getWallhaven(query = styleQuery, page = page) } })
+                    // Also bias Pexels and Pixabay by style
+                    primarySources.add(async { loadSourceSafely { getPixabay(query = styleQuery, page = page) } })
+                    primarySources.add(async { loadSourceSafely { getPexels(query = styleQuery, page = page) } })
                 }
                 if (redditRepo != null) {
                     primarySources.add(async { loadSourceSafely { redditRepo.getMultiSubreddit() } })
