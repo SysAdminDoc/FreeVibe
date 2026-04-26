@@ -27,7 +27,7 @@
 - [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
 - [x] Sounds COMMUNITY tab empty state: added "Upload a sound" `FilledTonalButton` to the empty state so users on an empty COMMUNITY tab see a direct CTA instead of dead-end text.
 - [x] Downloads broken-file badge: `DownloadsScreen` now async-checks file existence via `LaunchedEffect(displayList)` on a background dispatcher. `DownloadHistoryCard` receives a `broken` flag and renders a `Warning` icon in error-red with a "File missing" label instead of silently failing on tap.
-- [ ] Remaining 2.5 gap: wallpaper Discover still doesn't bias non-Wallhaven sources (Pexels/Pixabay) by style; query is Wallhaven-only.
+- [x] Resolved 2.5 gap: Wallpaper Discover now biases Pexels and Pixabay by user style in addition to Wallhaven. Created `getPexels(query, page)` method in WallpaperRepository. When user has style preferences, the Discover feed now generates three parallel style-biased queries: Wallhaven, Pexels, and Pixabay, all fed through the same merging + ranking pipeline.
 
 ---
 
