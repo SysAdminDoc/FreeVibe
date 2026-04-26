@@ -92,6 +92,7 @@ class SettingsViewModel @Inject constructor(
     val schedulerShuffle = prefs.schedulerShuffle.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val weatherEffects = prefs.weatherEffectsEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val adaptiveTint = prefs.adaptiveTintEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val adaptiveTintIntensity = prefs.adaptiveTintIntensity.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.3f)
     val darkModeSwitch = prefs.darkModeAutoSwitch.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val gridColumns = prefs.wallpaperGridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
@@ -108,6 +109,7 @@ class SettingsViewModel @Inject constructor(
     val pexelsApiKey = prefs.pexelsApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pixabayApiKey = prefs.pixabayApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val freesoundApiKey = prefs.freesoundApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val stabilityAiKey = prefs.stabilityAiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val showSketchyContent = prefs.showSketchyContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val showNsfwContent = prefs.showNsfwContent.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -255,7 +257,18 @@ class SettingsViewModel @Inject constructor(
     fun setSchedulerLock(enabled: Boolean) = viewModelScope.launch { prefs.setSchedulerLock(enabled) }
     fun setSchedulerShuffle(shuffle: Boolean) = viewModelScope.launch { prefs.setSchedulerShuffle(shuffle) }
     fun setWeatherEffects(enabled: Boolean) = viewModelScope.launch { prefs.setWeatherEffectsEnabled(enabled) }
-    fun setAdaptiveTint(enabled: Boolean) = viewModelScope.launch { prefs.setAdaptiveTintEnabled(enabled) }
+    fun setAdaptiveTint(enabled: Boolean) = viewModelScope.launch {
+        prefs.setAdaptiveTintEnabled(enabled)
+        // Bridge to SharedPreferences so WeatherWallpaperService can read it synchronously
+        context.getSharedPreferences("freevibe_weather_wp", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("adaptive_tint_enabled", enabled).apply()
+    }
+    fun setAdaptiveTintIntensity(intensity: Float) = viewModelScope.launch {
+        prefs.setAdaptiveTintIntensity(intensity)
+        context.getSharedPreferences("freevibe_weather_wp", android.content.Context.MODE_PRIVATE)
+            .edit().putFloat("adaptive_tint_intensity", intensity).apply()
+    }
+    fun setStabilityKey(key: String) = viewModelScope.launch { prefs.setStabilityKey(key) }
     fun setDarkModeSwitch(enabled: Boolean) = viewModelScope.launch { prefs.setDarkModeAutoSwitch(enabled) }
 
     fun clearCache() = viewModelScope.launch {

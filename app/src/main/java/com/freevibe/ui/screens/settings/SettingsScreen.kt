@@ -83,12 +83,14 @@ fun SettingsScreen(
     val schedulerShuffle by viewModel.schedulerShuffle.collectAsStateWithLifecycle()
     val weatherEffects by viewModel.weatherEffects.collectAsStateWithLifecycle()
     val adaptiveTint by viewModel.adaptiveTint.collectAsStateWithLifecycle()
+    val adaptiveTintIntensity by viewModel.adaptiveTintIntensity.collectAsStateWithLifecycle()
     val darkModeSwitch by viewModel.darkModeSwitch.collectAsStateWithLifecycle()
     val videoFpsLimit by viewModel.videoFpsLimit.collectAsStateWithLifecycle()
     val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsStateWithLifecycle()
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsStateWithLifecycle()
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsStateWithLifecycle()
     val freesoundApiKey by viewModel.freesoundApiKey.collectAsStateWithLifecycle()
+    val stabilityAiKey by viewModel.stabilityAiKey.collectAsStateWithLifecycle()
     val showSketchyContent by viewModel.showSketchyContent.collectAsStateWithLifecycle()
     val showNsfwContent by viewModel.showNsfwContent.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
@@ -236,8 +238,9 @@ fun SettingsScreen(
         pexelsApiKey,
         pixabayApiKey,
         freesoundApiKey,
+        stabilityAiKey,
     ) {
-        listOf(wallhavenApiKey, pexelsApiKey, pixabayApiKey, freesoundApiKey).count { it.isNotBlank() }
+        listOf(wallhavenApiKey, pexelsApiKey, pixabayApiKey, freesoundApiKey, stabilityAiKey).count { it.isNotBlank() }
     }
 
     Column(
@@ -613,6 +616,23 @@ fun SettingsScreen(
                 checked = adaptiveTint,
                 onCheckedChange = { viewModel.setAdaptiveTint(it) },
             )
+            if (adaptiveTint) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Text("Intensity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(
+                        value = adaptiveTintIntensity,
+                        onValueChange = { viewModel.setAdaptiveTintIntensity(it) },
+                        valueRange = 0.1f..1f,
+                        steps = 8,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "Subtle ← → Intense",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             SettingsToggle(
                 icon = Icons.Default.Cloud,
                 title = "Weather effects",
@@ -956,6 +976,41 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showFreesoundKey = false }) { Text("Cancel") }
+                    },
+                )
+            }
+            var showStabilityKey by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.Key,
+                title = "Stability AI API Key",
+                subtitle = "For advanced image generation (stability.ai)",
+                onClick = { showStabilityKey = true },
+            )
+            if (showStabilityKey) {
+                var keyText by remember { mutableStateOf(stabilityAiKey) }
+                AlertDialog(
+                    onDismissRequest = { showStabilityKey = false },
+                    title = { Text("Stability AI API Key") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Get a free key at stability.ai/account/keys", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            OutlinedTextField(
+                                value = keyText,
+                                onValueChange = { keyText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Paste API key here") },
+                                singleLine = true,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.setStabilityKey(keyText.trim())
+                            showStabilityKey = false
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showStabilityKey = false }) { Text("Cancel") }
                     },
                 )
             }
