@@ -284,7 +284,10 @@
 - [x] Wired SystemThemeListener into FreeVibeApp.onCreate() via `startSystemThemeListener()` on app scope
 - [x] Wallpaper ID format: `source|id|url` (stored when user applies a wallpaper; extracted and applied to BOTH home + lock)
 - [x] Listener runs on a 500ms poll cycle; captures last system theme state and auto-applies when it changes
-- Implementation complete: SystemThemeListener auto-monitors and applies; next pass will add Settings UI to let users assign wallpapers to slots
+- [x] Settings UI: Added toggle "Auto-switch wallpaper for dark mode" in Settings > Personalization
+- [x] Wallpaper slot assignment UI: Two clickable cards (Light/Dark) when toggle enabled; tapping opens picker dialog
+- [x] Wallpaper picker dialogs: Shows recent 10 wallpapers from history; user taps to store ID in preference
+- Implementation complete: end-to-end feature shipping with UI; users can assign wallpapers and system will auto-apply on theme toggle
 
 ### 6.3 Weather Effects Overlay
 - [x] WeatherParticleRenderer.kt already implemented: rain, snow, fog, stars, thunderstorm with particle system
