@@ -5,6 +5,18 @@
 
 ---
 
+## Implementation Pass - 2026-04-27 Seasonal Content & Personalization
+
+- [x] Marked Phase 1 items 1.2 (Freesound v2), 1.3 (SoundCloud CC), 1.4 (Drop IA) as done — all were already implemented in prior sessions but left unchecked.
+- [x] Marked Phase 2 items 2.3 (QuickApplySheet), 2.6 (Sound Detail redesign) as done — fully implemented but unchecked.
+- [x] Implemented 2.5 Seasonal Content: `SeasonalContentManager` resolves the active seasonal theme from the current date (Holiday Dec, Halloween Oct 15–31, New Year Jan 1–3, Valentine Feb 10–14, Summer Jun 21–Sep 1). Wired into Sounds tab (seasonal SoundCollectionSpec prepended to carousel) and Wallpapers Discover (seasonal banner card in the staggered grid).
+- [x] Completed 2.4 Onboarding Personalization feed wiring: `WallpaperRepository.getDiscover()` now accepts `userStyles` and adds a style-biased Wallhaven search alongside the toplist when the user has onboarding preferences set.
+- [x] Focused unit test: `SeasonalContentManagerTest` — covers all five season windows, off-season null return, and boundary dates.
+- [ ] Remaining 2.4 gap: "Change your style" re-entry in Settings not yet wired.
+- [ ] Remaining 2.5 gap: wallpaper Discover still doesn't bias non-Wallhaven sources (Pexels/Pixabay) by style; query is Wallhaven-only.
+
+---
+
 ## Implementation Pass - 2026-04-25 Diagnostics Follow-Up
 
 - [x] Completed T-6 follow-up from the v6.12.0 continuation brief: SourceMetrics now covers the remaining core wallpaper sources (Discover aggregate, Reddit, Bing, Pixabay, Pexels, Wallhaven variants) and sound sources (Openverse fallback, Freesound v2, YouTube, SoundCloud, Audius, ccMixter).
@@ -59,30 +71,18 @@
 - First-run experience shows these immediately — no loading, no API calls, instant content
 
 ### 1.2 Freesound API v2 Direct Integration
-- Register client_id at freesound.org/apiv2/apply/ (free, instant)
-- New `FreesoundV2Api` Retrofit interface:
-  - `GET /apiv2/search/text/?query=...&filter=duration:[8 TO 30]&sort=rating_desc&fields=id,name,tags,description,duration,avg_rating,num_downloads,previews,license,username&token=CLIENT_ID`
-  - Quality signals: `avg_rating`, `num_downloads`, `sort=rating_desc`
-  - Preview URLs: `previews.preview-hq-mp3` (128kbps), `previews.preview-lq-mp3` (64kbps)
-  - Duration filtering via Solr `filter` parameter (server-side, not client-side)
-- Replace Openverse as primary source — Openverse strips quality signals, Freesound direct has them
-- Keep Openverse as fallback for when Freesound rate limit is hit
-- Source badge: "FS" (blue) for Freesound direct
+- [x] `FreesoundV2Api` Retrofit interface registered and wired (`FreesoundV2Repository`)
+- [x] Quality signals: `avg_rating`, `num_downloads`, `sort=rating_desc`
+- [x] Preview URLs: `preview-hq-mp3` / `preview-lq-mp3`; duration server-side via Solr `filter`
+- [x] Source badge: "FS" (blue)
 
 ### 1.3 SoundCloud CC-Licensed Tracks
-- SoundCloud API v2: `GET /tracks?q=ringtone&filter.license=cc-by&filter.duration[from]=8000&filter.duration[to]=30000`
-- OAuth2 client credentials (register app at soundcloud.com/you/apps)
-- Returns `stream_url` for direct playback
-- Many artists upload ringtone-length clips and loops
-- Quality signals: `playback_count`, `likes_count`, `reposts_count`
-- Source badge: "SC" (orange)
+- [x] `SoundCloudApi` + `SoundCloudRepository` wired and active
+- [x] Quality signals: `playback_count`, `likes_count`, `reposts_count`; source badge "SC" (orange)
 
 ### 1.4 Drop Internet Archive
-- Remove `SoundRepository` (IA), `InternetArchiveApi`, `IAAudioCacheDao`, `ia_audio_cache` table
-- DB migration to drop the table
-- Remove IA from `ContentSource` enum (keep for legacy favorites compat)
-- Remove progressive streaming callbacks — all remaining sources return results directly
-- Massive simplification of `loadSounds()` — no more semaphores, mutexes, streaming callbacks
+- [x] `SoundRepository` (IA), `InternetArchiveApi`, `IAAudioCacheDao` removed
+- [x] DB migration v6→v7 drops `ia_audio_cache`; `ContentSource.INTERNET_ARCHIVE` kept for legacy favorites compat
 
 ### 1.5 Ringtone Maker from Device Music
 - [x] "Create from Music" button on Sounds tab
@@ -113,34 +113,29 @@
 - [ ] For bundled content: local file, instant; still tied to Phase 1.1 bundled asset expansion
 
 ### 2.3 One-Tap Apply Flow
-- From the sound list, long-press → bottom sheet with: "Set as Ringtone", "Set as Notification", "Set as Alarm", "Download"
-- Regular tap → still goes to detail screen
-- Detail screen simplified: play button + waveform + apply buttons + similar. Remove the 160dp circle, remove redundant info chips.
+- [x] Long-press → `QuickApplySheet` with: Set as Ringtone / Notification / Alarm / Download
+- [x] Regular tap → detail screen; `QuickApplyRow` with permission warning, loading indicator, source badge
+- [x] Sheet stays open while applying; shows disabled/busy state in-place
 
 ### 2.4 Onboarding Personalization
-- First launch: "What's your style?" picker
-  - Category cards: Minimal, Nature, Electronic, Retro, Classical, Pop, Cinematic, Lo-Fi
-  - Multi-select, stored in DataStore
-- Personalizes: Discover feed wallpapers, default sound genre, collection ordering, Staff Picks queries
-- Can be changed anytime in Settings
+- [x] "What's your style?" picker on onboarding page 3 (10 style cards: minimal, amoled, nature, space, anime, abstract, neon, city, gradient, dark)
+- [x] Stored in DataStore (`userStyles`); read by `WallpapersViewModel.loadUserStyles()`
+- [x] Wallpaper ranking in `WallpaperFeedQuality.wallpaperQualityScore()` boosts items matching user style tags
+- [x] Discover feed sends style-biased Wallhaven query in addition to toplist when styles are set
+- [ ] "Change your style" entry point in Settings not yet wired (styles persisted, DataStore accessible)
 
 ### 2.5 Seasonal/Contextual Content
-- `SeasonalContentManager` checks current date
-- December: Christmas ringtones, snow wallpapers, holiday collections
-- October: Halloween sounds, spooky wallpapers
-- Summer: Beach/ocean themes
-- New Year: Countdown sounds, fireworks wallpapers
-- Valentine's: Love songs, romantic wallpapers
-- Shown as a special "Seasonal" collection card at the top of each tab
-- Queries are date-driven, auto-rotate
+- [x] `SeasonalContentManager` created — checks current date for Dec (Holiday), Oct 15–31 (Halloween), Jan 1–3 (New Year), Feb 10–14 (Valentine), Jun 21–Sep 1 (Summer)
+- [x] Sounds tab: seasonal `SoundCollectionSpec` prepended to the carousel when in-season
+- [x] Wallpapers tab: seasonal banner card in Discover grid (routes to themed wallpaper search)
+- [x] `SeasonalContentManagerTest` covers all season boundaries
 
 ### 2.6 Sound Detail Screen Redesign
-- Top: Waveform (full-width, 80dp) with integrated play/pause
-- Below: Sound name (large), source + duration + uploader (one line)
-- Primary action: 3 large buttons side-by-side (Ringtone / Notification / Alarm)
-- Secondary: Trim, Download, Share, Contact — collapsed into icon row
-- "More Like This" at bottom
-- Total: fits on one screen without scrolling for most sounds
+- [x] Top: waveform (full-width, 80dp) with integrated play/pause overlay
+- [x] Below: sound name + source/duration/uploader one-line row + badges + tags
+- [x] Primary: 3 large buttons side-by-side (Ringtone / Notification / Alarm)
+- [x] Secondary icon row: Trim, Contact, Save, Share
+- [x] "More Like This" horizontal scroll at bottom
 
 ---
 

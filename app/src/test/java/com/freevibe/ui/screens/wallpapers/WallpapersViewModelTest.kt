@@ -19,6 +19,7 @@ import com.freevibe.data.repository.WallpaperRepository
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.SeasonalContentManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
@@ -488,6 +489,7 @@ class WallpapersViewModelTest {
             cacheManager = cacheManager,
             applyFeedbackBus = mockk(relaxed = true),
             voteRepo = voteRepo,
+            seasonalContentManager = SeasonalContentManager(),
         )
     }
 
@@ -500,7 +502,7 @@ class WallpapersViewModelTest {
         coEvery { wallpaperRepo.getPexelsCurated(any()) } returns emptyWallpaperResult()
         coEvery { wallpaperRepo.getPixabay(any(), any()) } returns emptyWallpaperResult()
         coEvery { wallpaperRepo.getWallhaven(any(), any(), any()) } returns emptyWallpaperResult()
-        coEvery { wallpaperRepo.getDiscover(any(), any()) } returns emptyWallpaperResult()
+        coEvery { wallpaperRepo.getDiscover(any(), any(), any()) } returns emptyWallpaperResult()
         coEvery { wallpaperRepo.getCachedDiscover(any()) } returns emptyList()
         coEvery { wallpaperRepo.findSimilar(any(), any()) } returns emptyWallpaperResult()
         coEvery { redditRepo.getDailyTopWallpaper() } returns null

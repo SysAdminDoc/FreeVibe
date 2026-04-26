@@ -23,6 +23,7 @@ import com.freevibe.service.AudioPlaybackManager
 import com.freevibe.service.AudioPreviewCache
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
+import com.freevibe.service.SeasonalContentManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.SoundApplier
 import com.freevibe.service.SoundUrlResolver
@@ -809,6 +810,7 @@ class SoundsViewModelTest {
             soundCloudRepo = soundCloudRepo,
             uploadRepo = mockk<UploadRepository>(relaxed = true),
             soundUrlResolver = soundUrlResolver,
+            seasonalContentManager = SeasonalContentManager(),
         )
     }
 

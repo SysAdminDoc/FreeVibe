@@ -24,6 +24,7 @@ import com.freevibe.service.ColorExtractor
 import com.freevibe.service.DualWallpaperService
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.OfflineFavoritesManager
+import com.freevibe.service.SeasonalContentManager
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
@@ -78,10 +79,14 @@ class WallpapersViewModel @Inject constructor(
     private val cacheManager: com.freevibe.data.local.WallpaperCacheManager,
     private val applyFeedbackBus: ApplyFeedbackBus,
     val voteRepo: VoteRepository,
+    private val seasonalContentManager: SeasonalContentManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
     val state = _state.asStateFlow()
+
+    /** Non-null only when a seasonal theme is currently active (holiday, summer, etc.). */
+    val seasonalTheme = seasonalContentManager.currentTheme()
 
     private var loadJob: Job? = null
     private var lastRouteQuery: String? = null
@@ -617,10 +622,12 @@ class WallpapersViewModel @Inject constructor(
             val currentTab = _state.value.selectedTab
             val currentPage = _state.value.currentPage
             try {
+                val userStyles = loadUserStyles()
                 val result = when (currentTab) {
                     WallpaperTab.DISCOVER -> wallpaperRepo.getDiscover(
                         page = currentPage,
                         redditRepo = redditRepo,
+                        userStyles = userStyles,
                     )
                     WallpaperTab.PIXABAY -> wallpaperRepo.getPixabay(currentPage)
                     WallpaperTab.PEXELS -> wallpaperRepo.getPexelsCurated(currentPage)
@@ -630,7 +637,6 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(_state.value.selectedColor ?: "", currentPage)
                 }
                 val preferredResolution = prefs.preferredResolution.first()
-                val userStyles = loadUserStyles()
                 val activeFilter = if (currentTab == WallpaperTab.DISCOVER) _state.value.discoverFilter else WallpaperDiscoverFilter.FOR_YOU
                 val combined = if (loadMore) _state.value.wallpapers + result.items else result.items
                 val rankedWallpapers = rankWallpapers(
