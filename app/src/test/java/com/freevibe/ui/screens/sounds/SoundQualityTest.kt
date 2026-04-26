@@ -29,6 +29,26 @@ class SoundQualityTest {
     }
 
     @Test
+    fun `sound collections are only shown for everyday sound tabs`() {
+        assertTrue(soundCollectionsFor(SoundTab.RINGTONES).isNotEmpty())
+        assertTrue(soundCollectionsFor(SoundTab.NOTIFICATIONS).isNotEmpty())
+        assertTrue(soundCollectionsFor(SoundTab.ALARMS).isNotEmpty())
+        assertTrue(soundCollectionsFor(SoundTab.YOUTUBE).isEmpty())
+        assertTrue(soundCollectionsFor(SoundTab.COMMUNITY).isEmpty())
+        assertTrue(soundCollectionsFor(SoundTab.SEARCH).isEmpty())
+    }
+
+    @Test
+    fun `sound collections expose distinct nonblank discovery queries`() {
+        SoundTab.entries.forEach { tab ->
+            val collections = soundCollectionsFor(tab)
+            assertEquals(collections.map { it.title }.distinct(), collections.map { it.title })
+            assertTrue(collections.all { it.query.isNotBlank() })
+            assertTrue(collections.all { it.subtitle.isNotBlank() })
+        }
+    }
+
+    @Test
     fun `rankSounds keeps best duplicate instead of first duplicate`() {
         val weak = testSound(
             id = "yt_one",

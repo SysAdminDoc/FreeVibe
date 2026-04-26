@@ -25,7 +25,15 @@
 
 - [x] Completed the P0 2.1 header simplification slice: the Sounds tab now exposes Ringtones, Notifications, and Alarms as visible primary chips instead of hiding the core modes behind a source dropdown.
 - [x] Product polish: YouTube, Community, and active Search are kept in a compact secondary menu; quality bias remains in the existing bottom sheet behind the search-row Refine button.
-- [ ] Remaining candidate: evaluate whether the collections carousel from the roadmap should be restored/expanded for sound discovery once bundled content volume increases.
+- [x] Follow-up completed in the Sound Discovery Carousel pass: collection discovery was restored as compact in-feed cards.
+
+## Implementation Pass - 2026-04-26 Sound Discovery Carousel
+
+- [x] Completed the remaining 2.1 discovery slice: Sounds now shows tab-aware collection cards for Ringtones, Notifications, and Alarms inside the feed, routing each card into focused search.
+- [x] Product polish: long-press quick apply now keeps the sheet open while applying, shows disabled/busy state in-place, and surfaces the missing system-settings permission with a direct Grant action.
+- [x] Comparable-product research applied: Paperize-style organized collections, Muzei-style source browsing clarity, and ringtone-maker preview/apply workflow emphasis were used as fit checks without copying external code.
+- [x] Test coverage: SoundQualityTest now covers collection visibility and nonblank distinct discovery queries.
+- [ ] Remaining candidate: true first-visible preview pre-buffering remains deferred under 2.2; YouTube preview URL resolution already happens during search, but ExoPlayer/HTTP cache prewarming needs separate lifecycle and battery scoping.
 
 ## Phase 1 — Content Foundation
 
@@ -86,7 +94,7 @@
 - [x] Remove: duration filter chips, sort chips, genre chips, mood chips from the persistent header
 - [x] New layout: Search bar → Tab row (Ringtones/Notifications/Alarms) → Content
 - [x] Move quality refinement into the existing bottom sheet behind the search-row Refine button; no persistent genre/mood/sort rows remain
-- [ ] Collections carousel stays — it's the primary discovery mechanism
+- [x] Collections carousel stays — it now lives in feed content as tab-aware discovery cards, not persistent chrome
 - Result: 2 rows of chrome instead of 4, content starts at 20% of screen instead of 45%
 
 ### 2.2 Instant Sound Preview
