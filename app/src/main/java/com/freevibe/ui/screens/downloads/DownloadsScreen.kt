@@ -47,6 +47,18 @@ fun DownloadsScreen(
             else -> allDownloads
         }
     }
+    var brokenIds by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(displayList) {
+        brokenIds = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            displayList.filter { it.localPath.isNotBlank() }.mapNotNullTo(mutableSetOf()) { item ->
+                val parsed = Uri.parse(item.localPath)
+                if (parsed.scheme == "file") {
+                    val path = parsed.path
+                    if (path != null && !java.io.File(path).exists()) item.id else null
+                } else null
+            }
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -96,6 +108,7 @@ fun DownloadsScreen(
                     items(displayList, key = { it.id }, contentType = { "download_card" }) { download ->
                         DownloadHistoryCard(
                             download = download,
+                            broken = download.id in brokenIds,
                             onOpen = {
                                 try {
                                     val path = download.localPath
@@ -164,6 +177,7 @@ private fun ActiveDownloadCard(dl: DownloadProgress, onDismiss: () -> Unit) {
 @Composable
 private fun DownloadHistoryCard(
     download: DownloadEntity,
+    broken: Boolean = false,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -180,19 +194,32 @@ private fun DownloadHistoryCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                if (download.type == "WALLPAPER") Icons.Default.Image else Icons.Default.MusicNote,
+                if (broken) Icons.Default.Warning
+                else if (download.type == "WALLPAPER") Icons.Default.Image else Icons.Default.MusicNote,
                 null, Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary,
+                tint = if (broken) MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                       else MaterialTheme.colorScheme.primary,
             )
             Column(Modifier.weight(1f)) {
-                Text(download.name.ifEmpty { download.id }, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    download.name.ifEmpty { download.id },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (broken) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.onSurface,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(dateFormat.format(Date(download.downloadedAt)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        if (download.type == "WALLPAPER") "Wallpaper" else "Sound",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    if (broken) {
+                        Text("File missing", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f))
+                    } else {
+                        Text(
+                            if (download.type == "WALLPAPER") "Wallpaper" else "Sound",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
             IconButton(onClick = onDelete, Modifier.size(36.dp)) {
