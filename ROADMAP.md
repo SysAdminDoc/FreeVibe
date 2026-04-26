@@ -279,19 +279,21 @@
 - Implementation complete: WallpaperDetailScreen integrates `colorPalette` StateFlow collection, renders scrollable swatch row with tonal colors
 
 ### 6.2 Dark/Light Mode Auto-Switch
-- Two wallpaper slots: "Light mode wallpaper" + "Dark mode wallpaper"
-- `UiModeManager` listener for system theme changes
-- Auto-applies correct wallpaper when user toggles system dark mode
-- Optional: auto-darken the light wallpaper with AMOLED crush instead of requiring two
+- [x] PreferencesManager already has `darkModeAutoSwitch`, `darkModeWallpaperId`, `lightModeWallpaperId` fields and setters
+- [x] Created `SystemThemeListener.kt`: monitors Configuration.UI_MODE_NIGHT changes, auto-applies correct wallpaper slot when system dark mode toggles
+- [x] Wired SystemThemeListener into FreeVibeApp.onCreate() via `startSystemThemeListener()` on app scope
+- [x] Wallpaper ID format: `source|id|url` (stored when user applies a wallpaper; extracted and applied to BOTH home + lock)
+- [x] Listener runs on a 500ms poll cycle; captures last system theme state and auto-applies when it changes
+- Implementation complete: SystemThemeListener auto-monitors and applies; next pass will add Settings UI to let users assign wallpapers to slots
 
 ### 6.3 Weather Effects Overlay
-- Open-Meteo API (free, no key): current weather conditions
-- Canvas particle system overlay in WallpaperService:
-  - Rain: vertical streaks, Snow: floating particles, Fog: gradient overlay
-  - Sun rays: diagonal beams, Thunderstorm: flash overlay + rain
-- Update weather every 30 minutes via WorkManager
-- Intensity matches real conditions
-- Works on both static and video wallpapers
+- [x] WeatherParticleRenderer.kt already implemented: rain, snow, fog, stars, thunderstorm with particle system
+- [x] VfxParticleRenderer.kt already implemented: fireflies, sakura, embers, bubbles, leaves, sparkles
+- [x] Both renderers wired into WeatherWallpaperService.draw() and called on every frame
+- [x] OpenMeteoApi.weatherCode→WeatherEffect mapping already complete (NOAA weather codes → RAIN/SNOW/FOG/etc.)
+- [x] WeatherUpdateWorker fetches conditions every 30 min and writes weather_effect + wind_speed to SharedPrefs
+- [x] WeatherWallpaperService.loadWeatherFromPrefs() reads and renders particles on top of wallpaper
+- Implementation complete: weather particles are fully functional end-to-end
 
 ### 6.4 Time-of-Day Adaptive Tint
 - [x] `ColorMatrix` filter in `WeatherWallpaperService.draw()` based on current hour
