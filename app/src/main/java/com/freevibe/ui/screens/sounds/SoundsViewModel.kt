@@ -22,6 +22,7 @@ import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toSound
 import com.freevibe.service.AudioPlaybackManager
+import com.freevibe.service.AudioPreviewCache
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
@@ -41,6 +42,7 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.time.Year
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
@@ -87,6 +89,7 @@ class SoundsViewModel @Inject constructor(
     val voteRepo: VoteRepository,
     private val bundledContent: BundledContentProvider,
     private val audioPlaybackManager: AudioPlaybackManager,
+    private val audioPreviewCache: AudioPreviewCache,
     private val soundCloudRepo: SoundCloudRepository,
     val uploadRepo: UploadRepository,
     private val soundUrlResolver: SoundUrlResolver,
@@ -100,8 +103,8 @@ class SoundsViewModel @Inject constructor(
     val autoPreview = prefs.autoPreviewSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val previewVolume = prefs.soundPreviewVolume.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.7f)
 
-    private val _cachedYtIds = MutableStateFlow<Set<String>>(emptySet())
-    val cachedYtIds = _cachedYtIds.asStateFlow()
+    private val _previewReadyIds = MutableStateFlow<Set<String>>(emptySet())
+    val previewReadyIds = _previewReadyIds.asStateFlow()
 
     val recentSearches = searchHistoryRepo.getRecentSoundSearches(8)
         .map { list -> list.map { it.query } }
@@ -114,6 +117,7 @@ class SoundsViewModel @Inject constructor(
     private var progressJob: Job? = null
     private var communityJob: Job? = null
     private val ytResolveSemaphore = Semaphore(6)
+    private val previewPrebufferInFlight = ConcurrentHashMap.newKeySet<String>()
 
     private val titleBlocklist = Regex("hindi|telugu|pack|trending|popular|\\bnew\\b|\\btop\\b|\\bbest\\b", RegexOption.IGNORE_CASE)
     private val WORD_SPLIT_REGEX = Regex("[^a-zA-Z0-9]+")
@@ -175,7 +179,9 @@ class SoundsViewModel @Inject constructor(
                     }
                 }
                 currentCoroutineContext().ensureActive()
-                _topHits.value = rankSounds(allHits, SoundTab.RINGTONES, SoundQualityFilter.BEST).take(5)
+                val rankedHits = rankSounds(allHits, SoundTab.RINGTONES, SoundQualityFilter.BEST).take(5)
+                _topHits.value = rankedHits
+                schedulePreviewPrebuffer(rankedHits)
 
                 // Pre-resolve preview URLs
                 supervisorScope {
@@ -186,7 +192,6 @@ class SoundsViewModel @Inject constructor(
                                 youtubeRepo.getAudioPreviewUrl(hit.id.removePrefix("yt_"))?.let { url ->
                                     currentCoroutineContext().ensureActive()
                                     cacheResolvedPreview(hit, url)
-                                    _cachedYtIds.update { it + hit.id }
                                 }
                             } catch (e: Exception) {
                                 e.rethrowIfCancelled()
@@ -206,13 +211,16 @@ class SoundsViewModel @Inject constructor(
 
     fun setQualityFilter(filter: SoundQualityFilter) {
         val currentTab = _state.value.selectedTab
+        var rankedSounds: List<Sound> = emptyList()
         _state.update {
+            rankedSounds = rankSounds(it.sounds, currentTab, filter)
             it.copy(
                 qualityFilter = filter,
-                sounds = rankSounds(it.sounds, currentTab, filter),
+                sounds = rankedSounds,
                 filterKey = nextFilterKey(),
             )
         }
+        schedulePreviewPrebuffer(rankedSounds)
     }
 
     fun selectTab(tab: SoundTab) {
@@ -300,7 +308,6 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(sounds = listOf(sound), isLoading = false) }
                 youtubeRepo.getAudioPreviewUrl(videoId)?.let {
                     cacheResolvedPreview(sound, it)
-                    _cachedYtIds.update { it + "yt_$videoId" }
                 }
             } catch (e: Exception) {
                 e.rethrowIfCancelled()
@@ -520,7 +527,40 @@ class SoundsViewModel @Inject constructor(
             selectedContent.selectSound(currentSelected.copy(previewUrl = previewUrl))
         }
 
-        return selectedContent.selectedSound.value?.takeIf { it.stableKey() == targetKey } ?: updatedSound
+        val refreshedSound = selectedContent.selectedSound.value?.takeIf { it.stableKey() == targetKey } ?: updatedSound
+        if (isInPreviewPrebufferWindow(targetKey)) {
+            schedulePreviewPrebuffer(listOf(refreshedSound))
+        }
+        return refreshedSound
+    }
+
+    private fun schedulePreviewPrebuffer(sounds: List<Sound>) {
+        if (!autoPreview.value) return
+        sounds
+            .asSequence()
+            .filter { it.previewUrl.isNotBlank() }
+            .take(FIRST_VISIBLE_PREVIEW_COUNT)
+            .forEach { sound ->
+                val key = sound.stableKey()
+                if (key in _previewReadyIds.value || !previewPrebufferInFlight.add(key)) return@forEach
+                viewModelScope.launch {
+                    try {
+                        if (audioPreviewCache.prebuffer(sound)) {
+                            _previewReadyIds.update { it + key }
+                        }
+                    } catch (e: Exception) {
+                        e.rethrowIfCancelled()
+                    } finally {
+                        previewPrebufferInFlight.remove(key)
+                    }
+                }
+            }
+    }
+
+    private fun isInPreviewPrebufferWindow(soundKey: String): Boolean {
+        val visibleFeed = _state.value.sounds.take(FIRST_VISIBLE_PREVIEW_COUNT)
+        val visibleTopHits = _topHits.value.take(FIRST_VISIBLE_PREVIEW_COUNT)
+        return (visibleFeed + visibleTopHits).any { it.stableKey() == soundKey }
     }
 
     private fun startPlayback(sound: Sound) {
@@ -760,12 +800,15 @@ class SoundsViewModel @Inject constructor(
                         seenFingerprints.add(soundFingerprint(it))
                     }
                     synchronized(resultLock) { allResults.addAll(bundled) }
+                    var rankedBundled: List<Sound> = emptyList()
                     _state.update {
+                        rankedBundled = rankSounds(bundled, loadTab, it.qualityFilter)
                         it.copy(
-                            sounds = rankSounds(bundled, loadTab, it.qualityFilter),
+                            sounds = rankedBundled,
                             isLoading = true,
                         )
                     }
+                    schedulePreviewPrebuffer(rankedBundled)
                 }
             }
 
@@ -797,6 +840,7 @@ class SoundsViewModel @Inject constructor(
                         },
                     )
                 }
+                schedulePreviewPrebuffer(_state.value.sounds)
             }
 
             fun noteHasMore(hasMore: Boolean) {
@@ -840,7 +884,6 @@ class SoundsViewModel @Inject constructor(
                                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
                                                     currentCoroutineContext().ensureActive()
                                                     cacheResolvedPreview(yt, url)
-                                                    _cachedYtIds.update { it + yt.id }
                                                 }
                                             } catch (e: Exception) {
                                                 e.rethrowIfCancelled()
@@ -977,16 +1020,19 @@ class SoundsViewModel @Inject constructor(
                 val surfacedError = firstFailure.get()
                     ?.takeIf { combined.isEmpty() }
                     ?.let(::categorizeError)
+                var visibleSoundsAfterLoad: List<Sound> = emptyList()
                 _state.update {
+                    val nextSounds = when {
+                        loadMore -> {
+                            val existingKeys = it.sounds.mapTo(mutableSetOf()) { sound -> sound.stableKey() }
+                            it.sounds + combined.filter { snd -> existingKeys.add(snd.stableKey()) }
+                        }
+                        preserveCurrentFeed -> it.sounds
+                        else -> combined
+                    }
+                    visibleSoundsAfterLoad = nextSounds
                     it.copy(
-                        sounds = when {
-                            loadMore -> {
-                                val existingKeys = it.sounds.mapTo(mutableSetOf()) { sound -> sound.stableKey() }
-                                it.sounds + combined.filter { snd -> existingKeys.add(snd.stableKey()) }
-                            }
-                            preserveCurrentFeed -> it.sounds
-                            else -> combined
-                        },
+                        sounds = nextSounds,
                         isLoading = false,
                         isLoadingMore = false,
                         isRefreshing = false,
@@ -997,6 +1043,7 @@ class SoundsViewModel @Inject constructor(
                         },
                     )
                 }
+                schedulePreviewPrebuffer(visibleSoundsAfterLoad)
             } catch (e: Exception) {
                 e.rethrowIfCancelled()
                 _state.update {
@@ -1095,14 +1142,17 @@ class SoundsViewModel @Inject constructor(
             try {
                 uploadRepo.getCommunityUploads(limit = 50).collect { sounds ->
                     timeoutJob.cancel()
+                    var rankedSounds: List<Sound> = emptyList()
                     _state.update {
+                        rankedSounds = rankSounds(sounds, SoundTab.COMMUNITY, it.qualityFilter)
                         it.copy(
-                            sounds = rankSounds(sounds, SoundTab.COMMUNITY, it.qualityFilter),
+                            sounds = rankedSounds,
                             isLoading = false,
                             isRefreshing = false,
                             hasMore = false,
                         )
                     }
+                    schedulePreviewPrebuffer(rankedSounds)
                 }
                 // Flow completed without emitting (empty community tab). Clear loading and
                 // kill the timeout so structured concurrency doesn't block the parent launch
@@ -1135,9 +1185,11 @@ class SoundsViewModel @Inject constructor(
                     minDuration = 0,
                     blockedWords = blocked,
                 )
+                var rankedSounds: List<Sound> = emptyList()
                 _state.update {
+                    rankedSounds = rankSounds(result.items, SoundTab.YOUTUBE, it.qualityFilter)
                     it.copy(
-                        sounds = rankSounds(result.items, SoundTab.YOUTUBE, it.qualityFilter),
+                        sounds = rankedSounds,
                         isLoading = false,
                         isRefreshing = false,
                         // We do not support paginating the YouTube tab yet, so avoid advertising
@@ -1145,6 +1197,7 @@ class SoundsViewModel @Inject constructor(
                         hasMore = false,
                     )
                 }
+                schedulePreviewPrebuffer(rankedSounds)
 
                 supervisorScope {
                     result.items.forEach { yt ->
@@ -1154,7 +1207,6 @@ class SoundsViewModel @Inject constructor(
                                 youtubeRepo.getAudioPreviewUrl(yt.id.removePrefix("yt_"))?.let { url ->
                                     currentCoroutineContext().ensureActive()
                                     cacheResolvedPreview(yt, url)
-                                    _cachedYtIds.update { it + yt.id }
                                 }
                             } catch (e: Exception) {
                                 e.rethrowIfCancelled()
@@ -1207,6 +1259,10 @@ class SoundsViewModel @Inject constructor(
                 _state.update { it.copy(isUploading = false, uploadProgress = 0f, error = "Upload failed: ${e.message}") }
             }
         }
+    }
+
+    private companion object {
+        const val FIRST_VISIBLE_PREVIEW_COUNT = 5
     }
 }
 

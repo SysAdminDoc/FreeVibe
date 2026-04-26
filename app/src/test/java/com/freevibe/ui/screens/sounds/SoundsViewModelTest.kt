@@ -20,6 +20,7 @@ import com.freevibe.data.repository.UploadRepository
 import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.service.AudioPlaybackManager
+import com.freevibe.service.AudioPreviewCache
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SelectedContentHolder
@@ -111,6 +112,51 @@ class SoundsViewModelTest {
         val state = viewModel.state.value
         assertEquals(setOf("au_focus", "ccm_focus"), state.sounds.map { it.id }.toSet())
         assertFalse(state.hasMore)
+    }
+
+    @Test
+    fun `initial load prebuffers first five preview urls`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+        val audioPreviewCache = mockk<AudioPreviewCache>()
+        val bundled = (1..6).map { index ->
+            testSound("bundle_$index", ContentSource.BUNDLED, "Aura Tone $index")
+        }
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+        coEvery { audioPreviewCache.prebuffer(any()) } returns true
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+            bundledRingtones = bundled,
+            audioPreviewCacheOverride = audioPreviewCache,
+        )
+
+        advanceUntilIdle()
+
+        val readyIds = viewModel.previewReadyIds.value
+        bundled.take(5).forEach { sound ->
+            assertTrue(readyIds.contains(sound.stableKey()))
+            coVerify(exactly = 1) { audioPreviewCache.prebuffer(match { it.id == sound.id }) }
+        }
+        assertFalse(readyIds.contains(bundled[5].stableKey()))
+        coVerify(exactly = 0) { audioPreviewCache.prebuffer(match { it.id == bundled[5].id }) }
     }
 
     @Test
@@ -701,6 +747,7 @@ class SoundsViewModelTest {
         bundledNotifications: List<Sound> = emptyList(),
         bundledAlarms: List<Sound> = emptyList(),
         audioPlaybackManagerOverride: AudioPlaybackManager? = null,
+        audioPreviewCacheOverride: AudioPreviewCache? = null,
         downloadManagerOverride: DownloadManager? = null,
         favoritesRepoOverride: FavoritesRepository? = null,
     ): SoundsViewModel {
@@ -729,6 +776,10 @@ class SoundsViewModelTest {
             every { it.duration } returns MutableStateFlow(0L)
         }
 
+        val audioPreviewCache = audioPreviewCacheOverride ?: mockk<AudioPreviewCache>().also {
+            coEvery { it.prebuffer(any()) } returns true
+        }
+
         val soundUrlResolver = mockk<SoundUrlResolver>()
         coEvery { soundUrlResolver.resolve(any()) } answers { firstArg<Sound>().downloadUrl }
 
@@ -754,6 +805,7 @@ class SoundsViewModelTest {
             voteRepo = mockk<VoteRepository>(relaxed = true),
             bundledContent = bundledContent,
             audioPlaybackManager = audioPlaybackManager,
+            audioPreviewCache = audioPreviewCache,
             soundCloudRepo = soundCloudRepo,
             uploadRepo = mockk<UploadRepository>(relaxed = true),
             soundUrlResolver = soundUrlResolver,

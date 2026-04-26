@@ -58,7 +58,7 @@ fun SoundsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
-    val cachedYtIds by viewModel.cachedYtIds.collectAsStateWithLifecycle()
+    val previewReadyIds by viewModel.previewReadyIds.collectAsStateWithLifecycle()
     val topHits by viewModel.topHits.collectAsStateWithLifecycle()
     val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
     val displayTopHits = remember(topHits, state.selectedTab, state.query, state.qualityFilter) {
@@ -307,7 +307,7 @@ fun SoundsScreen(
                             resolvingId = state.resolvingId,
                             isLoadingMore = state.isLoadingMore,
                             hasMore = state.hasMore,
-                            cachedYtIds = cachedYtIds,
+                            previewReadyIds = previewReadyIds,
                             filterKey = state.filterKey,
                             onSoundClick = { viewModel.selectSound(it); onSoundClick(it) },
                             onLongPress = { quickApplySound = it },
@@ -477,7 +477,7 @@ private fun SoundsList(
     resolvingId: String?,
     isLoadingMore: Boolean,
     hasMore: Boolean,
-    cachedYtIds: Set<String>,
+    previewReadyIds: Set<String>,
     filterKey: Int,
     onSoundClick: (Sound) -> Unit,
     onLongPress: (Sound) -> Unit,
@@ -535,6 +535,7 @@ private fun SoundsList(
                     tab = SoundTab.RINGTONES,
                     isPlaying = playingId == sound.stableKey(),
                     isResolving = sound.stableKey() == resolvingId,
+                    isPreviewReady = sound.stableKey() in previewReadyIds,
                     playbackProgress = if (playingId == sound.stableKey()) playbackProgress else 0f,
                     onClick = { onSoundClick(sound) },
                     onLongPress = { onLongPress(sound) },
@@ -556,6 +557,7 @@ private fun SoundsList(
                 tab = selectedTab,
                 isPlaying = playingId == sound.stableKey(),
                 isResolving = sound.stableKey() == resolvingId,
+                isPreviewReady = sound.stableKey() in previewReadyIds,
                 playbackProgress = if (playingId == sound.stableKey()) playbackProgress else 0f,
                 onClick = { onSoundClick(sound) },
                 onLongPress = { onLongPress(sound) },
@@ -745,6 +747,7 @@ private fun SoundCard(
     tab: SoundTab,
     isPlaying: Boolean,
     isResolving: Boolean = false,
+    isPreviewReady: Boolean = false,
     playbackProgress: Float = 0f,
     onClick: () -> Unit,
     onLongPress: () -> Unit = {},
@@ -823,6 +826,20 @@ private fun SoundCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (isPreviewReady) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(
+                                    "Ready",
+                                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
                         if (showUploader) {
                             Text(
                                 sound.uploaderName,
