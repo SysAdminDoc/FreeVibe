@@ -9,6 +9,26 @@ import org.junit.Test
 class SoundQualityTest {
 
     @Test
+    fun `core sound tabs stay limited to everyday sound types`() {
+        assertEquals(
+            listOf(SoundTab.RINGTONES, SoundTab.NOTIFICATIONS, SoundTab.ALARMS),
+            coreSoundTabs,
+        )
+    }
+
+    @Test
+    fun `secondary sound tabs only expose search when search is active`() {
+        assertEquals(
+            listOf(SoundTab.YOUTUBE, SoundTab.COMMUNITY),
+            secondarySoundTabs(SoundTab.RINGTONES),
+        )
+        assertEquals(
+            listOf(SoundTab.YOUTUBE, SoundTab.COMMUNITY, SoundTab.SEARCH),
+            secondarySoundTabs(SoundTab.SEARCH),
+        )
+    }
+
+    @Test
     fun `rankSounds keeps best duplicate instead of first duplicate`() {
         val weak = testSound(
             id = "yt_one",
