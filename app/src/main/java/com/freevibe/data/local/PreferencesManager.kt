@@ -43,6 +43,7 @@ class PreferencesManager @Inject constructor(
     val pexelsApiKey: Flow<String> = get(Keys.PEXELS_KEY, com.freevibe.BuildConfig.PEXELS_API_KEY)
     val pixabayApiKey: Flow<String> = get(Keys.PIXABAY_KEY, com.freevibe.BuildConfig.PIXABAY_API_KEY)
     val freesoundApiKey: Flow<String> = get(Keys.FREESOUND_KEY, com.freevibe.BuildConfig.FREESOUND_API_KEY)
+    val stabilityAiKey: Flow<String> = get(Keys.STABILITY_KEY, com.freevibe.BuildConfig.STABILITY_AI_KEY)
 
     // Sanitize API keys: strip surrounding whitespace and reject any control chars (including CR/LF
     // which OkHttp would throw on when placed in a request header — prefer to drop them here with
@@ -54,6 +55,7 @@ class PreferencesManager @Inject constructor(
     suspend fun setPexelsKey(key: String) = set(Keys.PEXELS_KEY, sanitizeApiKey(key))
     suspend fun setPixabayKey(key: String) = set(Keys.PIXABAY_KEY, sanitizeApiKey(key))
     suspend fun setFreesoundKey(key: String) = set(Keys.FREESOUND_KEY, sanitizeApiKey(key))
+    suspend fun setStabilityKey(key: String) = set(Keys.STABILITY_KEY, sanitizeApiKey(key))
 
     // ── Auto-wallpaper ────────────────────────────────────────────
 
@@ -206,6 +208,7 @@ class PreferencesManager @Inject constructor(
         val PEXELS_KEY = stringPreferencesKey("pexels_api_key")
         val PIXABAY_KEY = stringPreferencesKey("pixabay_api_key")
         val FREESOUND_KEY = stringPreferencesKey("freesound_api_key")
+        val STABILITY_KEY = stringPreferencesKey("stability_ai_key")
         val AUTO_WP_ENABLED = booleanPreferencesKey("auto_wp_enabled")
         val AUTO_WP_INTERVAL = longPreferencesKey("auto_wp_interval")
         val AUTO_WP_SOURCE = stringPreferencesKey("auto_wp_source")

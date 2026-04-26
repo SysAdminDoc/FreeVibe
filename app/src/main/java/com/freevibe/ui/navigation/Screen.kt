@@ -295,6 +295,14 @@ sealed class Screen(
         selectedIcon = Icons.Filled.History,
     )
 
+    // ── AI Wallpaper Generator ──────────────────────────────────
+    data object AiWallpaper : Screen(
+        route = "ai_wallpaper",
+        title = "AI Generate",
+        icon = Icons.Filled.AutoAwesome,
+        selectedIcon = Icons.Filled.AutoAwesome,
+    )
+
     companion object {
         val bottomNavItems: List<Screen>
             get() = listOf(Wallpapers, VideoWallpapers, Sounds, Favorites, Settings)

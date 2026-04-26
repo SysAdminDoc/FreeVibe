@@ -51,6 +51,7 @@ import com.freevibe.ui.screens.sounds.SoundDetailScreen
 import com.freevibe.ui.screens.sounds.SoundsScreen
 import com.freevibe.ui.screens.wallpapers.WallpaperDetailScreen
 import com.freevibe.ui.screens.wallpapers.WallpapersScreen
+import com.freevibe.ui.screens.aigenerate.AiWallpaperScreen
 
 private const val PREFS_KEY = "freevibe_app"
 private const val ONBOARDING_DONE = "onboarding_complete"
@@ -365,6 +366,9 @@ fun FreeVibeRoot(
                     onWallpaperClick = { wallpaper ->
                         navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
+                    onGenerateClick = {
+                        navController.navigate(Screen.AiWallpaper.route) { launchSingleTop = true }
+                    },
                 )
             }
             composable(Screen.VideoWallpapers.route) {
@@ -413,6 +417,13 @@ fun FreeVibeRoot(
                     onCategoriesClick = { navController.navigate(Screen.Categories.route) { launchSingleTop = true } },
                     onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) { launchSingleTop = true } },
                     onCollectionsClick = { navController.navigate(Screen.Collections.route) { launchSingleTop = true } },
+                )
+            }
+
+            // ── AI Wallpaper Generator ────────────────────────────
+            composable(Screen.AiWallpaper.route) {
+                AiWallpaperScreen(
+                    onBack = { navController.navigateUp() },
                 )
             }
 

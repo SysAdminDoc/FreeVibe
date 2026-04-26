@@ -38,8 +38,8 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 92
-        versionName = "6.12.0"
+        versionCode = 94
+        versionName = "6.14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -48,6 +48,7 @@ android {
         buildConfigField("String", "PIXABAY_API_KEY", "\"${localProps.getProperty("pixabay.api.key", "")}\"")
         buildConfigField("String", "FREESOUND_API_KEY", "\"${localProps.getProperty("freesound.api.key", "")}\"")
         buildConfigField("String", "SOUNDCLOUD_CLIENT_ID", "\"${localProps.getProperty("soundcloud.client.id", "")}\"")
+        buildConfigField("String", "STABILITY_AI_KEY", "\"${localProps.getProperty("stability.ai.key", "")}\"")
     }
 
     buildTypes {
