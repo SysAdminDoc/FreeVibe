@@ -7,11 +7,13 @@ import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -64,6 +66,7 @@ fun WallpaperDetailScreen(
     val sharedList by viewModel.sharedWallpaperList.collectAsStateWithLifecycle()
     val sharedListAnchorKey by viewModel.sharedWallpaperListAnchorKey.collectAsStateWithLifecycle()
     val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle()
+    val colorPalette by viewModel.colorPalette.collectAsStateWithLifecycle()
     val targetSource = fallbackWallpaper?.source
     val targetFullUrl = fallbackWallpaper?.fullUrl
     val detailIdentityKey = remember(wallpaperId, targetSource, targetFullUrl) {
@@ -85,6 +88,10 @@ fun WallpaperDetailScreen(
             fullUrl = targetFullUrl,
         ) ?: fallbackWallpaper
         restoreResolved = true
+    }
+
+    LaunchedEffect(resolvedWallpaper?.fullUrl) {
+        resolvedWallpaper?.fullUrl?.let { viewModel.extractColors(it) }
     }
 
     val initialWp = resolvedWallpaper
@@ -419,6 +426,61 @@ fun WallpaperDetailScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // Material You extracted theme colors
+                        if (colorPalette != null) {
+                            Spacer(Modifier.height(16.dp))
+                            DetailSectionTitle("Your theme colors")
+                            Spacer(Modifier.height(8.dp))
+                            val palette = colorPalette!!
+                            val scrollState = rememberScrollState()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(scrollState),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                listOf(
+                                    "Dominant" to palette.dominantColor,
+                                    "Vibrant" to palette.vibrantColor,
+                                    "Muted" to palette.mutedColor,
+                                    "Accent" to palette.bestAccentColor,
+                                    "Light" to palette.vibrantLight,
+                                ).forEach { (label, colorInt) ->
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Surface(
+                                            color = Color(colorInt),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                            modifier = Modifier.size(64.dp),
+                                        ) {}
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            String.format("#%06X", colorInt and 0xFFFFFF),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (wp.colors.isNotEmpty()) {
+                            // Show shimmer while colors extract
+                            Spacer(Modifier.height(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(120.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f),
+                                        RoundedCornerShape(12.dp),
+                                    ),
+                            )
                         }
 
                         if (wp.tags.isNotEmpty()) {

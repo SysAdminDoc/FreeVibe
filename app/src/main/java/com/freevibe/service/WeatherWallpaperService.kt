@@ -3,6 +3,9 @@ package com.freevibe.service
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
@@ -30,6 +33,12 @@ class WeatherWallpaperService : WallpaperService() {
         @Volatile private var destroyed = false
         private val frameInterval = 33L // ~30 FPS
 
+        // Adaptive tint state
+        private var tintEnabled = false
+        private var tintIntensity = 0.3f
+        private var tintLat = 0.0
+        private var tintLon = 0.0
+
         private val drawRunner = Runnable { draw() }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -48,6 +57,7 @@ class WeatherWallpaperService : WallpaperService() {
             }
             loadWeatherFromPrefs()
             loadVfxFromPrefs()
+            loadAdaptiveTintFromPrefs()
             if (visible) scheduleDraw()
         }
 
@@ -57,6 +67,7 @@ class WeatherWallpaperService : WallpaperService() {
             if (visible) {
                 loadWeatherFromPrefs()
                 loadVfxFromPrefs()
+                loadAdaptiveTintFromPrefs()
                 scheduleDraw()
             } else {
                 handler.removeCallbacks(drawRunner)
@@ -146,6 +157,14 @@ class WeatherWallpaperService : WallpaperService() {
             }
         }
 
+        private fun loadAdaptiveTintFromPrefs() {
+            val prefs = getSharedPreferences("freevibe_weather_wp", MODE_PRIVATE)
+            tintEnabled = prefs.getBoolean("adaptive_tint_enabled", false)
+            tintIntensity = prefs.getFloat("adaptive_tint_intensity", 0.3f)
+            tintLat = prefs.getLong("location_lat", 0L).toDouble()
+            tintLon = prefs.getLong("location_lon", 0L).toDouble()
+        }
+
         private fun scheduleDraw() {
             handler.removeCallbacks(drawRunner)
             if (visible) {
@@ -163,7 +182,21 @@ class WeatherWallpaperService : WallpaperService() {
                     // Draw wallpaper background
                     val bmp = synchronized(bitmapLock) { scaledBitmap }
                     if (bmp != null && !bmp.isRecycled) {
-                        canvas.drawBitmap(bmp, 0f, 0f, null)
+                        val paint = if (tintEnabled && tintLat != 0.0 && tintLon != 0.0) {
+                            val sunTimes = SolarCalculator.sunTimes(tintLat, tintLon)
+                            val hour = SolarCalculator.currentHour()
+                            val (dR, dG, dB) = SolarCalculator.tintOffsets(hour, sunTimes, tintIntensity)
+                            val matrix = ColorMatrix().apply {
+                                set(floatArrayOf(
+                                    1f, 0f, 0f, 0f, dR,
+                                    0f, 1f, 0f, 0f, dG,
+                                    0f, 0f, 1f, 0f, dB,
+                                    0f, 0f, 0f, 1f, 0f,
+                                ))
+                            }
+                            Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
+                        } else null
+                        canvas.drawBitmap(bmp, 0f, 0f, paint)
                     } else {
                         canvas.drawColor(android.graphics.Color.BLACK)
                     }

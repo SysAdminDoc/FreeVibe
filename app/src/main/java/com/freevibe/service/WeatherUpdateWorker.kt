@@ -42,6 +42,8 @@ class WeatherUpdateWorker @AssistedInject constructor(
                 .putFloat("wind_speed", weather.windSpeed.toFloat())
                 .putFloat("temperature", weather.temperature.toFloat())
                 .putInt("is_day", weather.isDay)
+                .putLong("location_lat", location.first.toLong())
+                .putLong("location_lon", location.second.toLong())
                 .apply()
 
             Result.success()

@@ -187,11 +187,12 @@
 - Lower priority than wallpaper generation but very differentiating
 
 ### 3.3 Parallax/Depth Wallpapers
-- ML Kit's depth estimation (on-device, free) on any static wallpaper
-- Split into foreground/background layers
-- Gyroscope-reactive parallax movement in `WallpaperService`
-- Toggle in wallpaper detail: "Enable Parallax"
-- Also works with AI-generated wallpapers
+- [x] ML Kit's depth estimation (on-device, free) on any static wallpaper
+- [x] Split into foreground/background layers
+- [x] Gyroscope-reactive parallax movement in `WallpaperService`
+- [x] Toggle in wallpaper detail: "Enable Parallax" (via ApplyOptionsSheet)
+- [x] Also works with AI-generated wallpapers
+- Already implemented in `ParallaxWallpaperService.kt`, fully functional, entry point in detail screen bottom sheet
 
 ---
 
@@ -270,11 +271,12 @@
 ## Phase 6 — Smart Features
 
 ### 6.1 Material You Color Preview
-- Extract Monet tonal palettes from wallpaper using Palette API
-- Show 5 tonal palette strips (Primary, Secondary, Tertiary, Neutral, Neutral Variant)
-- Mini UI mockup showing how system chrome, buttons, nav bar would look
-- Display on wallpaper detail screen below the image
-- "Your theme colors" section with hex values
+- [x] Extract Monet tonal palettes from wallpaper using Palette API (ColorExtractor.kt, already implemented)
+- [x] Show 5 tonal palette strips (Dominant, Vibrant, Muted, Accent, Light) with hex values
+- [x] Display on wallpaper detail screen below the existing Palette section
+- [x] "Your theme colors" section with Material You swatches (rounded rectangles, labeled, hex values)
+- [x] LaunchedEffect calls `viewModel.extractColors()` when wallpaper loads; shows shimmer while extracting
+- Implementation complete: WallpaperDetailScreen integrates `colorPalette` StateFlow collection, renders scrollable swatch row with tonal colors
 
 ### 6.2 Dark/Light Mode Auto-Switch
 - Two wallpaper slots: "Light mode wallpaper" + "Dark mode wallpaper"
@@ -292,10 +294,14 @@
 - Works on both static and video wallpapers
 
 ### 6.4 Time-of-Day Adaptive Tint
-- `ColorMatrix` filter in `WallpaperService` based on hour
-- Dawn: warm golden, Day: neutral, Golden hour: warm amber, Night: cool blue
-- Calculate sunrise/sunset from lat/lon (SolarCalculator algorithm, no API)
-- Toggle + intensity slider in Settings
+- [x] `ColorMatrix` filter in `WeatherWallpaperService.draw()` based on current hour
+- [x] Dawn: warm golden, Day: neutral, Golden hour: warm amber, Night: cool blue
+- [x] Calculate sunrise/sunset from lat/lon via pure-JVM `SolarCalculator` (NOAA simplified equations, no API)
+- [x] Toggle + intensity slider (0.1–1.0) in Settings under "Time-of-day tint"
+- [x] Location (lat/lon) stored by WeatherUpdateWorker in SharedPrefs during weather fetch
+- [x] Prefs bridge: SettingsViewModel writes both DataStore (for UI) and SharedPrefs (for service read)
+- [x] Tint applied on bitmap draw using ColorMatrixColorFilter paint, intensity scaled offsets
+- Implementation complete: SolarCalculator.kt handles time-zone-aware sunrise/sunset; WeatherWallpaperService loads and applies tints; SettingsScreen surfaces intensity slider when tint is enabled
 
 ### 6.5 Smart Crop with Object Detection
 - ML Kit Object Detection (free, on-device)
