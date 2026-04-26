@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -76,7 +77,10 @@ fun SoundsScreen(
     }
     var showSearchHistory by remember { mutableStateOf(false) }
     var quickApplySound by remember { mutableStateOf<Sound?>(null) }
+    var quickApplyActionInFlight by remember { mutableStateOf(false) }
+    var quickApplyObservedApplying by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val isYouTubeTab = state.selectedTab == SoundTab.YOUTUBE
     val soundFilterCount = remember(state.qualityFilter) {
@@ -130,10 +134,36 @@ fun SoundsScreen(
             sound = currentQuickApplySound,
             canApply = viewModel.canWriteSettings(),
             isApplying = state.isApplying,
-            onApply = { sound, type -> viewModel.applySound(sound, type); quickApplySound = null },
+            onApply = { sound, type ->
+                quickApplyActionInFlight = true
+                quickApplyObservedApplying = false
+                viewModel.applySound(sound, type)
+            },
             onDownload = { viewModel.downloadSound(it); quickApplySound = null },
-            onDismiss = { quickApplySound = null },
+            onGrantPermission = { context.startActivity(viewModel.requestWriteSettings()) },
+            onDismiss = {
+                if (!state.isApplying) {
+                    quickApplySound = null
+                    quickApplyActionInFlight = false
+                    quickApplyObservedApplying = false
+                }
+            },
         )
+        LaunchedEffect(quickApplyActionInFlight, state.isApplying, state.applySuccess, state.error) {
+            if (quickApplyActionInFlight && state.isApplying) {
+                quickApplyObservedApplying = true
+            }
+            if (
+                quickApplyActionInFlight &&
+                quickApplyObservedApplying &&
+                !state.isApplying &&
+                (state.applySuccess != null || state.error != null)
+            ) {
+                quickApplySound = null
+                quickApplyActionInFlight = false
+                quickApplyObservedApplying = false
+            }
+        }
     }
 
     // Snackbar for success/error feedback
@@ -285,6 +315,8 @@ fun SoundsScreen(
                             onLoadMore = { viewModel.loadMore() },
                             playbackProgress = playbackProgress,
                             topHits = displayTopHits,
+                            collections = if (state.query.isBlank()) soundCollectionsFor(state.selectedTab) else emptyList(),
+                            onCollectionClick = { collection -> viewModel.search(collection.query) },
                         )
                     }
                 }
@@ -453,6 +485,8 @@ private fun SoundsList(
     onLoadMore: () -> Unit,
     playbackProgress: Float,
     topHits: List<Sound>,
+    collections: List<SoundCollectionSpec>,
+    onCollectionClick: (SoundCollectionSpec) -> Unit,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(filterKey) { listState.scrollToItem(0) }
@@ -473,6 +507,16 @@ private fun SoundsList(
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        if (collections.isNotEmpty()) {
+            item(key = "sound_collections", contentType = "collections") {
+                SoundCollectionCarousel(
+                    collections = collections,
+                    onCollectionClick = onCollectionClick,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+            }
+        }
+
         // Top 5 This Week (Ringtones tab only)
         if (topHits.isNotEmpty()) {
             item(key = "tophits_header", contentType = "header") {
@@ -584,6 +628,112 @@ private fun soundsEmptyState(
         "No sounds found",
         "Try another tab or switch to a different quality filter.",
     )
+}
+
+@Composable
+private fun SoundCollectionCarousel(
+    collections: List<SoundCollectionSpec>,
+    onCollectionClick: (SoundCollectionSpec) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = "Collections",
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text("Collections", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(collections, key = { it.title }) { collection ->
+                SoundCollectionCard(
+                    collection = collection,
+                    onClick = { onCollectionClick(collection) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundCollectionCard(
+    collection: SoundCollectionSpec,
+    onClick: () -> Unit,
+) {
+    val accent = collectionToneColor(collection.tone)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .width(168.dp)
+            .height(104.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
+        shadowElevation = 4.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accent.copy(alpha = 0.16f),
+                modifier = Modifier.size(34.dp),
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        collectionToneIcon(collection.tone),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = accent,
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    collection.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    collection.subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun collectionToneColor(tone: SoundCollectionTone): Color = when (tone) {
+    SoundCollectionTone.MINIMAL -> MaterialTheme.colorScheme.primary
+    SoundCollectionTone.CALM -> MaterialTheme.colorScheme.tertiary
+    SoundCollectionTone.RETRO -> Color(0xFFFFB74D)
+    SoundCollectionTone.NATURE -> Color(0xFF66BB6A)
+    SoundCollectionTone.PUNCHY -> Color(0xFFFF6B6B)
+    SoundCollectionTone.MELODIC -> Color(0xFF64B5F6)
+}
+
+private fun collectionToneIcon(tone: SoundCollectionTone): androidx.compose.ui.graphics.vector.ImageVector = when (tone) {
+    SoundCollectionTone.MINIMAL -> Icons.Default.RadioButtonUnchecked
+    SoundCollectionTone.CALM -> Icons.Default.Spa
+    SoundCollectionTone.RETRO -> Icons.Default.PhoneInTalk
+    SoundCollectionTone.NATURE -> Icons.Default.WaterDrop
+    SoundCollectionTone.PUNCHY -> Icons.Default.Bolt
+    SoundCollectionTone.MELODIC -> Icons.Default.GraphicEq
 }
 
 // -- Sound Card --
@@ -825,6 +975,7 @@ private fun QuickApplySheet(
     isApplying: Boolean,
     onApply: (Sound, ContentType) -> Unit,
     onDownload: (Sound) -> Unit,
+    onGrantPermission: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -839,6 +990,32 @@ private fun QuickApplySheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
+
+            if (!canApply) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f)),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Text(
+                            "System settings permission is required before applying.",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        TextButton(onClick = onGrantPermission, enabled = !isApplying) {
+                            Text("Grant")
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             QuickApplyRow("Set as Ringtone", Icons.Default.Call, canApply && !isApplying) { onApply(sound, ContentType.RINGTONE) }
             QuickApplyRow("Set as Notification", Icons.Default.Notifications, canApply && !isApplying) { onApply(sound, ContentType.NOTIFICATION) }
