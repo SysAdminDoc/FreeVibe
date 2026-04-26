@@ -33,7 +33,15 @@
 - [x] Product polish: long-press quick apply now keeps the sheet open while applying, shows disabled/busy state in-place, and surfaces the missing system-settings permission with a direct Grant action.
 - [x] Comparable-product research applied: Paperize-style organized collections, Muzei-style source browsing clarity, and ringtone-maker preview/apply workflow emphasis were used as fit checks without copying external code.
 - [x] Test coverage: SoundQualityTest now covers collection visibility and nonblank distinct discovery queries.
-- [ ] Remaining candidate: true first-visible preview pre-buffering remains deferred under 2.2; YouTube preview URL resolution already happens during search, but ExoPlayer/HTTP cache prewarming needs separate lifecycle and battery scoping.
+- [x] Follow-up completed in the Instant Sound Preview pass: first-visible previews now prebuffer through the playback cache.
+
+## Implementation Pass - 2026-04-26 Instant Sound Preview
+
+- [x] Completed the 2.2 cache slice: first-visible preview URLs are prebuffered into a shared Media3 SimpleCache, and AudioPlaybackService plays through the same cache.
+- [x] Product polish: sound cards now show a compact Ready badge once the preview cache is warm, making playback state clearer before the user taps.
+- [x] YouTube continuity: existing search-time preview URL resolution now feeds the same first-visible prebuffer window once URLs are available.
+- [x] Test coverage: SoundsViewModelTest verifies only the first five preview URLs are prebuffered and exposed as ready.
+- [ ] Remaining candidate: true local bundled audio assets still belong to Phase 1.1; current Aura Picks are URL-backed and now warmed by the cache.
 
 ## Phase 1 — Content Foundation
 
@@ -98,11 +106,11 @@
 - Result: 2 rows of chrome instead of 4, content starts at 20% of screen instead of 45%
 
 ### 2.2 Instant Sound Preview
-- Pre-buffer the first 5 visible sounds' preview URLs on load
-- For YouTube sounds: resolve preview URL during search, not on tap
-- Tap play → instant playback, zero spinner
-- For Freesound v2: previews are direct URLs, no resolution needed
-- For bundled content: local file, instant
+- [x] Pre-buffer the first 5 visible sounds' preview URLs on load
+- [x] For YouTube sounds: resolve preview URL during search, not on tap
+- [x] Tap play uses the same prebuffer cache and exposes a Ready state before playback
+- [x] For Freesound v2: previews are direct URLs, no resolution needed
+- [ ] For bundled content: local file, instant; still tied to Phase 1.1 bundled asset expansion
 
 ### 2.3 One-Tap Apply Flow
 - From the sound list, long-press → bottom sheet with: "Set as Ringtone", "Set as Notification", "Set as Alarm", "Download"

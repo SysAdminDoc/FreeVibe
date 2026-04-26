@@ -10,9 +10,12 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class AudioPlaybackService : MediaSessionService() {
+
+    @Inject lateinit var audioPreviewCache: AudioPreviewCache
 
     private var mediaSession: MediaSession? = null
 
@@ -20,6 +23,7 @@ class AudioPlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(audioPreviewCache.mediaSourceFactory())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
