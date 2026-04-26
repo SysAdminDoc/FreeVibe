@@ -5,6 +5,23 @@
 
 ---
 
+## Implementation Pass - 2026-05-XX AI Wallpaper Generation (Phase 3.1)
+
+- [x] **Version**: Bumped to v6.14.0 / versionCode 94 (skipping 6.13.0 which was committed but never landed in build.gradle.kts).
+- [x] **Phase 3.1 AI Wallpaper Generation**: Full implementation shipped.
+  - `StabilityAiApi` — Retrofit interface for `POST v2beta/stable-image/generate/core` (multipart binary response).
+  - `AiWallpaperRepository` — generates 9:16 PNG, atomic write to `filesDir/ai_wallpapers/`, `pruneOldFiles(50)` storage cap.
+  - `AiStyle` enum — PHOTOGRAPHIC, ANIME, DIGITAL_ART, CINEMATIC, FANTASY, NEON_PUNK, PIXEL_ART, NONE with display labels and API preset strings.
+  - `AiWallpaperViewModel` — Hilt ViewModel; `stabilityAiKey` StateFlow from DataStore; full generate/apply/save flow.
+  - `AiWallpaperScreen` — GlassCard header with animated API key field (password toggle + save), prompt OutlinedTextField (500-char cap), style FilterChip row, generate button with shimmer placeholder during generation, result image with Save to Favorites + Set Wallpaper (HOME/LOCK/BOTH dropdown).
+  - Entry point: "AI" FilledTonalButton with AutoAwesome icon in WallpapersScreen chip row; routes to `Screen.AiWallpaper`.
+  - `STABILITY_AI_KEY` BuildConfig field; `PreferencesManager.stabilityAiKey` / `setStabilityKey()` for DataStore persistence.
+  - `ContentSource.AI_GENERATED` added to enum; `sourceDisplayName()` exhaustive when branch updated.
+- [x] Confirmed Phase 2.4 "Change your style" Settings entry is already implemented (`SettingsScreen.kt` ~line 375).
+- [x] Confirmed Phase 5.3 VFX Particle Overlays already implemented (`VfxParticleRenderer.kt`).
+
+---
+
 ## Implementation Pass - 2026-04-25 Product Polish
 
 - [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
@@ -130,7 +147,7 @@
 - [x] Stored in DataStore (`userStyles`); read by `WallpapersViewModel.loadUserStyles()`
 - [x] Wallpaper ranking in `WallpaperFeedQuality.wallpaperQualityScore()` boosts items matching user style tags
 - [x] Discover feed sends style-biased Wallhaven query in addition to toplist when styles are set
-- [ ] "Change your style" entry point in Settings not yet wired (styles persisted, DataStore accessible)
+- [x] "Change your style" entry point in Settings already implemented (`SettingsScreen.kt` ~line 375)
 
 ### 2.5 Seasonal/Contextual Content
 - [x] `SeasonalContentManager` created — checks current date for Dec (Holiday), Oct 15–31 (Halloween), Jan 1–3 (New Year), Feb 10–14 (Valentine), Jun 21–Sep 1 (Summer)
@@ -152,13 +169,14 @@
 *Problem: All content is sourced externally. Let users create their own.*
 
 ### 3.1 AI Wallpaper Generation
-- Stability AI API (free tier: 25 credits/month, ~25 generations)
-  - `POST https://api.stability.ai/v2beta/stable-image/generate/core`
-  - Body: `{ "prompt": "...", "output_format": "png", "aspect_ratio": "9:16" }`
-- UI: Text field + style picker (Photographic, Anime, Digital Art, 3D, Pixel Art)
-- "Generate" button → loading animation → result preview → set as wallpaper
-- Store generated wallpapers in a "My Creations" collection
-- BuildConfig key with free tier default, user can add their own key in Settings
+- [x] Stability AI API (free tier: 25 credits/month, ~25 generations)
+  - `POST https://api.stability.ai/v2beta/stable-image/generate/core` — multipart form, binary PNG response
+- [x] UI: Text prompt (500 char) + style FilterChip row (Photo/Anime/Digital Art/Cinematic/Fantasy/Neon/Pixel/None)
+- [x] Generate button -> shimmer loading -> result preview -> set as wallpaper (HOME/LOCK/BOTH)
+- [x] Save to Favorites with `ContentSource.AI_GENERATED`
+- [x] API key persisted in DataStore; in-screen key field with animated reveal + save
+- [x] Storage capped at 50 generated images (`pruneOldFiles`)
+- [x] Entry point: "AI" chip in WallpapersScreen header row
 - **This is the single biggest differentiator vs every other open-source wallpaper app**
 
 ### 3.2 AI Sound Generation (Stretch)
@@ -226,7 +244,9 @@
 - Useful for YouTube videos with intros/outros
 
 ### 5.3 VFX Particle Overlays
-- Overlay particle effects on any wallpaper (static or video):
+- [x] Already implemented: `VfxParticleRenderer.kt` with FIREFLIES, SAKURA, EMBERS, BUBBLES, LEAVES, SPARKLES effects
+- [x] Wired into `WeatherWallpaperService`; Settings "Decorative effects" picker at ~line 634
+- Original spec:
   - Snow, Rain, Fire Embers, Fireflies, Stars/Twinkle, Sakura Petals, Leaves, Bubbles
 - Canvas-based particle system in `WallpaperService`
 - Configurable: density, speed, direction

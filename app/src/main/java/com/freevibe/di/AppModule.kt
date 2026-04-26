@@ -14,6 +14,7 @@ import com.freevibe.data.remote.RateLimitInterceptor
 import com.freevibe.data.remote.audius.AudiusApi
 import com.freevibe.data.remote.bing.BingDailyApi
 import com.freevibe.data.remote.ccmixter.CcMixterApi
+import com.freevibe.data.remote.stability.StabilityAiApi
 import com.freevibe.data.remote.freesound.FreesoundV2Api
 import com.freevibe.data.remote.weather.OpenMeteoApi
 import com.freevibe.data.remote.pexels.PexelsApi
@@ -181,6 +182,18 @@ object AppModule {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(CcMixterApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideStabilityAiApi(client: OkHttpClient): StabilityAiApi =
+        Retrofit.Builder()
+            .baseUrl(StabilityAiApi.BASE_URL)
+            .client(client.newBuilder()
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .build())
+            .build()
+            .create(StabilityAiApi::class.java)
 
     // -- Database --
 

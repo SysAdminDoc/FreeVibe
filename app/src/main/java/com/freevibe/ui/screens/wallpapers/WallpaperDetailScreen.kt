@@ -919,6 +919,7 @@ internal fun sourceDisplayName(source: ContentSource): String = when (source) {
     ContentSource.SOUNDCLOUD -> "SoundCloud"
     ContentSource.COMMUNITY -> "Community"
     ContentSource.BUNDLED -> "Aura Picks"
+    ContentSource.AI_GENERATED -> "AI Generated"
 }
 
 internal fun formatCompactCount(value: Int): String {

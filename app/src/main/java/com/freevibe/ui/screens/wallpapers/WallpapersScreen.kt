@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -85,6 +86,7 @@ fun WallpapersScreen(
     initialSimilarSource: String? = null,
     initialSimilarFullUrl: String? = null,
     onWallpaperClick: (Wallpaper) -> Unit = {},
+    onGenerateClick: () -> Unit = {},
     viewModel: WallpapersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -334,6 +336,15 @@ fun WallpapersScreen(
                                 )
                             }
                         }
+                    }
+                    FilledTonalButton(
+                        onClick = onGenerateClick,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.heightIn(min = 34.dp),
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("AI", maxLines = 1)
                     }
                     if (state.selectedTab == WallpaperTab.DISCOVER && state.discoverFilter != WallpaperDiscoverFilter.FOR_YOU) {
                         AssistChip(
