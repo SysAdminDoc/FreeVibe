@@ -76,7 +76,6 @@ fun SoundsScreen(
     }
     var showSearchHistory by remember { mutableStateOf(false) }
     var quickApplySound by remember { mutableStateOf<Sound?>(null) }
-    var showSourceMenu by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val isYouTubeTab = state.selectedTab == SoundTab.YOUTUBE
@@ -172,11 +171,6 @@ fun SoundsScreen(
         },
     ) { scaffoldPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
-            val visibleTabs = remember(state.selectedTab) {
-                SoundTab.entries.filter {
-                    it != SoundTab.SEARCH || state.selectedTab == SoundTab.SEARCH
-                }
-            }
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -187,39 +181,49 @@ fun SoundsScreen(
                 shadowElevation = 6.dp,
             ) {
                 Box {
-                    CompactSearchField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
-                        placeholder = if (isYouTubeTab) "Search YouTube or paste URL..." else "Search sounds or artists",
-                        leadingIcon = if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
-                        leadingTint = if (isYouTubeTab) Color(0xFFFF6A5B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth(),
-                        onClear = {
-                            searchQuery = ""
-                            showSearchHistory = false
-                            focusManager.clearFocus()
-                            when (state.selectedTab) {
-                                SoundTab.SEARCH -> viewModel.clearSearchMode()
-                                SoundTab.YOUTUBE -> viewModel.clearYouTubeSearch()
-                                else -> Unit
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            if (searchQuery.isNotBlank()) {
-                                if (isYouTubeTab && isYouTubeUrl(searchQuery)) {
-                                    viewModel.importYouTubeUrl(searchQuery)
-                                } else if (isYouTubeTab) {
-                                    viewModel.searchYouTube(searchQuery)
-                                } else {
-                                    viewModel.search(searchQuery)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CompactSearchField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
+                            placeholder = if (isYouTubeTab) "Search YouTube or paste URL..." else "Search sounds or artists",
+                            leadingIcon = if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
+                            leadingTint = if (isYouTubeTab) Color(0xFFFF6A5B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                            onClear = {
+                                searchQuery = ""
+                                showSearchHistory = false
+                                focusManager.clearFocus()
+                                when (state.selectedTab) {
+                                    SoundTab.SEARCH -> viewModel.clearSearchMode()
+                                    SoundTab.YOUTUBE -> viewModel.clearYouTubeSearch()
+                                    else -> Unit
                                 }
-                            }
-                            showSearchHistory = false
-                            focusManager.clearFocus()
-                        }),
-                    )
+                            },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                if (searchQuery.isNotBlank()) {
+                                    if (isYouTubeTab && isYouTubeUrl(searchQuery)) {
+                                        viewModel.importYouTubeUrl(searchQuery)
+                                    } else if (isYouTubeTab) {
+                                        viewModel.searchYouTube(searchQuery)
+                                    } else {
+                                        viewModel.search(searchQuery)
+                                    }
+                                }
+                                showSearchHistory = false
+                                focusManager.clearFocus()
+                            }),
+                        )
+                        SoundFilterButton(
+                            filterCount = soundFilterCount,
+                            onClick = { showFiltersSheet = true },
+                        )
+                    }
                     SearchHistoryDropdown(
                         recentQueries = recentSearches,
                         isVisible = showSearchHistory && searchQuery.isEmpty(),
@@ -238,65 +242,10 @@ fun SoundsScreen(
                 }
 
                 Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box {
-                        FilledTonalButton(
-                            onClick = { showSourceMenu = true },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            modifier = Modifier.heightIn(min = 34.dp),
-                        ) {
-                            Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(soundTabLabel(state.selectedTab), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                        DropdownMenu(
-                            expanded = showSourceMenu,
-                            onDismissRequest = { showSourceMenu = false },
-                        ) {
-                            visibleTabs.forEach { tab ->
-                                DropdownMenuItem(
-                                    text = { Text(soundTabLabel(tab)) },
-                                    onClick = {
-                                        showSourceMenu = false
-                                        viewModel.selectTab(tab)
-                                    },
-                                    leadingIcon = {
-                                        if (state.selectedTab == tab) {
-                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    OutlinedButton(
-                        onClick = { showFiltersSheet = true },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                        modifier = Modifier.heightIn(min = 34.dp),
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                if (soundFilterCount > 0) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$soundFilterCount") }
-                                }
-                            },
-                        ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (soundFilterCount > 0) soundFilterLabel(state.qualityFilter) else "Filters")
-                    }
-
-                }
+                SoundModeBar(
+                    selectedTab = state.selectedTab,
+                    onSelectTab = viewModel::selectTab,
+                )
             }
 
             // Content
@@ -367,6 +316,18 @@ private fun isYouTubeUrl(text: String): Boolean {
     return t.contains("youtube.com/") || t.contains("youtu.be/") || t.contains("youtube.com/shorts/")
 }
 
+internal val coreSoundTabs: List<SoundTab> = listOf(
+    SoundTab.RINGTONES,
+    SoundTab.NOTIFICATIONS,
+    SoundTab.ALARMS,
+)
+
+internal fun secondarySoundTabs(selectedTab: SoundTab): List<SoundTab> = buildList {
+    add(SoundTab.YOUTUBE)
+    add(SoundTab.COMMUNITY)
+    if (selectedTab == SoundTab.SEARCH) add(SoundTab.SEARCH)
+}
+
 private fun soundTabLabel(tab: SoundTab): String = when (tab) {
     SoundTab.RINGTONES -> "Ringtones"
     SoundTab.NOTIFICATIONS -> "Notifications"
@@ -374,6 +335,101 @@ private fun soundTabLabel(tab: SoundTab): String = when (tab) {
     SoundTab.YOUTUBE -> "YouTube"
     SoundTab.COMMUNITY -> "Community"
     SoundTab.SEARCH -> "Search"
+}
+
+private fun soundTabIcon(tab: SoundTab): androidx.compose.ui.graphics.vector.ImageVector = when (tab) {
+    SoundTab.RINGTONES -> Icons.Default.Call
+    SoundTab.NOTIFICATIONS -> Icons.Default.Notifications
+    SoundTab.ALARMS -> Icons.Default.Alarm
+    SoundTab.YOUTUBE -> Icons.Default.SmartDisplay
+    SoundTab.COMMUNITY -> Icons.Default.Groups
+    SoundTab.SEARCH -> Icons.Default.Search
+}
+
+@Composable
+private fun SoundFilterButton(
+    filterCount: Int,
+    onClick: () -> Unit,
+) {
+    FilledTonalIconButton(
+        onClick = onClick,
+        modifier = Modifier.size(44.dp),
+    ) {
+        BadgedBox(
+            badge = {
+                if (filterCount > 0) {
+                    Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$filterCount") }
+                }
+            },
+        ) {
+            Icon(Icons.Default.Tune, contentDescription = "Refine sounds", modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun SoundModeBar(
+    selectedTab: SoundTab,
+    onSelectTab: (SoundTab) -> Unit,
+) {
+    var showMoreMenu by remember { mutableStateOf(false) }
+    val secondaryTabs = remember(selectedTab) { secondarySoundTabs(selectedTab) }
+    val secondarySelected = selectedTab in secondaryTabs
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        coreSoundTabs.forEach { tab ->
+            FilterChip(
+                selected = selectedTab == tab,
+                onClick = { onSelectTab(tab) },
+                label = { Text(soundTabLabel(tab), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            )
+        }
+
+        Box {
+            FilterChip(
+                selected = secondarySelected,
+                onClick = { showMoreMenu = true },
+                label = {
+                    Text(
+                        if (secondarySelected) soundTabLabel(selectedTab) else "More",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                trailingIcon = {
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+            )
+            DropdownMenu(
+                expanded = showMoreMenu,
+                onDismissRequest = { showMoreMenu = false },
+            ) {
+                secondaryTabs.forEach { tab ->
+                    DropdownMenuItem(
+                        text = { Text(soundTabLabel(tab)) },
+                        onClick = {
+                            showMoreMenu = false
+                            onSelectTab(tab)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (selectedTab == tab) Icons.Default.Check else soundTabIcon(tab),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+    }
 }
 
 // -- Sounds List --

@@ -21,6 +21,12 @@
 - [x] Emulator smoke: generated local WAV opens in Create Sound mode with waveform, trim timing, guidance, fade controls, and ringtone/notification/alarm actions visible.
 - [ ] Remaining candidate: repeat create-from-music QA through the system picker on a physical device with real user music files.
 
+## Implementation Pass - 2026-04-26 Sounds Tab Chrome
+
+- [x] Completed the P0 2.1 header simplification slice: the Sounds tab now exposes Ringtones, Notifications, and Alarms as visible primary chips instead of hiding the core modes behind a source dropdown.
+- [x] Product polish: YouTube, Community, and active Search are kept in a compact secondary menu; quality bias remains in the existing bottom sheet behind the search-row Refine button.
+- [ ] Remaining candidate: evaluate whether the collections carousel from the roadmap should be restored/expanded for sound discovery once bundled content volume increases.
+
 ## Phase 1 — Content Foundation
 
 *Problem: Aura is a search engine pretending to be a curated library. Fix the content first.*
@@ -77,10 +83,10 @@
 *Problem: Engineer's app, not user's app. Too many controls, not enough delight.*
 
 ### 2.1 Simplify the Sounds Tab
-- Remove: duration filter chips, sort chips, genre chips, mood chips from the persistent header
-- New layout: Search bar → Tab row (Ringtones/Notifications/Alarms) → Content
-- Move genres/moods/sort into a bottom sheet filter (filter icon button in search bar)
-- Collections carousel stays — it's the primary discovery mechanism
+- [x] Remove: duration filter chips, sort chips, genre chips, mood chips from the persistent header
+- [x] New layout: Search bar → Tab row (Ringtones/Notifications/Alarms) → Content
+- [x] Move quality refinement into the existing bottom sheet behind the search-row Refine button; no persistent genre/mood/sort rows remain
+- [ ] Collections carousel stays — it's the primary discovery mechanism
 - Result: 2 rows of chrome instead of 4, content starts at 20% of screen instead of 45%
 
 ### 2.2 Instant Sound Preview
