@@ -216,7 +216,7 @@ class WallpapersViewModelTest {
             redditRepo = redditRepo,
         )
 
-        coEvery { wallpaperRepo.getDiscover(any(), any()) } returnsMany listOf(
+        coEvery { wallpaperRepo.getDiscover(any(), any(), any()) } returnsMany listOf(
             SearchResult(
                 items = listOf(seededWallpaper),
                 totalCount = 1,

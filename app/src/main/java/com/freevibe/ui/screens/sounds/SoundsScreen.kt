@@ -331,6 +331,7 @@ fun SoundsScreen(
                                 }
                             } else emptyList(),
                             onCollectionClick = { collection -> viewModel.search(collection.query) },
+                            onUploadClick = { uploadAudioPickerLauncher.launch("audio/*") },
                         )
                     }
                 }
@@ -501,6 +502,7 @@ private fun SoundsList(
     topHits: List<Sound>,
     collections: List<SoundCollectionSpec>,
     onCollectionClick: (SoundCollectionSpec) -> Unit,
+    onUploadClick: (() -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(filterKey) { listState.scrollToItem(0) }
@@ -602,7 +604,17 @@ private fun SoundsList(
                             it,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp),
                         )
+                    }
+                    if (selectedTab == SoundTab.COMMUNITY && onUploadClick != null) {
+                        Spacer(Modifier.height(16.dp))
+                        FilledTonalButton(onClick = onUploadClick) {
+                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Upload a sound")
+                        }
                     }
                 }
             }

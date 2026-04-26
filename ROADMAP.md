@@ -5,6 +5,15 @@
 
 ---
 
+## Implementation Pass - 2026-04-25 Product Polish
+
+- [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
+- [x] Sounds COMMUNITY tab empty state: added "Upload a sound" `FilledTonalButton` to the empty state so users on an empty COMMUNITY tab see a direct CTA instead of dead-end text.
+- [x] Downloads broken-file badge: `DownloadsScreen` now async-checks file existence via `LaunchedEffect(displayList)` on a background dispatcher. `DownloadHistoryCard` receives a `broken` flag and renders a `Warning` icon in error-red with a "File missing" label instead of silently failing on tap.
+- [ ] Remaining 2.5 gap: wallpaper Discover still doesn't bias non-Wallhaven sources (Pexels/Pixabay) by style; query is Wallhaven-only.
+
+---
+
 ## Implementation Pass - 2026-04-27 Seasonal Content & Personalization
 
 - [x] Marked Phase 1 items 1.2 (Freesound v2), 1.3 (SoundCloud CC), 1.4 (Drop IA) as done — all were already implemented in prior sessions but left unchecked.
@@ -12,8 +21,7 @@
 - [x] Implemented 2.5 Seasonal Content: `SeasonalContentManager` resolves the active seasonal theme from the current date (Holiday Dec, Halloween Oct 15–31, New Year Jan 1–3, Valentine Feb 10–14, Summer Jun 21–Sep 1). Wired into Sounds tab (seasonal SoundCollectionSpec prepended to carousel) and Wallpapers Discover (seasonal banner card in the staggered grid).
 - [x] Completed 2.4 Onboarding Personalization feed wiring: `WallpaperRepository.getDiscover()` now accepts `userStyles` and adds a style-biased Wallhaven search alongside the toplist when the user has onboarding preferences set.
 - [x] Focused unit test: `SeasonalContentManagerTest` — covers all five season windows, off-season null return, and boundary dates.
-- [ ] Remaining 2.4 gap: "Change your style" re-entry in Settings not yet wired.
-- [ ] Remaining 2.5 gap: wallpaper Discover still doesn't bias non-Wallhaven sources (Pexels/Pixabay) by style; query is Wallhaven-only.
+- [x] Remaining 2.4 gap resolved: see Implementation Pass - 2026-04-25 above.
 
 ---
 
