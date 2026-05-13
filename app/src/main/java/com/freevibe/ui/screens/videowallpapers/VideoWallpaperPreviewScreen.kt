@@ -84,7 +84,7 @@ fun VideoWallpaperPreviewScreen(
                     Row(
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(2.dp),
                     ) {
@@ -112,12 +112,14 @@ fun VideoWallpaperPreviewScreen(
                     FilledTonalButton(
                         onClick = onCrop,
                         modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) {
                         Text("Crop…", style = MaterialTheme.typography.labelLarge)
                     }
                     Button(
                         onClick = onApply,
                         modifier = Modifier.weight(1.2f).height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -171,7 +173,7 @@ fun VideoWallpaperPreviewScreen(
             if (title.isNotBlank()) {
                 Surface(
                     color = Color.Black.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 16.dp, bottom = 86.dp + padding.calculateBottomPadding()),
@@ -195,7 +197,7 @@ private enum class VideoPreviewMode { LOCK, HOME }
 private fun ModeChip(label: String, active: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
     ) {
         Text(

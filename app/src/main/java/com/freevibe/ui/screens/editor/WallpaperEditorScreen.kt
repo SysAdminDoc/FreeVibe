@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +110,11 @@ fun WallpaperEditorScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(strokeWidth = 2.dp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Opening editor...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             return@Scaffold
         }
@@ -117,21 +123,17 @@ fun WallpaperEditorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.BrokenImage,
-                        null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onBack) { Text("Back") }
-                }
+                AuraStateCard(
+                    icon = Icons.Default.BrokenImage,
+                    title = "Wallpaper unavailable",
+                    description = "This image could not be restored for editing. Return to Wallpapers and choose another item.",
+                    tone = MaterialTheme.colorScheme.tertiary,
+                    primaryAction = AuraStateAction("Back to wallpapers", Icons.AutoMirrored.Filled.ArrowBack, onBack),
+                )
             }
             return@Scaffold
         }
@@ -204,7 +206,8 @@ fun WallpaperEditorScreen(
                             viewModel.applyPreset(preset.b, preset.c, preset.s, preset.bl, preset.v, preset.g, preset.a, preset.w)
                         },
                         label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)),
                         colors = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ),
@@ -228,6 +231,7 @@ fun WallpaperEditorScreen(
                         leadingIcon = {
                             Icon(filter.icon, null, modifier = Modifier.size(14.dp))
                         },
+                        shape = RoundedCornerShape(8.dp),
                     )
                 }
             }
@@ -267,16 +271,19 @@ fun WallpaperEditorScreen(
                     onClick = { viewModel.apply(WallpaperTarget.HOME) },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying,
+                    shape = RoundedCornerShape(10.dp),
                 ) { Text("Home") }
                 OutlinedButton(
                     onClick = { viewModel.apply(WallpaperTarget.LOCK) },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying,
+                    shape = RoundedCornerShape(10.dp),
                 ) { Text("Lock") }
                 Button(
                     onClick = { viewModel.apply(WallpaperTarget.BOTH) },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying,
+                    shape = RoundedCornerShape(10.dp),
                 ) {
                     if (state.isApplying) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text("Both")

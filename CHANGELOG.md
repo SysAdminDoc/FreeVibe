@@ -4,6 +4,13 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.17.0
+- **Secondary-flow premium polish**: refined the post-browse UX for sound detail, contact assignment, wallpaper preview, video preview, wallpaper edit/crop, and sound trim/edit flows so recovery, permission, loading, empty, and action states now match the v6.16 design system instead of falling back to ad hoc centered spinners and copy.
+- **First-run finish**: tightened onboarding status labels, feature badges, page indicators, and navigation buttons to the same rectangular 4-12dp shape language, and simplified the first welcome page so the primary CTA is not crowded by a partially visible feature card.
+- **Contact ringtone assignment**: replaced plain permission prompts and empty contact views with shared `AuraStateCard` recovery affordances, upgraded contact search to the shared compact search field, switched circular initials to rectangular avatars, and added per-contact applying feedback while assignments run.
+- **Sound detail quality**: upgraded the waveform play control, permission warning, secondary action row, disabled share handling, similar-sound skeleton loading, and empty-similar state for clearer hierarchy, stronger touch targets, and more trustworthy feedback.
+- **Editor and preview consistency**: brought wallpaper editor/crop and sound editor unavailable/loading/first-run states onto the shared state-card pattern, tightened chip/button radii to the 4-12dp system, clarified audio editor microcopy, and normalized preview action controls.
+
 ## v6.16.0
 - **Premium UX polish pass**: tightened Aura's Compose design system around neutral AMOLED surfaces, brass/mist/coral accents, rectangular 4-12dp radii, zero letter spacing, calmer elevation, and no pill-shaped status backdrops.
 - **Navigation and component consistency**: removed decorative gradient orbs from the app root, replaced Material pill indicators/badges with quieter rectangular count badges, normalized `GlassCard`, `HighlightPill`, search dropdowns, bottom navigation, cards, settings rows, sheets, preview surfaces, and diagnostic metrics.

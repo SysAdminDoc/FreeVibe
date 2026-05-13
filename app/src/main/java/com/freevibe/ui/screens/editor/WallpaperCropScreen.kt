@@ -30,6 +30,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +108,11 @@ fun WallpaperCropScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(strokeWidth = 2.dp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Opening crop tool...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             return@Scaffold
         }
@@ -115,21 +121,17 @@ fun WallpaperCropScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.BrokenImage,
-                        null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Wallpaper unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onBack) { Text("Back") }
-                }
+                AuraStateCard(
+                    icon = Icons.Default.BrokenImage,
+                    title = "Wallpaper unavailable",
+                    description = "This image could not be restored for cropping. Return to Wallpapers and choose another item.",
+                    tone = MaterialTheme.colorScheme.tertiary,
+                    primaryAction = AuraStateAction("Back to wallpapers", Icons.AutoMirrored.Filled.ArrowBack, onBack),
+                )
             }
             return@Scaffold
         }
@@ -245,7 +247,7 @@ fun WallpaperCropScreen(
                             }
                         },
                         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(32.dp),
                     )
                 }
@@ -264,6 +266,7 @@ fun WallpaperCropScreen(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying && state.bitmap != null,
+                    shape = RoundedCornerShape(10.dp),
                 ) { Text("Home") }
                 OutlinedButton(
                     onClick = {
@@ -271,6 +274,7 @@ fun WallpaperCropScreen(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying && state.bitmap != null,
+                    shape = RoundedCornerShape(10.dp),
                 ) { Text("Lock") }
                 Button(
                     onClick = {
@@ -278,6 +282,7 @@ fun WallpaperCropScreen(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.isApplying && state.bitmap != null,
+                    shape = RoundedCornerShape(10.dp),
                 ) {
                     if (state.isApplying) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text("Both")
