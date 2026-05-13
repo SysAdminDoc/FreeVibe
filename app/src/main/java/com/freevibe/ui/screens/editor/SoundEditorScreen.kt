@@ -6,7 +6,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +25,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.stableKey
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -124,7 +125,11 @@ fun SoundEditorScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(strokeWidth = 2.dp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Opening audio editor...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             return@Scaffold
         }
@@ -133,21 +138,17 @@ fun SoundEditorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .padding(20.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.MusicOff,
-                        null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Sound unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onBack) { Text("Back") }
-                }
+                AuraStateCard(
+                    icon = Icons.Default.MusicOff,
+                    title = "Sound unavailable",
+                    description = "This sound could not be restored for editing. Return to Sounds and choose another item.",
+                    tone = MaterialTheme.colorScheme.tertiary,
+                    primaryAction = AuraStateAction("Back to sounds", Icons.AutoMirrored.Filled.ArrowBack, onBack),
+                )
             }
             return@Scaffold
         }
@@ -168,37 +169,42 @@ fun SoundEditorScreen(
 
             if (state.isLoading) {
                 Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(8.dp))
-                        Text("Loading waveform...", style = MaterialTheme.typography.bodySmall)
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 2.dp)
+                            Spacer(Modifier.height(10.dp))
+                            Text("Preparing waveform...", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "This usually takes a few seconds for longer files.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             } else if (state.waveform.isEmpty() && state.localFilePath == null) {
-                // No audio loaded — show open file prompt
                 Box(
-                    Modifier.fillMaxWidth().height(200.dp),
+                    Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.AudioFile,
-                            null,
-                            Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Open an audio file to create a ringtone, notification, or alarm sound",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        FilledTonalButton(onClick = { filePicker.launch("audio/*") }) {
-                            Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Browse Files")
-                        }
-                    }
+                    AuraStateCard(
+                        icon = Icons.Default.AudioFile,
+                        title = "Open an audio file",
+                        description = "Choose a sound file to trim into a ringtone, notification, or alarm.",
+                        tone = MaterialTheme.colorScheme.primary,
+                        primaryAction = AuraStateAction(
+                            label = "Browse files",
+                            icon = Icons.Default.FolderOpen,
+                            onClick = { filePicker.launch("audio/*") },
+                        ),
+                    )
                 }
             } else if (state.waveform.isNotEmpty()) {
                 // Waveform with trim handles
@@ -250,12 +256,12 @@ fun SoundEditorScreen(
                         onClick = { viewModel.togglePlayback() },
                         modifier = Modifier
                             .size(64.dp)
-                            .clip(CircleShape)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.primaryContainer),
                     ) {
                         Icon(
                             if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "Play/Pause",
+                            contentDescription = if (state.isPlaying) "Pause preview" else "Play preview",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(32.dp),
                         )
@@ -263,7 +269,7 @@ fun SoundEditorScreen(
                 }
 
                 // Fade controls
-                Text("Fade Effects", style = MaterialTheme.typography.labelLarge)
+                Text("Fade effects", style = MaterialTheme.typography.labelLarge)
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -271,7 +277,7 @@ fun SoundEditorScreen(
                     // Fade In
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Fade In: ${state.fadeInMs}ms",
+                            "Fade in: ${state.fadeInMs} ms",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -290,7 +296,7 @@ fun SoundEditorScreen(
                     // Fade Out
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Fade Out: ${state.fadeOutMs}ms",
+                            "Fade out: ${state.fadeOutMs} ms",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -309,7 +315,7 @@ fun SoundEditorScreen(
                 }
 
                 // Apply buttons
-                Text("Set trimmed audio as:", style = MaterialTheme.typography.labelLarge)
+                Text("Set trimmed audio as", style = MaterialTheme.typography.labelLarge)
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

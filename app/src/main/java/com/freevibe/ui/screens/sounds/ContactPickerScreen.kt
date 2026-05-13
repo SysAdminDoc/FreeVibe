@@ -4,10 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,8 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -34,6 +33,10 @@ import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.remote.toSound
 import com.freevibe.data.repository.FavoritesRepository
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
+import com.freevibe.ui.components.CompactSearchField
+import com.freevibe.ui.components.ShimmerBox
 import com.freevibe.service.BundledContentProvider
 import com.freevibe.service.ContactInfo
 import com.freevibe.service.ContactRingtoneService
@@ -46,6 +49,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 data class ContactPickerState(
@@ -55,6 +59,7 @@ data class ContactPickerState(
     val hasPermission: Boolean = false,
     val selectedSound: Sound? = null,
     val isApplying: Boolean = false,
+    val applyingContactId: Long? = null,
     val success: String? = null,
     val error: String? = null,
 )
@@ -117,28 +122,28 @@ class ContactPickerViewModel @Inject constructor(
 
     fun assignToContact(contactId: Long) {
         val sound = _state.value.selectedSound ?: run {
-            _state.update { it.copy(error = "No sound selected") }
+            _state.update { it.copy(error = "No sound selected. Return to Sounds and choose a valid item.") }
             return
         }
-        _state.update { it.copy(isApplying = true) }
+        _state.update { it.copy(isApplying = true, applyingContactId = contactId, error = null, success = null) }
         viewModelScope.launch {
             val dlUrl = soundUrlResolver.resolve(sound)
             if (dlUrl.isNullOrBlank()) {
-                _state.update { it.copy(isApplying = false, error = "No download URL available for this sound") }
+                _state.update { it.copy(isApplying = false, applyingContactId = null, error = "This sound does not have a downloadable ringtone file.") }
                 return@launch
             }
             soundApplier.downloadOnly(dlUrl, sound.name, ContentType.RINGTONE)
                 .onSuccess { uri ->
                     contactService.setContactRingtone(contactId, uri)
                         .onSuccess {
-                            _state.update { it.copy(isApplying = false, success = "Ringtone set for contact") }
+                            _state.update { it.copy(isApplying = false, applyingContactId = null, success = "Ringtone set for contact") }
                         }
                         .onFailure { e ->
-                            _state.update { it.copy(isApplying = false, error = e.message) }
+                            _state.update { it.copy(isApplying = false, applyingContactId = null, error = e.message) }
                         }
                 }
                 .onFailure { e ->
-                    _state.update { it.copy(isApplying = false, error = "Download failed: ${e.message}") }
+                    _state.update { it.copy(isApplying = false, applyingContactId = null, error = "Download failed: ${e.message}") }
                 }
         }
     }
@@ -257,29 +262,24 @@ fun ContactPickerScreen(
         ) {
             when (soundResolved) {
                 null -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
+                            CircularProgressIndicator(strokeWidth = 2.dp)
                             Spacer(Modifier.height(12.dp))
-                            Text("Loading selected sound...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Opening contact picker...", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     return@Scaffold
                 }
                 false -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.MusicOff,
-                                null,
-                                modifier = Modifier.size(56.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text("Selected sound is no longer available", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(8.dp))
-                            FilledTonalButton(onClick = onBack) { Text("Back") }
-                        }
+                    Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                        AuraStateCard(
+                            icon = Icons.Default.MusicOff,
+                            title = "Sound unavailable",
+                            description = "The selected sound could not be restored. Return to Sounds and choose another item.",
+                            tone = MaterialTheme.colorScheme.tertiary,
+                            primaryAction = AuraStateAction("Back to sounds", Icons.AutoMirrored.Filled.ArrowBack, onBack),
+                        )
                     }
                     return@Scaffold
                 }
@@ -287,45 +287,50 @@ fun ContactPickerScreen(
             }
 
             if (!state.hasPermission) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Contacts,
-                            null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                    if (permissionPermanentlyDenied) {
+                        AuraStateCard(
+                            icon = Icons.Default.Contacts,
+                            title = "Contacts access is off",
+                            description = "Enable contacts permission in Android settings so Aura can assign this sound to one person.",
+                            tone = MaterialTheme.colorScheme.tertiary,
+                            primaryAction = AuraStateAction(
+                                label = "Open settings",
+                                icon = Icons.Default.Settings,
+                                onClick = {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                                    }
+                                    try { context.startActivity(intent) } catch (_: Exception) {}
+                                },
+                            ),
                         )
-                        Spacer(Modifier.height(16.dp))
-                        if (permissionPermanentlyDenied) {
-                            Text("Permission permanently denied", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Please enable contacts permission in app settings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = android.net.Uri.fromParts("package", context.packageName, null)
-                                }
-                                try { context.startActivity(intent) } catch (_: Exception) {}
-                            }) {
-                                Text("Open Settings")
-                            }
-                        } else {
-                            Text("Contacts permission required", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(Modifier.height(8.dp))
-                            Button(onClick = {
-                                permissionLauncher.launch(
-                                    arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
-                                )
-                            }) {
-                                Text("Grant Permission")
-                            }
-                        }
+                    } else {
+                        AuraStateCard(
+                            icon = Icons.Default.Contacts,
+                            title = "Allow contacts access",
+                            description = "Aura needs read and write contacts permission to set a custom ringtone for a selected contact.",
+                            tone = MaterialTheme.colorScheme.primary,
+                            primaryAction = AuraStateAction(
+                                label = "Allow contacts",
+                                icon = Icons.Default.Check,
+                                onClick = {
+                                    permissionLauncher.launch(
+                                        arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
+                                    )
+                                },
+                            ),
+                            secondaryAction = AuraStateAction(
+                                label = "Back",
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                onClick = onBack,
+                            ),
+                        )
                     }
                 }
                 return@Scaffold
             }
 
-            // Search bar
             state.selectedSound?.let { sound ->
                 Surface(
                     modifier = Modifier
@@ -333,6 +338,7 @@ fun ContactPickerScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
                 ) {
                     Row(
                         modifier = Modifier
@@ -341,15 +347,21 @@ fun ContactPickerScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        ) {
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(10.dp).size(20.dp),
+                            )
+                        }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(sound.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                "This sound will be assigned as the contact ringtone",
+                                "Assign as this contact's ringtone",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -358,56 +370,52 @@ fun ContactPickerScreen(
                 }
             }
 
-            OutlinedTextField(
+            CompactSearchField(
                 value = state.query,
                 onValueChange = { viewModel.search(it) },
+                placeholder = "Search contacts",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search contacts...") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                leadingIcon = Icons.Default.Search,
+                onClear = { viewModel.search("", immediate = true); focusManager.clearFocus() },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
-                ),
             )
 
             if (state.isLoading) {
-                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                ContactListSkeleton()
             } else if (state.contacts.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.PersonSearch,
-                            null,
-                            Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            if (state.query.isNotEmpty()) "No contacts found" else "No contacts on device",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
+                    AuraStateCard(
+                        icon = Icons.Default.PersonSearch,
+                        title = if (state.query.isNotBlank()) "No matching contacts" else "No contacts found",
+                        description = if (state.query.isNotBlank()) {
+                            "Try a different name or clear the search to show all contacts."
+                        } else {
+                            "Aura could not find contacts on this device after permission was granted."
+                        },
+                        tone = MaterialTheme.colorScheme.tertiary,
+                        primaryAction = if (state.query.isNotBlank()) {
+                            AuraStateAction("Clear search", Icons.Default.Close) {
+                                viewModel.search("", immediate = true)
+                                focusManager.clearFocus()
+                            }
+                        } else {
+                            null
+                        },
+                    )
                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     items(state.contacts, key = { it.id }) { contact ->
                         ContactRow(
                             contact = contact,
-                            isApplying = state.isApplying,
+                            enabled = !state.isApplying,
+                            isApplying = state.applyingContactId == contact.id,
                             onClick = { viewModel.assignToContact(contact.id) },
                         )
                     }
@@ -418,33 +426,63 @@ fun ContactPickerScreen(
 }
 
 @Composable
+private fun ContactListSkeleton() {
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(8) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ShimmerBox(Modifier.size(44.dp), shape = RoundedCornerShape(10.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ShimmerBox(Modifier.width(150.dp).height(14.dp), shape = RoundedCornerShape(5.dp))
+                        ShimmerBox(Modifier.width(96.dp).height(10.dp), shape = RoundedCornerShape(5.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ContactRow(
     contact: ContactInfo,
+    enabled: Boolean,
     isApplying: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        enabled = !isApplying,
+        enabled = enabled,
         shape = RoundedCornerShape(12.dp),
-        color = Color.Transparent,
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isApplying) 1f else 0.62f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (enabled) 0.22f else 0.1f)),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .alpha(if (enabled || isApplying) 1f else 0.55f)
                 .padding(vertical = 10.dp, horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Avatar
             Surface(
                 modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        contact.name.firstOrNull()?.uppercase() ?: "?",
+                        contact.name.take(1).uppercase(Locale.ROOT).ifBlank { "?" },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -458,21 +496,33 @@ private fun ContactRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (contact.currentRingtoneUri != null) {
-                    Text(
-                        "Custom ringtone set",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                    )
-                }
+                Text(
+                    if (isApplying) {
+                        "Assigning ringtone..."
+                    } else if (contact.currentRingtoneUri != null) {
+                        "Custom ringtone set"
+                    } else {
+                        "Tap to assign"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (contact.currentRingtoneUri != null || isApplying) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
 
-            Icon(
-                Icons.Default.ChevronRight,
-                null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
+            if (isApplying) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

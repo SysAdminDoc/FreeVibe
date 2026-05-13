@@ -34,7 +34,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.local.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.freevibe.ui.components.GlassCard
-import com.freevibe.ui.components.HighlightPill
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -128,7 +127,7 @@ fun OnboardingScreen(
             ) {
                 repeat(4) { i ->
                     val width by animateDpAsState(
-                        targetValue = if (pagerState.currentPage == i) 28.dp else 8.dp,
+                        targetValue = if (pagerState.currentPage == i) 22.dp else 7.dp,
                         animationSpec = tween(durationMillis = 220),
                         label = "indicator_width",
                     )
@@ -136,8 +135,8 @@ fun OnboardingScreen(
                         modifier = Modifier
                             .padding(horizontal = 4.dp)
                             .width(width)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(2.dp))
                             .background(
                                 if (pagerState.currentPage == i) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
@@ -160,7 +159,7 @@ fun OnboardingScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(54.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                     ) { Text("Back") }
                 }
 
@@ -175,7 +174,7 @@ fun OnboardingScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(54.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                 ) {
                     Text(if (pagerState.currentPage == 3) "Get Started" else "Next")
                 }
@@ -198,7 +197,7 @@ private fun OnboardingTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HighlightPill(
+        OnboardingLabel(
             label = "Step ${currentPage + 1} of $totalPages",
             icon = Icons.Default.AutoAwesome,
             tint = MaterialTheme.colorScheme.secondary,
@@ -207,6 +206,30 @@ private fun OnboardingTopBar(
             TextButton(onClick = onSkip) {
                 Text("Skip setup", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingLabel(
+    label: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(6.dp),
+        color = tint.copy(alpha = 0.13f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.24f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = tint)
         }
     }
 }
@@ -224,23 +247,6 @@ private fun WelcomePage() {
             Icons.Default.Block to "No ads",
             Icons.Default.Verified to "Open source",
         ),
-        content = {
-            FeatureRow(
-                icon = Icons.Default.AutoAwesome,
-                title = "A calmer discovery feed",
-                subtitle = "Curated sources, style preferences, and smarter quality ranking keep browsing intentional.",
-            )
-            FeatureRow(
-                icon = Icons.Default.VideoLibrary,
-                title = "Motion and sound in one place",
-                subtitle = "Live wallpapers, trimmed clips, ringtones, and ambient extras live under one roof.",
-            )
-            FeatureRow(
-                icon = Icons.Default.Tune,
-                title = "You stay in control",
-                subtitle = "Tweak sources, automation, previews, and battery tradeoffs whenever you want.",
-            )
-        },
     )
 }
 
@@ -351,7 +357,7 @@ private fun StylePickerPage(selectedStyles: Set<String>, onToggle: (String) -> U
                     "Style profile",
                     style = MaterialTheme.typography.titleMedium,
                 )
-                HighlightPill(
+                OnboardingLabel(
                     label = if (selectedStyles.isEmpty()) "Optional" else "${selectedStyles.size} selected",
                     icon = Icons.Default.CheckCircle,
                     tint = MaterialTheme.colorScheme.secondary,
@@ -478,7 +484,7 @@ private fun PageLayout(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
@@ -488,8 +494,8 @@ private fun PageLayout(
                 .padding(horizontal = 12.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            HighlightPill(label = eyebrow, icon = Icons.Default.AutoAwesome, tint = iconColor)
-            Spacer(Modifier.height(18.dp))
+            OnboardingLabel(label = eyebrow, icon = Icons.Default.AutoAwesome, tint = iconColor)
+            Spacer(Modifier.height(16.dp))
             Box(
                 modifier = Modifier
                     .size(96.dp)
@@ -499,7 +505,7 @@ private fun PageLayout(
             ) {
                 Icon(icon, null, tint = iconColor, modifier = Modifier.size(44.dp))
             }
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 title,
                 style = MaterialTheme.typography.headlineLarge,
@@ -513,13 +519,13 @@ private fun PageLayout(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (badges.isNotEmpty()) {
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(18.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     badges.forEach { (badgeIcon, label) ->
-                        HighlightPill(
+                        OnboardingLabel(
                             label = label,
                             icon = badgeIcon,
                             tint = MaterialTheme.colorScheme.secondary,
@@ -528,7 +534,7 @@ private fun PageLayout(
                 }
             }
             if (content != null) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     content()
                 }

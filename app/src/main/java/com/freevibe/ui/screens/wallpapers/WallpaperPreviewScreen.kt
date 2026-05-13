@@ -80,7 +80,7 @@ fun WallpaperPreviewScreen(
                     Row(
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(2.dp),
                     ) {
@@ -145,7 +145,7 @@ private enum class PreviewMode { LOCK, HOME }
 private fun PreviewModeChip(label: String, active: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
     ) {
         Text(
@@ -382,6 +382,7 @@ private fun ApplyActionButton(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.height(44.dp),
+            shape = RoundedCornerShape(10.dp),
         ) {
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
@@ -390,6 +391,7 @@ private fun ApplyActionButton(
             onClick = onClick,
             enabled = enabled,
             modifier = modifier.height(44.dp),
+            shape = RoundedCornerShape(10.dp),
         ) {
             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))

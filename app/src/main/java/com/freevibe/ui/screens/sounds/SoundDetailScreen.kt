@@ -1,6 +1,7 @@
 package com.freevibe.ui.screens.sounds
 
 import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -32,6 +32,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
+import com.freevibe.ui.components.ShimmerBox
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
@@ -83,22 +86,30 @@ fun SoundDetailScreen(
         ?: topHits.firstOrNull { matchesSoundIdentity(it, soundId, targetSource, targetPreviewUrl, targetDownloadUrl) }
         ?: resolvedSound
     if (s == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             if (!restoreResolved) {
-                CircularProgressIndicator()
-            } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.MusicOff,
-                        null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    )
+                    CircularProgressIndicator(strokeWidth = 2.dp)
                     Spacer(Modifier.height(12.dp))
-                    Text("Sound unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onBack) { Text("Back") }
+                    Text(
+                        "Opening sound...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
+            } else {
+                AuraStateCard(
+                    icon = Icons.Default.MusicOff,
+                    title = "Sound unavailable",
+                    description = "This sound could not be restored from its source. Return to Sounds and choose another result.",
+                    tone = MaterialTheme.colorScheme.tertiary,
+                    primaryAction = AuraStateAction("Back to sounds", Icons.AutoMirrored.Filled.ArrowBack, onBack),
+                )
             }
         }
         return
@@ -113,6 +124,10 @@ fun SoundDetailScreen(
         !(s.source == ContentSource.BUNDLED && s.uploaderName == "Aura Picks")
     val detailBadges = remember(s, state.selectedTab) { soundBadges(s, state.selectedTab) }
     val (sourceLabel, sourceColor) = soundSourceTone(s.source)
+    val shareBody = remember(s.sourcePageUrl, s.downloadUrl) {
+        s.sourcePageUrl.ifEmpty { s.downloadUrl }
+    }
+    val canShareSound = shareBody.isNotBlank()
 
     val currentSoundKey = s.stableKey()
     val similarSounds = remember(currentSoundKey) { mutableStateOf<List<Sound>>(emptyList()) }
@@ -169,9 +184,11 @@ fun SoundDetailScreen(
                 }
                 // Play overlay
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                    modifier = Modifier.size(48.dp),
+                    contentColor = Color.White,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                    modifier = Modifier.size(52.dp),
                     onClick = { viewModel.togglePlayback(s) },
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -209,7 +226,7 @@ fun SoundDetailScreen(
                     detailBadges.forEach { badge ->
                         Surface(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                         ) {
                             Text(
                                 badge,
@@ -228,7 +245,7 @@ fun SoundDetailScreen(
                     s.tags.take(5).forEach { tag ->
                         Surface(
                             onClick = { onSearchTag(tag) },
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(8.dp),
                         ) {
                             Text("#$tag", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
@@ -238,14 +255,32 @@ fun SoundDetailScreen(
 
             // Permission warning
             if (!viewModel.canWriteSettings()) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)), shape = RoundedCornerShape(12.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
-                        Column(Modifier.weight(1f)) {
-                            Text("Permission needed", style = MaterialTheme.typography.labelLarge)
-                            Text("Allow modifying system settings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f)),
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(10.dp).size(20.dp),
+                            )
                         }
-                        TextButton(onClick = { context.startActivity(viewModel.requestWriteSettings()) }) { Text("Grant") }
+                        Column(Modifier.weight(1f)) {
+                            Text("Allow ringtone changes", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "Aura needs system settings access before it can set ringtones, notifications, and alarms.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        TextButton(onClick = { context.startActivity(viewModel.requestWriteSettings()) }) { Text("Open") }
                     }
                 }
             }
@@ -257,19 +292,14 @@ fun SoundDetailScreen(
                 ApplyButton("Alarm", Icons.Default.Alarm, !state.isApplying && viewModel.canWriteSettings(), state.isApplying, Modifier.weight(1f)) { viewModel.applySound(s, ContentType.ALARM) }
             }
 
-            // Secondary actions as icon row
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                IconButton(onClick = { onEdit(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.ContentCut, "Trim sound", Modifier.size(22.dp)); Text("Trim", style = MaterialTheme.typography.labelSmall) } }
-                IconButton(onClick = { onContactPicker(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Contacts, "Assign to contact", Modifier.size(22.dp)); Text("Contact", style = MaterialTheme.typography.labelSmall) } }
-                IconButton(onClick = { viewModel.downloadSound(s) }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Download, "Save sound", Modifier.size(22.dp)); Text("Save", style = MaterialTheme.typography.labelSmall) } }
-                IconButton(onClick = {
-                    val shareBody = s.sourcePageUrl.ifEmpty { s.downloadUrl }
-                    // Don't open a share sheet with an empty body — it renders an empty "Share"
-                    // dialog that lets the user pick a target only to paste nothing.
-                    if (shareBody.isBlank()) return@IconButton
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecondarySoundAction("Trim", Icons.Default.ContentCut, Modifier.weight(1f)) { onEdit(s) }
+                SecondarySoundAction("Contact", Icons.Default.Contacts, Modifier.weight(1f)) { onContactPicker(s) }
+                SecondarySoundAction("Save", Icons.Default.Download, Modifier.weight(1f)) { viewModel.downloadSound(s) }
+                SecondarySoundAction("Share", Icons.Default.Share, Modifier.weight(1f), enabled = canShareSound) {
                     val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareBody); putExtra(Intent.EXTRA_SUBJECT, s.name) }
                     try { context.startActivity(Intent.createChooser(intent, "Share sound")) } catch (_: Exception) {}
-                }) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Share, "Share sound", Modifier.size(22.dp)); Text("Share", style = MaterialTheme.typography.labelSmall) } }
+                }
             }
 
             // More Like This
@@ -303,6 +333,34 @@ private fun ApplyButton(text: String, icon: androidx.compose.ui.graphics.vector.
 }
 
 @Composable
+private fun SecondarySoundAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(64.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (enabled) 0.28f else 0.14f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
+
+@Composable
 private fun SimilarSoundsSection(
     sound: Sound,
     similarSounds: MutableState<List<Sound>>,
@@ -323,7 +381,23 @@ private fun SimilarSoundsSection(
         Text("More Like This", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         if (isLoading.value) {
-            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(3) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.width(160.dp),
+                    ) {
+                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ShimmerBox(Modifier.size(34.dp), shape = RoundedCornerShape(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                ShimmerBox(Modifier.width(78.dp).height(12.dp), shape = RoundedCornerShape(5.dp))
+                                ShimmerBox(Modifier.width(44.dp).height(10.dp), shape = RoundedCornerShape(5.dp))
+                            }
+                        }
+                    }
+                }
+            }
         } else if (similarSounds.value.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(similarSounds.value, key = { it.stableKey() }) { similar ->
@@ -334,7 +408,7 @@ private fun SimilarSoundsSection(
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(
                                 onClick = { viewModel.togglePlayback(similar) },
-                                modifier = Modifier.size(34.dp).clip(CircleShape).background(if (currentPlayingId == similar.stableKey()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
+                                modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(if (currentPlayingId == similar.stableKey()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
                             ) {
                                 Icon(
                                     if (currentPlayingId == similar.stableKey()) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -352,7 +426,20 @@ private fun SimilarSoundsSection(
                 }
             }
         } else if (loaded) {
-            Text("No similar sounds found", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("No close matches yet", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
