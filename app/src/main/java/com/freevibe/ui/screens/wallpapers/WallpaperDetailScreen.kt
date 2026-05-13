@@ -239,6 +239,9 @@ fun WallpaperDetailScreen(
             viewModel.clearSuccess()
         }
     }
+    val navigationBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val compactOverlayBottomPadding = maxOf(8.dp, navigationBottomPadding / 4)
+    val expandedOverlayBottomPadding = navigationBottomPadding + 14.dp
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Box(
@@ -319,8 +322,11 @@ fun WallpaperDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                        .padding(horizontal = 14.dp)
+                        .padding(
+                            top = 14.dp,
+                            bottom = if (showDetailsPanel) expandedOverlayBottomPadding else compactOverlayBottomPadding,
+                        ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (showDetailsPanel) {

@@ -4,6 +4,9 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.20.0
+- **Wallpaper detail overlay placement**: the compact wallpaper apply card now sits lower on devices with three-button navigation, using the previously empty bottom inset so more of the wallpaper remains visible above the controls.
+
 ## v6.19.0
 - **Wallpaper detail visibility**: opening a wallpaper detail now keeps the image visible by default with a compact bottom action card instead of the full metadata/apply panel covering the wallpaper. Dense metadata, palette, tags, and extended actions remain available from Details, with a clear Show image action to collapse the panel again.
 
