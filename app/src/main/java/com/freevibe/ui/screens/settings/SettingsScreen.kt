@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -802,7 +801,7 @@ fun SettingsScreen(
             // Preview volume slider
             Surface(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
@@ -817,7 +816,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
                     ) {
                         @Suppress("DEPRECATION")
@@ -1636,14 +1635,14 @@ private fun SettingsMetric(
     Surface(
         modifier = modifier,
         color = tint.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(10.dp),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(8.dp),
                 color = tint.copy(alpha = 0.14f),
             ) {
                 Icon(
@@ -1700,7 +1699,7 @@ private fun SettingsItem(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
@@ -1715,7 +1714,7 @@ private fun SettingsItem(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
             ) {
                 Icon(
@@ -1752,7 +1751,7 @@ private fun SettingsToggle(
     Surface(
         onClick = { onCheckedChange(!checked) },
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
             if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
@@ -1768,7 +1767,7 @@ private fun SettingsToggle(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = if (checked) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                 } else {
@@ -1802,7 +1801,7 @@ private fun SettingsToggle(
 private fun SourceDiagnosticsEmptyState() {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.76f),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f),
@@ -1859,7 +1858,7 @@ private fun DiagnosticMetricPill(
     tint: Color,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         color = tint.copy(alpha = 0.12f),
         border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.16f)),
     ) {
@@ -1886,7 +1885,7 @@ private fun SourceDiagnosticRow(stat: SourceMetrics.SourceStats) {
 
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, tint.copy(alpha = 0.24f)),
     ) {
         Column(
@@ -1910,7 +1909,7 @@ private fun SourceDiagnosticRow(stat: SourceMetrics.SourceStats) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(5.dp)
-                    .clip(RoundedCornerShape(999.dp)),
+                    .clip(RoundedCornerShape(3.dp)),
                 color = tint,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             )

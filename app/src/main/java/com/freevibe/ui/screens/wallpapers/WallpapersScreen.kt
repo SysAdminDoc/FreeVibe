@@ -51,6 +51,7 @@ import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.matchesHiddenIds
 import com.freevibe.service.SeasonalTheme
 import com.freevibe.ui.components.CompactSearchField
+import com.freevibe.ui.components.CountBadge
 import com.freevibe.ui.components.DownloadProgressBar
 import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.HighlightPill
@@ -173,7 +174,7 @@ fun WallpapersScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                 highlightHeight = 120.dp,
                 shadowElevation = 6.dp,
@@ -279,16 +280,14 @@ fun WallpapersScreen(
                             },
                         ),
                     ) {
-                        BadgedBox(
-                            badge = {
-                                if (wallpaperFilterCount > 0) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                        Text("$wallpaperFilterCount")
-                                    }
-                                }
-                            },
-                        ) {
+                        Box {
                             Icon(Icons.Default.Tune, contentDescription = "Wallpaper filters", modifier = Modifier.size(18.dp))
+                            CountBadge(
+                                count = wallpaperFilterCount,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 10.dp, y = (-8).dp),
+                            )
                         }
                     }
                 }
@@ -344,7 +343,7 @@ fun WallpapersScreen(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("AI", maxLines = 1)
+                        Text("Generate", maxLines = 1)
                     }
                     if (state.selectedTab == WallpaperTab.DISCOVER && state.discoverFilter != WallpaperDiscoverFilter.FOR_YOU) {
                         AssistChip(
@@ -778,8 +777,8 @@ private fun WallpaperGrid(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onWallpaperClick(pick) },
-                    shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
                 ) {
                     Box(
                         modifier = Modifier
@@ -932,14 +931,14 @@ private fun WallpaperCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress,
             ),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)),
     ) {
         Box {
@@ -1103,12 +1102,13 @@ private fun WallpaperStateCard(
     GlassCard(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(20.dp),
-        highlightHeight = 128.dp,
-        shadowElevation = 8.dp,
+        highlightHeight = 88.dp,
+        shadowElevation = 3.dp,
     ) {
         Surface(
-            shape = CircleShape,
+            shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
         ) {
             Icon(
                 imageVector = icon,
@@ -1136,7 +1136,7 @@ private fun WallpaperStateCard(
                 primaryAction?.let { action ->
                     Button(
                         onClick = action.onClick,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) {
                         Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1146,7 +1146,7 @@ private fun WallpaperStateCard(
                 secondaryAction?.let { action ->
                     OutlinedButton(
                         onClick = action.onClick,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) {
                         Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1170,7 +1170,7 @@ private fun SeasonalBannerCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f),
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.36f)),
         shadowElevation = 4.dp,
@@ -1183,7 +1183,7 @@ private fun SeasonalBannerCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(10.dp),
                 color = accentColor.copy(alpha = 0.18f),
                 modifier = Modifier.size(44.dp),
             ) {
@@ -1264,7 +1264,7 @@ private fun DiscoverCollectionsRow(
                 val shortcut = collections[index]
                 Surface(
                     onClick = { onSearch?.invoke(shortcut.query) },
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)),
                     shadowElevation = 4.dp,
@@ -1275,7 +1275,7 @@ private fun DiscoverCollectionsRow(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = shortcut.tint.copy(alpha = 0.14f),
                         ) {
                             Icon(
@@ -1351,7 +1351,7 @@ private fun FloatingActionRow(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, tint.copy(alpha = 0.16f)),
         shadowElevation = 6.dp,

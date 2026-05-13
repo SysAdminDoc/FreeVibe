@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -211,7 +212,7 @@ fun ShimmerSoundList(modifier: Modifier = Modifier) {
             ) {
                 ShimmerBox(
                     modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(10.dp),
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     ShimmerBox(modifier = Modifier.width(180.dp).height(14.dp))
@@ -227,10 +228,10 @@ fun ShimmerSoundList(modifier: Modifier = Modifier) {
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(26.dp),
-    contentPadding: PaddingValues = PaddingValues(20.dp),
-    highlightHeight: Dp = 144.dp,
-    shadowElevation: Dp = 10.dp,
+    shape: Shape = RoundedCornerShape(12.dp),
+    contentPadding: PaddingValues = PaddingValues(18.dp),
+    highlightHeight: Dp = 96.dp,
+    shadowElevation: Dp = 3.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
@@ -239,7 +240,7 @@ fun GlassCard(
         shape = shape,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
         ),
         tonalElevation = 0.dp,
         shadowElevation = shadowElevation,
@@ -249,9 +250,9 @@ fun GlassCard(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.94f),
-                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.95f),
+                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
                         ),
                     ),
                 ),
@@ -261,12 +262,11 @@ fun GlassCard(
                     .fillMaxWidth()
                     .height(highlightHeight)
                     .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                                 Color.Transparent,
                             ),
-                            radius = 520f,
                         ),
                     ),
             )
@@ -287,12 +287,12 @@ fun HighlightPill(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(8.dp),
         color = tint.copy(alpha = 0.14f),
         border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -324,7 +324,7 @@ fun CompactSearchField(
     onClear: (() -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(10.dp),
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -434,6 +434,110 @@ fun SourceBadge(source: String, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
             color = color,
+        )
+    }
+}
+
+data class AuraStateAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+)
+
+@Composable
+fun AuraStateCard(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    tone: Color = MaterialTheme.colorScheme.primary,
+    primaryAction: AuraStateAction? = null,
+    secondaryAction: AuraStateAction? = null,
+) {
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(20.dp),
+        highlightHeight = 88.dp,
+        shadowElevation = 3.dp,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = tone.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, tone.copy(alpha = 0.18f)),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tone,
+                modifier = Modifier
+                    .padding(11.dp)
+                    .size(24.dp),
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Start,
+        )
+        if (primaryAction != null || secondaryAction != null) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                primaryAction?.let { action ->
+                    Button(
+                        onClick = action.onClick,
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(action.label)
+                    }
+                }
+                secondaryAction?.let { action ->
+                    OutlinedButton(
+                        onClick = action.onClick,
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(action.label)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CountBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+    tone: Color = MaterialTheme.colorScheme.primary,
+) {
+    if (count <= 0) return
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(6.dp),
+        color = tone,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 1.dp,
+    ) {
+        Text(
+            text = if (count > 99) "99+" else count.toString(),
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
         )
     }
 }

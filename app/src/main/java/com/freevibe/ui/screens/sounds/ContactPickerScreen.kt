@@ -331,7 +331,7 @@ fun ContactPickerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Row(
@@ -367,7 +367,7 @@ fun ContactPickerScreen(
                 placeholder = { Text("Search contacts...") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                 colors = OutlinedTextFieldDefaults.colors(

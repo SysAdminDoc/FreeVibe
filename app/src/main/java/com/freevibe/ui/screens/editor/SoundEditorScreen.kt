@@ -358,7 +358,7 @@ private fun TrimGuidance(trimDurationMs: Long) {
         modifier = Modifier.fillMaxWidth(),
         color = containerColor,
         contentColor = contentColor,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

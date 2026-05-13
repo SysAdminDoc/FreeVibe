@@ -40,7 +40,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.repository.matchesHiddenIds
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
 import com.freevibe.ui.components.CompactSearchField
+import com.freevibe.ui.components.CountBadge
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.launchLiveWallpaperPicker
 import kotlinx.coroutines.Dispatchers
@@ -314,14 +317,14 @@ fun VideoWallpapersScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                 modifier = Modifier.heightIn(min = 34.dp),
             ) {
-                BadgedBox(
-                    badge = {
-                        if (videoFilterCount > 0) {
-                            Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$videoFilterCount") }
-                        }
-                    },
-                ) {
+                Box {
                     Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
+                    CountBadge(
+                        count = videoFilterCount,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 10.dp, y = (-8).dp),
+                    )
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(if (videoFilterCount > 0) videoFocusLabel(state.focusFilter) else "Filters")
@@ -349,22 +352,25 @@ fun VideoWallpapersScreen(
             when {
                 (state.isLoading || state.isRefreshing) && state.items.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(12.dp))
-                            Text("Finding video wallpapers...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        AuraStateCard(
+                            icon = Icons.Default.SlowMotionVideo,
+                            title = "Finding motion wallpapers",
+                            description = "Aura is checking sources for portrait-friendly clips and battery-aware playback hints.",
+                            modifier = Modifier.padding(24.dp),
+                        )
                     }
                 }
                 state.error != null && state.items.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.ErrorOutline, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
-                            Spacer(Modifier.height(12.dp))
-                            Text(state.error ?: "Unknown error", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(12.dp))
-                            FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Retry") }
-                        }
+                        AuraStateCard(
+                            icon = Icons.Default.ErrorOutline,
+                            title = "Video sources did not respond",
+                            description = state.error ?: "Aura could not load live wallpaper candidates. Retry or choose a clip from your gallery.",
+                            tone = MaterialTheme.colorScheme.error,
+                            primaryAction = AuraStateAction("Retry", Icons.Default.Refresh) { viewModel.refresh() },
+                            secondaryAction = AuraStateAction("From gallery", Icons.Default.FolderOpen) { galleryLauncher.launch("video/*") },
+                            modifier = Modifier.padding(24.dp),
+                        )
                     }
                 }
                 state.items.isEmpty() -> {
@@ -374,19 +380,13 @@ fun VideoWallpapersScreen(
                         everythingHidden = false,
                     )
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(icon, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                            Spacer(Modifier.height(12.dp))
-                            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                detail,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Retry") }
-                        }
+                        AuraStateCard(
+                            icon = icon,
+                            title = title,
+                            description = detail,
+                            primaryAction = AuraStateAction("Retry", Icons.Default.Refresh) { viewModel.refresh() },
+                            modifier = Modifier.padding(24.dp),
+                        )
                     }
                 }
                 else -> {
@@ -430,19 +430,13 @@ fun VideoWallpapersScreen(
                                 everythingHidden = true,
                             )
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(icon, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        detail,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    FilledTonalButton(onClick = { viewModel.refresh() }) { Text("Refresh Feed") }
-                                }
+                                AuraStateCard(
+                                    icon = icon,
+                                    title = title,
+                                    description = detail,
+                                    primaryAction = AuraStateAction("Refresh", Icons.Default.Refresh) { viewModel.refresh() },
+                                    modifier = Modifier.padding(24.dp),
+                                )
                             }
                         } else {
                             LazyColumn(
@@ -606,7 +600,7 @@ private fun VideoCard(
     }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Box {

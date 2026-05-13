@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -99,19 +98,6 @@ fun OnboardingScreen(
                 )
             ),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            Color.Transparent,
-                        ),
-                        radius = 1200f,
-                    ),
-                ),
-        )
         Column(modifier = Modifier.fillMaxSize()) {
             OnboardingTopBar(
                 currentPage = pagerState.currentPage,
@@ -151,7 +137,7 @@ fun OnboardingScreen(
                             .padding(horizontal = 4.dp)
                             .width(width)
                             .height(8.dp)
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(RoundedCornerShape(4.dp))
                             .background(
                                 if (pagerState.currentPage == i) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
@@ -174,7 +160,7 @@ fun OnboardingScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(54.dp),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) { Text("Back") }
                 }
 
@@ -189,7 +175,7 @@ fun OnboardingScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(54.dp),
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(10.dp),
                 ) {
                     Text(if (pagerState.currentPage == 3) "Get Started" else "Next")
                 }
@@ -310,7 +296,7 @@ private fun FeatureRow(icon: ImageVector, title: String, subtitle: String) {
     ) {
         Surface(
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(10.dp),
         ) {
             Icon(
                 icon,
@@ -385,7 +371,7 @@ private fun StylePickerPage(selectedStyles: Set<String>, onToggle: (String) -> U
                             modifier = Modifier
                                 .weight(1f)
                                 .height(132.dp),
-                            shape = RoundedCornerShape(22.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (selected) option.tint.copy(alpha = 0.18f)
                             else MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
                             border = BorderStroke(
@@ -401,7 +387,7 @@ private fun StylePickerPage(selectedStyles: Set<String>, onToggle: (String) -> U
                                 verticalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Surface(
-                                    shape = CircleShape,
+                                    shape = RoundedCornerShape(10.dp),
                                     color = option.tint.copy(alpha = 0.14f),
                                 ) {
                                     Icon(
@@ -507,7 +493,7 @@ private fun PageLayout(
             Box(
                 modifier = Modifier
                     .size(96.dp)
-                    .clip(CircleShape)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(iconColor.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {

@@ -4,6 +4,13 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.16.0
+- **Premium UX polish pass**: tightened Aura's Compose design system around neutral AMOLED surfaces, brass/mist/coral accents, rectangular 4-12dp radii, zero letter spacing, calmer elevation, and no pill-shaped status backdrops.
+- **Navigation and component consistency**: removed decorative gradient orbs from the app root, replaced Material pill indicators/badges with quieter rectangular count badges, normalized `GlassCard`, `HighlightPill`, search dropdowns, bottom navigation, cards, settings rows, sheets, preview surfaces, and diagnostic metrics.
+- **States and feedback**: added a shared `AuraStateCard` pattern and applied it to wallpapers, sounds, video wallpapers, downloads, favorites, collections, wallpaper history, and loading/error/empty states so recovery copy, actions, icons, and spacing feel consistent.
+- **Workflow clarity**: clarified the wallpaper generation entry point, improved sound/video retry and gallery fallback affordances, improved API-key visibility accessibility copy, and made empty states explain the next useful action instead of stopping at "nothing here."
+- **Verification**: `assembleDebug`, `testDebugUnitTest`, and `lintDebug` are green. USB install was not performed because the connected phone already has `com.freevibe` installed with a different signing key; uninstalling it would remove or disturb the user's installed app.
+
 ## v6.15.0
 - **Deep audit pass** — eleven real bugs found in the v6.13–v6.14 deltas (AI wallpaper, Phase 6.2 dark/light auto-switch, Phase 6.4 adaptive tint, Phase 2.5 seasonal/Pexels). All fixes ship with unit-test regression nets.
 - **Data integrity (P0)**: `WeatherUpdateWorker` was storing latitude/longitude with `putLong(value.toLong())` — silently truncating fractional degrees. A user at 39.7392° was stored as `39`, a user near the equator at 0.5° was stored as `0`. The reader then used the `tintLat != 0.0 && tintLon != 0.0` sentinel to gate adaptive tinting, so anyone within 1° of Null Island had tinting disabled entirely. Switched to `putFloat` (~7 sig figs, sub-meter precision) plus a `location_present` boolean sentinel. Reader falls back to the legacy Long keys for a single update cycle so existing installs don't lose tinting between upgrade and the next 30-min worker tick.

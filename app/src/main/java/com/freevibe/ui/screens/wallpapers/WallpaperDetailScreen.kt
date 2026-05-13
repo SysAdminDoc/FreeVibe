@@ -128,7 +128,7 @@ fun WallpaperDetailScreen(
                     contentPadding = PaddingValues(24.dp),
                 ) {
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
                     ) {
                         Icon(
@@ -320,10 +320,10 @@ fun WallpaperDetailScreen(
                 ) {
                     GlassCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(18.dp),
-                        highlightHeight = 180.dp,
-                        shadowElevation = 10.dp,
+                        highlightHeight = 112.dp,
+                        shadowElevation = 4.dp,
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -380,7 +380,7 @@ fun WallpaperDetailScreen(
                                     .weight(1f)
                                     .height(54.dp),
                                 enabled = !state.isApplying,
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(10.dp),
                             ) {
                                 if (state.isApplying) {
                                     CircularProgressIndicator(
@@ -399,7 +399,7 @@ fun WallpaperDetailScreen(
                                 modifier = Modifier
                                     .weight(0.72f)
                                     .height(54.dp),
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(10.dp),
                             ) {
                                 Icon(Icons.Default.Visibility, null, Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
@@ -686,7 +686,7 @@ private fun DetailOverlayPill(
 ) {
     Surface(
         color = Color.Black.copy(alpha = 0.34f),
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(8.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
@@ -709,7 +709,7 @@ private fun DetailOverlayPill(
 private fun DetailInfoChip(label: String) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     ) {
         Text(
@@ -739,7 +739,7 @@ private fun DetailActionPill(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(10.dp),
         color = tint.copy(alpha = 0.12f),
         border = BorderStroke(1.dp, tint.copy(alpha = 0.12f)),
     ) {
@@ -842,7 +842,7 @@ private fun SheetOption(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(10.dp),
     ) {
         Row(
             modifier = Modifier
@@ -852,7 +852,7 @@ private fun SheetOption(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
             ) {
                 Icon(

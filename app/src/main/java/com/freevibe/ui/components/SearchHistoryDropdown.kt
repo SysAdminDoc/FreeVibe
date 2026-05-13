@@ -36,9 +36,9 @@ fun SearchHistoryDropdown(
     ) {
         Surface(
             color = Color.Transparent,
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(12.dp),
             tonalElevation = 0.dp,
-            shadowElevation = 12.dp,
+            shadowElevation = 6.dp,
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
                 MaterialTheme.colorScheme.outline.copy(alpha = 0.14f),

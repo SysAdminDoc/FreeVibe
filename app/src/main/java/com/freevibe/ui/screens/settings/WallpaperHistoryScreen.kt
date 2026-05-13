@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.freevibe.data.model.WallpaperHistoryEntity
+import com.freevibe.ui.components.AuraStateCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -61,18 +62,12 @@ fun WallpaperHistoryScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.History, null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "No wallpaper history yet",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                AuraStateCard(
+                    icon = Icons.Default.History,
+                    title = "No wallpaper history yet",
+                    description = "Applied wallpapers will appear here so you can revisit, compare, and restore prior looks.",
+                    modifier = Modifier.padding(24.dp),
+                )
             }
         } else {
             LazyVerticalStaggeredGrid(

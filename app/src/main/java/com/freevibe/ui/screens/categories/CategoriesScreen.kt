@@ -100,7 +100,7 @@ private fun CategoryCard(category: WallpaperCategory, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(100.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(Brush.linearGradient(category.gradient))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
