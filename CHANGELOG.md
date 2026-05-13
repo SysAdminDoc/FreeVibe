@@ -4,6 +4,9 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.19.0
+- **Wallpaper detail visibility**: opening a wallpaper detail now keeps the image visible by default with a compact bottom action card instead of the full metadata/apply panel covering the wallpaper. Dense metadata, palette, tags, and extended actions remain available from Details, with a clear Show image action to collapse the panel again.
+
 ## v6.18.0
 - **Sound source cleanup**: Sounds browsing and search now aggregate only Freesound, Audius, and YouTube, removing Aura Picks/bundled results, ccMixter, SoundCloud, and the old Openverse fallback from the user-facing sound feed.
 - **YouTube readiness**: Opening or clearing the YouTube sounds tab now loads a default YouTube query automatically, and YouTube play buttons show a loading spinner plus clearer copy while the stream resolves or buffers before playback starts.
