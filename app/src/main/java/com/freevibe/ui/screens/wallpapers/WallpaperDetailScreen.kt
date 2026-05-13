@@ -30,6 +30,7 @@ import kotlin.math.absoluteValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -208,6 +209,10 @@ fun WallpaperDetailScreen(
     var showApplyOptions by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showCollectionPicker by remember { mutableStateOf(false) }
+    var showDetailsPanel by remember { mutableStateOf(false) }
+    LaunchedEffect(wp.stableKey()) {
+        showDetailsPanel = false
+    }
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -318,6 +323,7 @@ fun WallpaperDetailScreen(
                         .padding(horizontal = 14.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (showDetailsPanel) {
                     GlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -342,6 +348,12 @@ fun WallpaperDetailScreen(
                                         tint = MaterialTheme.colorScheme.secondary,
                                     )
                                 }
+                            }
+                            TextButton(
+                                onClick = { showDetailsPanel = false },
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text("Show image")
                             }
                         }
                         Spacer(Modifier.height(14.dp))
@@ -578,6 +590,33 @@ fun WallpaperDetailScreen(
                             )
                         }
                     }
+                    } else {
+                        CompactWallpaperOverlayCard(
+                            wallpaper = wp,
+                            isFavorite = isFavorite,
+                            voteCount = voteCount,
+                            isApplying = state.isApplying,
+                            onApplyClick = { showApplyOptions = true },
+                            onPreview = { onPreview(wp) },
+                            onShowDetails = { showDetailsPanel = true },
+                            onToggleFavorite = { viewModel.toggleFavorite(wp) },
+                            onDownload = { viewModel.downloadWallpaper(wp) },
+                            onFindSimilar = { onFindSimilar(wp) },
+                            onShare = {
+                                val shareUrl = wp.sourcePageUrl.ifEmpty { wp.fullUrl }
+                                if (shareUrl.isBlank()) return@CompactWallpaperOverlayCard
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareUrl)
+                                }
+                                try {
+                                    context.startActivity(Intent.createChooser(intent, "Share wallpaper"))
+                                } catch (_: Exception) {}
+                            },
+                            onHide = { viewModel.downvote(wp.stableKey()) },
+                            onMore = { showMoreMenu = true },
+                        )
+                    }
                 }
             }
 
@@ -658,6 +697,155 @@ private fun WallpaperImage(url: String, modifier: Modifier = Modifier) {
                 }
             }
             else -> SubcomposeAsyncImageContent()
+        }
+    }
+}
+
+@Composable
+private fun CompactWallpaperOverlayCard(
+    wallpaper: Wallpaper,
+    isFavorite: Boolean,
+    voteCount: Int,
+    isApplying: Boolean,
+    onApplyClick: () -> Unit,
+    onPreview: () -> Unit,
+    onShowDetails: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onDownload: () -> Unit,
+    onFindSimilar: () -> Unit,
+    onShare: () -> Unit,
+    onHide: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val actionsScroll = rememberScrollState()
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        highlightHeight = 72.dp,
+        shadowElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SourceBadge(wallpaper.source.name)
+                    if (voteCount > 0) {
+                        DetailInfoChip("${formatCompactCount(voteCount)} likes")
+                    }
+                }
+                Text(
+                    text = wallpaperDetailTitle(wallpaper),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = wallpaperDetailSubtitle(wallpaper),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            DetailTopIconButton(
+                icon = Icons.Default.MoreHoriz,
+                contentDescription = "More wallpaper actions",
+                onClick = onMore,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Button(
+                onClick = onApplyClick,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                enabled = !isApplying,
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                if (isApplying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(Icons.Default.Wallpaper, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Set")
+                }
+            }
+            FilledTonalButton(
+                onClick = onPreview,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Icon(Icons.Default.Visibility, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Preview")
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(actionsScroll),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DetailActionPill(
+                icon = Icons.Default.Info,
+                label = "Details",
+                tint = MaterialTheme.colorScheme.secondary,
+                onClick = onShowDetails,
+            )
+            DetailActionPill(
+                icon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                label = if (isFavorite) "Saved" else "Save",
+                tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                onClick = onToggleFavorite,
+            )
+            DetailActionPill(
+                icon = Icons.Default.Download,
+                label = "Download",
+                tint = MaterialTheme.colorScheme.primary,
+                onClick = onDownload,
+            )
+            DetailActionPill(
+                icon = Icons.Default.ImageSearch,
+                label = "Similar",
+                tint = MaterialTheme.colorScheme.secondary,
+                onClick = onFindSimilar,
+            )
+            DetailActionPill(
+                icon = Icons.Default.Share,
+                label = "Share",
+                tint = MaterialTheme.colorScheme.primary,
+                onClick = onShare,
+            )
+            DetailActionPill(
+                icon = Icons.Default.ThumbDown,
+                label = "Hide",
+                tint = MaterialTheme.colorScheme.error,
+                onClick = onHide,
+            )
         }
     }
 }
