@@ -4,6 +4,10 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.18.0
+- **Sound source cleanup**: Sounds browsing and search now aggregate only Freesound, Audius, and YouTube, removing Aura Picks/bundled results, ccMixter, SoundCloud, and the old Openverse fallback from the user-facing sound feed.
+- **YouTube readiness**: Opening or clearing the YouTube sounds tab now loads a default YouTube query automatically, and YouTube play buttons show a loading spinner plus clearer copy while the stream resolves or buffers before playback starts.
+
 ## v6.17.0
 - **Secondary-flow premium polish**: refined the post-browse UX for sound detail, contact assignment, wallpaper preview, video preview, wallpaper edit/crop, and sound trim/edit flows so recovery, permission, loading, empty, and action states now match the v6.16 design system instead of falling back to ad hoc centered spinners and copy.
 - **First-run finish**: tightened onboarding status labels, feature badges, page indicators, and navigation buttons to the same rectangular 4-12dp shape language, and simplified the first welcome page so the primary CTA is not crowded by a partially visible feature card.

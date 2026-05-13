@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -639,8 +641,13 @@ private fun soundsEmptyState(
 ): Triple<androidx.compose.ui.graphics.vector.ImageVector, String, String?> = when {
     selectedTab == SoundTab.YOUTUBE && query.isBlank() -> Triple(
         Icons.Default.SmartDisplay,
-        "Search YouTube or paste a video URL",
-        "Import audio from a specific video or try a short search like calm ringtone.",
+        "Loading YouTube sounds",
+        "Aura will load a default YouTube search here. You can also paste a video URL.",
+    )
+    selectedTab == SoundTab.YOUTUBE -> Triple(
+        Icons.Default.SmartDisplay,
+        "No YouTube audio found",
+        "Try another search or paste a specific video URL.",
     )
     selectedTab == SoundTab.COMMUNITY -> Triple(
         Icons.Default.UploadFile,
@@ -787,6 +794,12 @@ private fun SoundCard(
         !(sound.source == ContentSource.BUNDLED && sound.uploaderName == "Aura Picks")
     val (sourceLabel, sourceColor) = soundSourceTone(sound.source)
     val badges = remember(sound, tab) { soundBadges(sound, tab) }
+    val playButtonDescription = when {
+        isResolving && sound.source == ContentSource.YOUTUBE -> "Loading YouTube audio"
+        isResolving -> "Preparing audio"
+        isPlaying -> "Pause"
+        else -> "Play"
+    }
     Surface(
         color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
         shape = RoundedCornerShape(12.dp),
@@ -810,6 +823,7 @@ private fun SoundCard(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
+                        .semantics { contentDescription = playButtonDescription }
                         .background(
                             if (isPlaying) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceContainerHigh
@@ -820,7 +834,7 @@ private fun SoundCard(
                     } else {
                         Icon(
                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = playButtonDescription,
                             tint = if (isPlaying) Color.White else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(20.dp),
                         )
@@ -908,7 +922,7 @@ private fun SoundCard(
             if (isResolving) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Resolving audio...",
+                    if (sound.source == ContentSource.YOUTUBE) "Loading YouTube audio..." else "Preparing audio...",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                     modifier = Modifier.padding(start = 56.dp),
