@@ -46,12 +46,9 @@ private val contentSources = listOf(
     OssLicense("Reddit", "https://www.reddit.com/dev/api/", "User-owned", "Wallpaper & video subreddits"),
     OssLicense("Pexels", "https://www.pexels.com/api/", "Pexels License", "Photos & videos"),
     OssLicense("Pixabay", "https://pixabay.com/api/docs/", "Pixabay License", "Photos & videos"),
-    OssLicense("Freesound", "https://freesound.org/docs/api/", "Various CC", "Sound search"),
-    OssLicense("Openverse", "https://api.openverse.org/", "Various CC", "Audio aggregator (including Jamendo/Wikimedia)"),
-    OssLicense("Audius", "https://docs.audius.co/api/", "Provider-defined", "Public streamable music catalog"),
-    OssLicense("ccMixter", "https://ccmixter.org/query-api", "Various CC", "Creative Commons audio catalog"),
+    OssLicense("YouTube", "https://www.youtube.com/", "Provider-defined", "Active sound feed and video wallpapers"),
     OssLicense("NewPipe Extractor", "https://github.com/TeamNewPipe/NewPipeExtractor", "GPL-3.0", "YouTube search"),
-    OssLicense("SoundCloud", "https://developers.soundcloud.com/", "Various CC", "CC-licensed audio"),
+    OssLicense("Freesound", "https://freesound.org/docs/api/", "Various CC", "Legacy sound attribution"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

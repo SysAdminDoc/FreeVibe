@@ -92,7 +92,6 @@ fun SettingsScreen(
     val wallhavenApiKey by viewModel.wallhavenApiKey.collectAsStateWithLifecycle()
     val pexelsApiKey by viewModel.pexelsApiKey.collectAsStateWithLifecycle()
     val pixabayApiKey by viewModel.pixabayApiKey.collectAsStateWithLifecycle()
-    val freesoundApiKey by viewModel.freesoundApiKey.collectAsStateWithLifecycle()
     val stabilityAiKey by viewModel.stabilityAiKey.collectAsStateWithLifecycle()
     val showSketchyContent by viewModel.showSketchyContent.collectAsStateWithLifecycle()
     val showNsfwContent by viewModel.showNsfwContent.collectAsStateWithLifecycle()
@@ -242,10 +241,9 @@ fun SettingsScreen(
         wallhavenApiKey,
         pexelsApiKey,
         pixabayApiKey,
-        freesoundApiKey,
         stabilityAiKey,
     ) {
-        listOf(wallhavenApiKey, pexelsApiKey, pixabayApiKey, freesoundApiKey, stabilityAiKey).count { it.isNotBlank() }
+        listOf(wallhavenApiKey, pexelsApiKey, pixabayApiKey, stabilityAiKey).count { it.isNotBlank() }
     }
 
     Column(
@@ -866,7 +864,7 @@ fun SettingsScreen(
             SettingsItem(
                 icon = Icons.Default.LibraryMusic,
                 title = "Sound sources",
-                subtitle = "Review the providers Aura uses for search, downloads, and attributions",
+                subtitle = "YouTube powers the sound feed; community uploads and legacy attributions remain documented",
                 onClick = onLicensesClick,
             )
         }
@@ -1024,49 +1022,6 @@ fun SettingsScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showPixabayKey = false }) { Text("Cancel") }
-                    },
-                )
-            }
-            var showFreesoundKey by remember { mutableStateOf(false) }
-            SettingsItem(
-                icon = Icons.Default.Key,
-                title = "Freesound API Key",
-                subtitle = if (freesoundApiKey.isBlank()) {
-                    "Optional: higher limits for Freesound v2 (freesound.org/docs/api)"
-                } else {
-                    "Connected for Freesound v2 searches and similar-sound lookup"
-                },
-                onClick = { showFreesoundKey = true },
-            )
-            if (showFreesoundKey) {
-                var keyText by remember { mutableStateOf(freesoundApiKey) }
-                AlertDialog(
-                    onDismissRequest = { showFreesoundKey = false },
-                    title = { Text("Freesound API Key") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                "Add your Freesound token for higher search limits and more reliable related-sound results.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            OutlinedTextField(
-                                value = keyText,
-                                onValueChange = { keyText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("Paste API key here") },
-                                singleLine = true,
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            viewModel.setFreesoundKey(keyText.trim())
-                            showFreesoundKey = false
-                        }) { Text("Save") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showFreesoundKey = false }) { Text("Cancel") }
                     },
                 )
             }

@@ -226,7 +226,7 @@ fun SoundsScreen(
                         CompactSearchField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it; showSearchHistory = it.isEmpty() },
-                            placeholder = if (isYouTubeTab) "Search YouTube or paste URL..." else "Search sounds or artists",
+                            placeholder = if (isYouTubeTab) "Search YouTube or paste URL..." else "Search YouTube sounds",
                             leadingIcon = if (isYouTubeTab) Icons.Default.SmartDisplay else Icons.Default.Search,
                             leadingTint = if (isYouTubeTab) Color(0xFFFF6A5B) else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
@@ -290,7 +290,7 @@ fun SoundsScreen(
                     AuraStateCard(
                         icon = Icons.Default.CloudOff,
                         title = "Sounds could not refresh",
-                        description = state.error ?: "Aura could not reach the selected audio sources. Retry, or switch tabs to keep browsing cached picks.",
+                        description = state.error ?: "Aura could not reach YouTube audio search. Retry, or switch tabs to keep browsing cached picks.",
                         tone = MaterialTheme.colorScheme.error,
                         primaryAction = AuraStateAction(
                             label = "Retry",
@@ -597,7 +597,7 @@ private fun SoundsList(
                     AuraStateCard(
                         icon = Icons.Default.GraphicEq,
                         title = "Tuning the sound feed",
-                        description = "Aura is checking preview availability and ranking clean, usable audio before showing results.",
+                        description = "Aura is checking YouTube clip length and preview availability before showing ringtone-ready results.",
                     )
                     ShimmerSoundList(Modifier.fillMaxWidth())
                 }
@@ -657,12 +657,12 @@ private fun soundsEmptyState(
     selectedTab == SoundTab.SEARCH && query.isNotBlank() -> Triple(
         Icons.Default.MusicOff,
         "No sounds found for \"$query\"",
-        "Try fewer words, a broader mood, or another source tab.",
+        "Try fewer words or a more direct YouTube sound search.",
     )
     else -> Triple(
         Icons.Default.MusicOff,
         "No sounds found",
-        "Try another tab or switch to a different quality filter.",
+        "Try another sound type or switch to a different quality filter.",
     )
 }
 

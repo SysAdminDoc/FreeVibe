@@ -66,7 +66,7 @@ class SoundsViewModelTest {
     }
 
     @Test
-    fun `initial mixed load does not advertise more pages from one-shot sources`() = runTest(dispatcher) {
+    fun `initial sound feed uses youtube only and does not advertise pagination`() = runTest(dispatcher) {
         val youtubeRepo = mockk<YouTubeRepository>()
         val freesoundRepo = mockk<FreesoundRepository>()
         val freesoundV2Repo = mockk<FreesoundV2Repository>()
@@ -83,9 +83,18 @@ class SoundsViewModelTest {
             soundCloudRepo = soundCloudRepo,
         )
 
-        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns emptySoundResult()
-        coEvery { freesoundRepo.search(any(), any(), any(), any()) } returns emptySoundResult()
-        coEvery { soundCloudRepo.search(any(), any(), any(), any(), any()) } returns emptySoundResult()
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns SearchResult(
+            items = listOf(testSound("yt_focus", ContentSource.YOUTUBE, "Aura Focus Tone")),
+            totalCount = 1,
+            currentPage = 1,
+            hasMore = true,
+        )
+        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns SearchResult(
+            items = listOf(testSound("fs_focus", ContentSource.FREESOUND, "Freesound Focus Tone")),
+            totalCount = 1,
+            currentPage = 1,
+            hasMore = true,
+        )
         coEvery { audiusRepo.search(any(), any(), any(), any()) } returns SearchResult(
             items = listOf(testSound("au_focus", ContentSource.AUDIUS, "Aura Focus Tone")),
             totalCount = 1,
@@ -111,8 +120,10 @@ class SoundsViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.state.value
-        assertEquals(setOf("au_focus"), state.sounds.map { it.id }.toSet())
+        assertEquals(setOf("yt_focus"), state.sounds.map { it.id }.toSet())
         assertFalse(state.hasMore)
+        coVerify(exactly = 0) { freesoundV2Repo.search(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { audiusRepo.search(any(), any(), any(), any()) }
     }
 
     @Test
@@ -125,7 +136,7 @@ class SoundsViewModelTest {
         val soundCloudRepo = mockk<SoundCloudRepository>()
         val audioPreviewCache = mockk<AudioPreviewCache>()
         val providerSounds = (1..6).map { index ->
-            testSound("fs_$index", ContentSource.FREESOUND, "Clean Tone $index")
+            testSound("yt_$index", ContentSource.YOUTUBE, "Clean Tone $index")
         }
 
         stubCommonDependencies(
@@ -136,7 +147,7 @@ class SoundsViewModelTest {
             ccMixterRepo = ccMixterRepo,
             soundCloudRepo = soundCloudRepo,
         )
-        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns SearchResult(
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns SearchResult(
             items = providerSounds,
             totalCount = providerSounds.size,
             currentPage = 1,
@@ -166,7 +177,7 @@ class SoundsViewModelTest {
     }
 
     @Test
-    fun `loadMore skips one-shot Audius after first page`() = runTest(dispatcher) {
+    fun `loadMore is disabled for youtube sound feed`() = runTest(dispatcher) {
         val youtubeRepo = mockk<YouTubeRepository>()
         val freesoundRepo = mockk<FreesoundRepository>()
         val freesoundV2Repo = mockk<FreesoundV2Repository>()
@@ -183,23 +194,8 @@ class SoundsViewModelTest {
             soundCloudRepo = soundCloudRepo,
         )
 
-        coEvery { freesoundV2Repo.search(any(), any(), any(), 1, any()) } returns SearchResult(
-            items = listOf(testSound("fs_page1", ContentSource.FREESOUND, "Morning Bell")),
-            totalCount = 1,
-            currentPage = 1,
-            hasMore = true,
-        )
-        coEvery { freesoundV2Repo.search(any(), any(), any(), 2, any()) } returns emptySoundResult(page = 2)
-        coEvery { freesoundRepo.search(any(), any(), any(), any()) } returns emptySoundResult()
-        coEvery { soundCloudRepo.search(any(), any(), any(), any(), any()) } returns emptySoundResult()
-        coEvery { audiusRepo.search(any(), any(), any(), any()) } returns SearchResult(
-            items = listOf(testSound("au_page1", ContentSource.AUDIUS, "Bright Pulse")),
-            totalCount = 1,
-            currentPage = 1,
-            hasMore = true,
-        )
-        coEvery { ccMixterRepo.search(any(), any(), any(), any()) } returns SearchResult(
-            items = listOf(testSound("ccm_page1", ContentSource.CCMIXTER, "Bright Pulse Mix")),
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns SearchResult(
+            items = listOf(testSound("yt_page1", ContentSource.YOUTUBE, "Morning Bell")),
             totalCount = 1,
             currentPage = 1,
             hasMore = true,
@@ -215,15 +211,16 @@ class SoundsViewModelTest {
         )
 
         advanceUntilIdle()
-        assertTrue(viewModel.state.value.hasMore)
+        assertEquals(setOf("yt_page1"), viewModel.state.value.sounds.map { it.id }.toSet())
+        assertFalse(viewModel.state.value.hasMore)
+        clearMocks(youtubeRepo, answers = false, recordedCalls = true)
 
         viewModel.loadMore()
         advanceUntilIdle()
 
-        assertEquals(setOf("fs_page1", "au_page1"), viewModel.state.value.sounds.map { it.id }.toSet())
+        assertEquals(setOf("yt_page1"), viewModel.state.value.sounds.map { it.id }.toSet())
         assertFalse(viewModel.state.value.hasMore)
-        coVerify(exactly = 2) { audiusRepo.search(any(), any(), any(), any()) }
-        coVerify(exactly = 0) { ccMixterRepo.search(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { youtubeRepo.searchSounds(any(), any(), any(), any()) }
     }
 
     @Test
@@ -287,7 +284,7 @@ class SoundsViewModelTest {
             ccMixterRepo = ccMixterRepo,
             soundCloudRepo = soundCloudRepo,
         )
-        coEvery { youtubeRepo.searchSounds("ringtone search", any(), any(), any()) } returns SearchResult(
+        coEvery { youtubeRepo.searchSounds("Ringtones", any(), any(), any()) } returns SearchResult(
             items = listOf(testSound("yt_default", ContentSource.YOUTUBE, "Default Loop")),
             totalCount = 1,
             currentPage = 1,
@@ -311,10 +308,50 @@ class SoundsViewModelTest {
 
         val state = viewModel.state.value
         assertEquals(SoundTab.YOUTUBE, state.selectedTab)
-        assertEquals("ringtone search", state.query)
+        assertEquals("Ringtones", state.query)
         assertEquals(listOf("yt_default"), state.sounds.map { it.id })
         assertFalse(state.hasMore)
-        coVerify(exactly = 1) { youtubeRepo.searchSounds("ringtone search", 600, 0, listOf("mix", "podcast")) }
+        coVerify(exactly = 1) { youtubeRepo.searchSounds("Ringtones", 45, 5, listOf("mix", "podcast")) }
+    }
+
+    @Test
+    fun `notification tab uses youtube queries with short duration cap`() = runTest(dispatcher) {
+        val youtubeRepo = mockk<YouTubeRepository>()
+        val freesoundRepo = mockk<FreesoundRepository>()
+        val freesoundV2Repo = mockk<FreesoundV2Repository>()
+        val audiusRepo = mockk<AudiusRepository>()
+        val ccMixterRepo = mockk<CcMixterRepository>()
+        val soundCloudRepo = mockk<SoundCloudRepository>()
+
+        stubCommonDependencies(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        val viewModel = createViewModel(
+            youtubeRepo = youtubeRepo,
+            freesoundRepo = freesoundRepo,
+            freesoundV2Repo = freesoundV2Repo,
+            audiusRepo = audiusRepo,
+            ccMixterRepo = ccMixterRepo,
+            soundCloudRepo = soundCloudRepo,
+        )
+
+        advanceUntilIdle()
+        clearMocks(youtubeRepo, answers = false, recordedCalls = true)
+
+        viewModel.selectTab(SoundTab.NOTIFICATIONS)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { youtubeRepo.searchSounds("Notifications", 8, 0, listOf("mix", "podcast")) }
+        coVerify(exactly = 1) { youtubeRepo.searchSounds("notification sound effect short", 8, 0, listOf("mix", "podcast")) }
+        coVerify(exactly = 1) { youtubeRepo.searchSounds("phone notification sound effect", 8, 0, listOf("mix", "podcast")) }
+        coVerify(exactly = 0) { audiusRepo.search(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { freesoundV2Repo.search(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -606,7 +643,7 @@ class SoundsViewModelTest {
         val audiusRepo = mockk<AudiusRepository>()
         val ccMixterRepo = mockk<CcMixterRepository>()
         val soundCloudRepo = mockk<SoundCloudRepository>()
-        val providerSound = testSound("fs_keep", ContentSource.FREESOUND, "Clean Bell")
+        val providerSound = testSound("yt_keep", ContentSource.YOUTUBE, "Clean Bell")
 
         stubCommonDependencies(
             youtubeRepo = youtubeRepo,
@@ -616,14 +653,11 @@ class SoundsViewModelTest {
             ccMixterRepo = ccMixterRepo,
             soundCloudRepo = soundCloudRepo,
         )
-        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returnsMany listOf(
-            SearchResult(
-                items = listOf(providerSound),
-                totalCount = 1,
-                currentPage = 1,
-                hasMore = false,
-            ),
-            emptySoundResult(),
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns SearchResult(
+            items = listOf(providerSound),
+            totalCount = 1,
+            currentPage = 1,
+            hasMore = false,
         )
 
         val viewModel = createViewModel(
@@ -636,13 +670,15 @@ class SoundsViewModelTest {
         )
 
         advanceUntilIdle()
-        assertEquals(listOf("fs_keep"), viewModel.state.value.sounds.map { it.id })
+        assertEquals(listOf("yt_keep"), viewModel.state.value.sounds.map { it.id })
+
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns emptySoundResult()
 
         viewModel.refresh()
         advanceUntilIdle()
 
         val state = viewModel.state.value
-        assertEquals(listOf("fs_keep"), state.sounds.map { it.id })
+        assertEquals(listOf("yt_keep"), state.sounds.map { it.id })
         assertEquals(null, state.error)
     }
 
@@ -664,14 +700,11 @@ class SoundsViewModelTest {
             soundCloudRepo = soundCloudRepo,
         )
 
-        coEvery { freesoundV2Repo.search(match { it.contains("focus") }, any(), any(), any(), any()) } returnsMany listOf(
-            SearchResult(
-                items = listOf(testSound("focus_keep", ContentSource.FREESOUND, "Focus Keep")),
-                totalCount = 1,
-                currentPage = 1,
-                hasMore = true,
-            ),
-            emptySoundResult(),
+        coEvery { youtubeRepo.searchSounds(match { it.contains("focus") }, any(), any(), any()) } returns SearchResult(
+            items = listOf(testSound("focus_keep", ContentSource.YOUTUBE, "Focus Keep")),
+            totalCount = 1,
+            currentPage = 1,
+            hasMore = true,
         )
 
         val viewModel = createViewModel(
@@ -688,7 +721,9 @@ class SoundsViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf("focus_keep"), viewModel.state.value.sounds.map { it.id })
-        assertTrue(viewModel.state.value.hasMore)
+        assertFalse(viewModel.state.value.hasMore)
+
+        coEvery { youtubeRepo.searchSounds(match { it.contains("focus") }, any(), any(), any()) } returns emptySoundResult()
 
         viewModel.refresh()
         advanceUntilIdle()
@@ -707,7 +742,7 @@ class SoundsViewModelTest {
         val audiusRepo = mockk<AudiusRepository>()
         val ccMixterRepo = mockk<CcMixterRepository>()
         val soundCloudRepo = mockk<SoundCloudRepository>()
-        val providerSound = testSound("fs_keep", ContentSource.FREESOUND, "Clean Bell")
+        val providerSound = testSound("yt_keep", ContentSource.YOUTUBE, "Clean Bell")
 
         stubCommonDependencies(
             youtubeRepo = youtubeRepo,
@@ -717,7 +752,7 @@ class SoundsViewModelTest {
             ccMixterRepo = ccMixterRepo,
             soundCloudRepo = soundCloudRepo,
         )
-        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns SearchResult(
+        coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns SearchResult(
             items = listOf(providerSound),
             totalCount = 1,
             currentPage = 1,
@@ -734,17 +769,15 @@ class SoundsViewModelTest {
         )
 
         advanceUntilIdle()
-        assertEquals(listOf("fs_keep"), viewModel.state.value.sounds.map { it.id })
+        assertEquals(listOf("yt_keep"), viewModel.state.value.sounds.map { it.id })
 
-        coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } throws UnknownHostException()
-        coEvery { audiusRepo.search(any(), any(), any(), any()) } throws UnknownHostException()
         coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } throws UnknownHostException()
 
         viewModel.refresh()
         advanceUntilIdle()
 
         val state = viewModel.state.value
-        assertEquals(listOf("fs_keep"), state.sounds.map { it.id })
+        assertEquals(listOf("yt_keep"), state.sounds.map { it.id })
         assertEquals("No internet connection. Showing your last good results.", state.error)
     }
 
@@ -869,9 +902,9 @@ class SoundsViewModelTest {
         val prefs = mockk<PreferencesManager>()
         every { prefs.autoPreviewSounds } returns flowOf(true)
         every { prefs.soundPreviewVolume } returns flowOf(0.7f)
-        every { prefs.ytSoundQueryRingtones } returns flowOf("ringtone search")
-        every { prefs.ytSoundQueryNotifications } returns flowOf("notification search")
-        every { prefs.ytSoundQueryAlarms } returns flowOf("alarm search")
+        every { prefs.ytSoundQueryRingtones } returns flowOf("Ringtones")
+        every { prefs.ytSoundQueryNotifications } returns flowOf("Notifications")
+        every { prefs.ytSoundQueryAlarms } returns flowOf("Alarms")
         every { prefs.ytSoundBlockedWords } returns flowOf("mix,podcast")
 
         val searchHistoryRepo = mockk<SearchHistoryRepository>()
@@ -907,10 +940,6 @@ class SoundsViewModelTest {
         return SoundsViewModel(
             context = mockk<Context>(relaxed = true),
             youtubeRepo = youtubeRepo,
-            freesoundRepo = freesoundRepo,
-            freesoundV2Repo = freesoundV2Repo,
-            audiusRepo = audiusRepo,
-            ccMixterRepo = ccMixterRepo,
             favoritesRepo = favoritesRepo,
             soundApplier = mockk<SoundApplier>(relaxed = true),
             downloadManager = downloadManagerOverride ?: mockk<DownloadManager>(relaxed = true),
@@ -922,7 +951,6 @@ class SoundsViewModelTest {
             bundledContent = bundledContent,
             audioPlaybackManager = audioPlaybackManager,
             audioPreviewCache = audioPreviewCache,
-            soundCloudRepo = soundCloudRepo,
             uploadRepo = mockk<UploadRepository>(relaxed = true),
             soundUrlResolver = soundUrlResolver,
             seasonalContentManager = SeasonalContentManager(),
@@ -939,6 +967,8 @@ class SoundsViewModelTest {
     ) {
         every { youtubeRepo.isCached(any()) } returns false
         coEvery { youtubeRepo.searchSounds(any(), any(), any(), any()) } returns emptySoundResult()
+        coEvery { youtubeRepo.getAudioPreviewUrl(any()) } returns null
+        coEvery { youtubeRepo.getAudioStreamUrl(any()) } returns null
         coEvery { freesoundRepo.search(any(), any(), any(), any()) } returns emptySoundResult()
         coEvery { freesoundV2Repo.search(any(), any(), any(), any(), any()) } returns emptySoundResult()
         coEvery { audiusRepo.search(any(), any(), any(), any()) } returns emptySoundResult()
