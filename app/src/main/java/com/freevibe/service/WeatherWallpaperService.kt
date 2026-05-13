@@ -38,6 +38,14 @@ class WeatherWallpaperService : WallpaperService() {
         private var tintIntensity = 0.3f
         private var tintLat = 0.0
         private var tintLon = 0.0
+        private var tintLocationPresent = false
+
+        // Cached tint paint. Rebuilding ColorMatrix + Paint every frame at 30 FPS was
+        // ~30 allocations/sec under steady-state — we now rebuild only when the input
+        // hour rounds to a different 5-minute bucket. Reset to null whenever any input
+        // changes (intensity, location, enable flag).
+        private var tintPaint: Paint? = null
+        private var tintPaintBucket: Int = Int.MIN_VALUE
 
         private val drawRunner = Runnable { draw() }
 
@@ -161,8 +169,62 @@ class WeatherWallpaperService : WallpaperService() {
             val prefs = getSharedPreferences("freevibe_weather_wp", MODE_PRIVATE)
             tintEnabled = prefs.getBoolean("adaptive_tint_enabled", false)
             tintIntensity = prefs.getFloat("adaptive_tint_intensity", 0.3f)
-            tintLat = prefs.getLong("location_lat", 0L).toDouble()
-            tintLon = prefs.getLong("location_lon", 0L).toDouble()
+            // Prefer the Float-precision keys (current schema). Fall back to the legacy
+            // Long-truncated keys only when a fresh weather update hasn't run yet so
+            // existing users don't lose tinting between an upgrade and the next 30-min
+            // worker tick. location_present is the canonical "we have coordinates" flag.
+            tintLocationPresent = prefs.getBoolean("location_present", false)
+            tintLat = if (tintLocationPresent) {
+                prefs.getFloat("location_lat", 0f).toDouble()
+            } else {
+                // Legacy fallback for users who upgraded mid-cycle.
+                runCatching { prefs.getLong("location_lat", 0L).toDouble() }.getOrDefault(0.0)
+            }
+            tintLon = if (tintLocationPresent) {
+                prefs.getFloat("location_lon", 0f).toDouble()
+            } else {
+                runCatching { prefs.getLong("location_lon", 0L).toDouble() }.getOrDefault(0.0)
+            }
+            // Invalidate the cached tint paint — any of these inputs may have changed.
+            tintPaint = null
+            tintPaintBucket = Int.MIN_VALUE
+        }
+
+        /**
+         * Returns a cached [Paint] with the current adaptive-tint ColorMatrix applied,
+         * or null if tinting is disabled / no location is present. The Paint is rebuilt
+         * only when the current local hour crosses a 5-minute bucket, so the per-frame
+         * cost at 30 FPS is a couple of double comparisons instead of two new objects.
+         */
+        private fun currentTintPaint(): Paint? {
+            if (!tintEnabled || !tintLocationPresent) return null
+            val hour = SolarCalculator.currentHour()
+            // 5-min buckets: 12 per hour, 288 per day. The tintOffsets curve has steps
+            // every ~30 min so 5-min granularity is more than smooth enough.
+            val bucket = (hour * 12.0).toInt()
+            val cached = tintPaint
+            if (cached != null && bucket == tintPaintBucket) return cached
+            val sunTimes = SolarCalculator.sunTimes(tintLat, tintLon)
+            val offsets = SolarCalculator.tintOffsets(hour, sunTimes, tintIntensity)
+            if (offsets[0] == 0f && offsets[1] == 0f && offsets[2] == 0f) {
+                // Neutral midday — skip the ColorMatrix entirely so the bitmap draws
+                // with the same fast path as when tint is disabled.
+                tintPaint = null
+                tintPaintBucket = bucket
+                return null
+            }
+            val matrix = ColorMatrix().apply {
+                set(floatArrayOf(
+                    1f, 0f, 0f, 0f, offsets[0],
+                    0f, 1f, 0f, 0f, offsets[1],
+                    0f, 0f, 1f, 0f, offsets[2],
+                    0f, 0f, 0f, 1f, 0f,
+                ))
+            }
+            val paint = Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
+            tintPaint = paint
+            tintPaintBucket = bucket
+            return paint
         }
 
         private fun scheduleDraw() {
@@ -182,20 +244,7 @@ class WeatherWallpaperService : WallpaperService() {
                     // Draw wallpaper background
                     val bmp = synchronized(bitmapLock) { scaledBitmap }
                     if (bmp != null && !bmp.isRecycled) {
-                        val paint = if (tintEnabled && tintLat != 0.0 && tintLon != 0.0) {
-                            val sunTimes = SolarCalculator.sunTimes(tintLat, tintLon)
-                            val hour = SolarCalculator.currentHour()
-                            val (dR, dG, dB) = SolarCalculator.tintOffsets(hour, sunTimes, tintIntensity)
-                            val matrix = ColorMatrix().apply {
-                                set(floatArrayOf(
-                                    1f, 0f, 0f, 0f, dR,
-                                    0f, 1f, 0f, 0f, dG,
-                                    0f, 0f, 1f, 0f, dB,
-                                    0f, 0f, 0f, 1f, 0f,
-                                ))
-                            }
-                            Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
-                        } else null
+                        val paint = currentTintPaint()
                         canvas.drawBitmap(bmp, 0f, 0f, paint)
                     } else {
                         canvas.drawColor(android.graphics.Color.BLACK)

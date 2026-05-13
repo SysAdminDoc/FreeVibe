@@ -220,6 +220,13 @@ class SettingsViewModelTest {
             every { prefs.autoWallpaperRequiresCharging } returns flowOf(false)
             every { prefs.autoWallpaperRequiresWiFiOnly } returns flowOf(false)
             every { prefs.autoWallpaperRequiresIdle } returns flowOf(false)
+            // Added in v6.13/v6.14 — these StateFlow-backed VM fields fail-fast on
+            // first collection if not stubbed. Pre-existing test fixture gap caught
+            // during a deeper audit pass.
+            every { prefs.adaptiveTintIntensity } returns flowOf(0.3f)
+            every { prefs.darkModeWallpaperId } returns flowOf("") // Phase 6.2 dark slot
+            every { prefs.lightModeWallpaperId } returns flowOf("") // Phase 6.2 light slot
+            every { prefs.stabilityAiKey } returns flowOf("")       // Phase 3.1 AI
         }
 
     private fun waitForIdle(

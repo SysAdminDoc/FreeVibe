@@ -751,76 +751,38 @@ fun SettingsScreen(
                             }
                         }
                     },
-                    confirmButton = { TextButton(onClick = { showVfxPicker = false }) { Text("Cancel") } },
+                    // "Close" not "Cancel" — each radio click already commits the selection
+                    // synchronously, so there is nothing to cancel by the time this button
+                    // is reachable.
+                    confirmButton = { TextButton(onClick = { showVfxPicker = false }) { Text("Close") } },
                 )
             }
-            // Dark/light mode wallpaper pickers
-            if (showDarkModeWallpaperPicker && wallpaperHistory.isNotEmpty()) {
-                AlertDialog(
-                    onDismissRequest = { showDarkModeWallpaperPicker = false },
-                    title = { Text("Choose dark mode wallpaper") },
-                    text = {
-                        Column(modifier = Modifier.heightIn(max = 300.dp)) {
-                            LazyColumn {
-                                items(wallpaperHistory.take(10)) { entry ->
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
-                                                viewModel.setDarkModeWallpaperId(wallpaperId)
-                                                showDarkModeWallpaperPicker = false
-                                            }
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(entry.source, style = MaterialTheme.typography.labelMedium)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            entry.wallpaperId.take(20),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
+            // Dark/light mode wallpaper pickers.
+            // Earlier revision bailed silently when wallpaperHistory was empty, leaving the
+            // user clicking the slot card with no feedback. Now the dialog opens regardless
+            // and shows an explanatory empty state so the affordance isn't a dead click.
+            if (showDarkModeWallpaperPicker) {
+                WallpaperSlotPickerDialog(
+                    title = "Choose dark mode wallpaper",
+                    history = wallpaperHistory,
+                    onPick = { entry ->
+                        val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
+                        viewModel.setDarkModeWallpaperId(wallpaperId)
+                        showDarkModeWallpaperPicker = false
                     },
-                    confirmButton = { TextButton(onClick = { showDarkModeWallpaperPicker = false }) { Text("Cancel") } },
+                    onDismiss = { showDarkModeWallpaperPicker = false },
                 )
             }
-            if (showLightModeWallpaperPicker && wallpaperHistory.isNotEmpty()) {
-                AlertDialog(
-                    onDismissRequest = { showLightModeWallpaperPicker = false },
-                    title = { Text("Choose light mode wallpaper") },
-                    text = {
-                        Column(modifier = Modifier.heightIn(max = 300.dp)) {
-                            LazyColumn {
-                                items(wallpaperHistory.take(10)) { entry ->
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
-                                                viewModel.setLightModeWallpaperId(wallpaperId)
-                                                showLightModeWallpaperPicker = false
-                                            }
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(entry.source, style = MaterialTheme.typography.labelMedium)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            entry.wallpaperId.take(20),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
+            if (showLightModeWallpaperPicker) {
+                WallpaperSlotPickerDialog(
+                    title = "Choose light mode wallpaper",
+                    history = wallpaperHistory,
+                    onPick = { entry ->
+                        val wallpaperId = "${entry.source}|${entry.wallpaperId}|${entry.fullUrl}"
+                        viewModel.setLightModeWallpaperId(wallpaperId)
+                        showLightModeWallpaperPicker = false
                     },
-                    confirmButton = { TextButton(onClick = { showLightModeWallpaperPicker = false }) { Text("Cancel") } },
+                    onDismiss = { showLightModeWallpaperPicker = false },
                 )
             }
         }
@@ -2014,6 +1976,66 @@ private fun clearCacheConfirmation(cacheUsage: CacheUsageState): String =
         }
         append(". Downloaded files are not affected.")
     }
+
+/**
+ * Picker dialog for the dark/light mode wallpaper slot. Renders the wallpaper history
+ * list (most recent 10) or an explanatory empty state when the user hasn't applied any
+ * wallpapers yet — both branches use the same shell so the dialog never opens-then-
+ * silently-closes the way a top-level `if (history.isNotEmpty())` guard would.
+ */
+@Composable
+private fun WallpaperSlotPickerDialog(
+    title: String,
+    history: List<com.freevibe.data.model.WallpaperHistoryEntity>,
+    onPick: (com.freevibe.data.model.WallpaperHistoryEntity) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            if (history.isEmpty()) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Text(
+                        "No wallpapers applied yet",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Apply at least one wallpaper from the Wallpapers tab and it will show up here as a slot option.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Column(modifier = Modifier.heightIn(max = 300.dp)) {
+                    LazyColumn {
+                        items(history.take(10)) { entry ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPick(entry) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(entry.source, style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    entry.wallpaperId.take(20),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
 
 @Composable
 private fun SourcePickerDialog(

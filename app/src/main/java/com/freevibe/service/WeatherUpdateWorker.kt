@@ -35,15 +35,26 @@ class WeatherUpdateWorker @AssistedInject constructor(
 
             val weather = response.currentWeather ?: return Result.success()
 
-            // Store weather data for WeatherWallpaperService
+            // Store weather data for WeatherWallpaperService.
+            //
+            // Latitude/longitude are stored as Float — earlier revisions used
+            // putLong(location.first.toLong()) which truncated 39.7392 → 39 and silently
+            // disabled adaptive tint for anyone within 1° of the equator/prime meridian
+            // (the WallpaperService bails when lat/lon are both zero). Float gives ~7
+            // significant digits which is more than enough for solar-position math
+            // (sub-meter precision after the decimal). Long-bit-packed Double would be
+            // pixel-perfect but isn't needed here.
             applicationContext.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
                 .edit()
                 .putString("weather_effect", weather.weatherEffect.name)
                 .putFloat("wind_speed", weather.windSpeed.toFloat())
                 .putFloat("temperature", weather.temperature.toFloat())
                 .putInt("is_day", weather.isDay)
-                .putLong("location_lat", location.first.toLong())
-                .putLong("location_lon", location.second.toLong())
+                .putFloat("location_lat", location.first.toFloat())
+                .putFloat("location_lon", location.second.toFloat())
+                // Sentinel so a missing-location read in the service can be distinguished
+                // from a legitimate (0.0, 0.0) reading on Null Island.
+                .putBoolean("location_present", true)
                 .apply()
 
             Result.success()
