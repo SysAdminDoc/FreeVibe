@@ -8,7 +8,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
-import java.time.Year
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,19 +18,19 @@ class PreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     companion object {
-        fun defaultRingtoneQuery(year: Int = Year.now().value): String =
-            "best ringtone $year trending phone ringtone download"
+        fun defaultRingtoneQuery(): String =
+            "Ringtones"
 
         fun defaultNotificationQuery(): String =
-            "short notification sound effect beep chime ding alert"
+            "Notifications"
 
         fun defaultAlarmQuery(): String =
-            "alarm clock tone buzzer morning wake up sound"
+            "Alarms"
 
-        fun defaultTopHitQueries(year: Int = Year.now().value): List<String> = listOf(
-            "top songs this week $year ringtone",
-            "billboard hot 100 this week ringtone $year",
-            "most popular songs right now ringtone $year",
+        fun defaultTopHitQueries(): List<String> = listOf(
+            "Ringtones",
+            "phone ringtone sound effect",
+            "classic phone ringtones",
         )
     }
 

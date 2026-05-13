@@ -255,7 +255,7 @@ private fun FeaturesPage() {
     val features = listOf(
         Triple(Icons.Default.Wallpaper, "HD/4K Wallpapers", "5 sources: Wallhaven, Pexels, Pixabay, Reddit, Bing"),
         Triple(Icons.Default.VideoLibrary, "Video Wallpapers", "Pexels, Pixabay loops, YouTube, Reddit cinemagraphs"),
-        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "YouTube, Freesound, Openverse, Audius, ccMixter, trim & fade editor"),
+        Triple(Icons.Default.MusicNote, "Ringtones & Sounds", "YouTube sound search, short-clip filters, trim & fade editor"),
         Triple(Icons.Default.Schedule, "Smart Scheduler", "Auto-rotate by interval, source, or time of day"),
         Triple(Icons.Default.Cloud, "Weather Effects", "Rain, snow, fog overlay from real-time weather"),
         Triple(Icons.Default.DarkMode, "AMOLED Editor", "Black crush, vignette, grain, warmth + 10 presets"),

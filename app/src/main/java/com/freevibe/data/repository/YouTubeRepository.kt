@@ -57,6 +57,8 @@ class YouTubeRepository @Inject constructor(
             "top \\d+", "\\d+ best", "compilation", "mix 20\\d\\d", "playlist",
             "ranked", "tier list", "reaction", "review", "tutorial", "how to",
             "part \\d+", "episode", "ep\\.", "podcast", "interview", "live stream",
+            "timer", "countdown", "comparison", "quiz", "turn on notifications",
+            "turn off notifications", "enable notifications", "notification spam",
             "hindi", "telugu", "pack",
         ).map { Regex(it, RegexOption.IGNORE_CASE) }
     }
