@@ -283,7 +283,7 @@ fun VideoCropScreen(
                 },
                 modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
                 enabled = !isCropping && dimensionsReady,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
             ) {
                 if (isCropping) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)

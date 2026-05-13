@@ -80,7 +80,7 @@ fun WallpaperPreviewScreen(
                     Row(
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(2.dp),
                     ) {
@@ -145,7 +145,7 @@ private enum class PreviewMode { LOCK, HOME }
 private fun PreviewModeChip(label: String, active: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
     ) {
         Text(
@@ -270,7 +270,7 @@ private fun HomeMock(overlayTint: Color) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 10.dp)
-                .clip(RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color.Black.copy(alpha = 0.28f))
                 .padding(horizontal = 10.dp, vertical = 10.dp),
         ) {

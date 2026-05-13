@@ -245,7 +245,7 @@ fun WallpaperCropScreen(
                             }
                         },
                         label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.height(32.dp),
                     )
                 }

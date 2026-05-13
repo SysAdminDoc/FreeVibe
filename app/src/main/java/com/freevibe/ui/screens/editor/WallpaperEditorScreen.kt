@@ -2,7 +2,6 @@ package com.freevibe.ui.screens.editor
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -205,7 +204,7 @@ fun WallpaperEditorScreen(
                             viewModel.applyPreset(preset.b, preset.c, preset.s, preset.bl, preset.v, preset.g, preset.a, preset.w)
                         },
                         label = { Text(preset.name, style = MaterialTheme.typography.labelSmall) },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = SuggestionChipDefaults.suggestionChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ),

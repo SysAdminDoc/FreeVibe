@@ -7,12 +7,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -52,6 +50,7 @@ import com.freevibe.ui.screens.sounds.SoundsScreen
 import com.freevibe.ui.screens.wallpapers.WallpaperDetailScreen
 import com.freevibe.ui.screens.wallpapers.WallpapersScreen
 import com.freevibe.ui.screens.aigenerate.AiWallpaperScreen
+import com.freevibe.ui.components.CountBadge
 
 private const val PREFS_KEY = "freevibe_app"
 private const val ONBOARDING_DONE = "onboarding_complete"
@@ -167,35 +166,6 @@ fun FreeVibeRoot(
                 ),
             ),
     ) {
-        Box(
-            modifier = Modifier
-                .size(280.dp)
-                .offset(x = (-40).dp, y = (-72).dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .size(340.dp)
-                .offset(x = 180.dp, y = 420.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
-
         Scaffold(
             containerColor = Color.Transparent,
             snackbarHost = {
@@ -220,11 +190,11 @@ fun FreeVibeRoot(
                         contentAlignment = Alignment.Center,
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                             contentColor = MaterialTheme.colorScheme.onSurface,
                             tonalElevation = 0.dp,
-                            shadowElevation = 10.dp,
+                            shadowElevation = 5.dp,
                             border = BorderStroke(
                                 1.dp,
                                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
@@ -258,17 +228,16 @@ fun FreeVibeRoot(
                                         },
                                         icon = {
                                             if (screen == Screen.Favorites && favoritesCount > 0) {
-                                                BadgedBox(badge = {
-                                                    Badge(
-                                                        containerColor = MaterialTheme.colorScheme.primary,
-                                                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                                                    ) {
-                                                        Text(if (favoritesCount > 99) "99+" else "$favoritesCount")
-                                                    }
-                                                }) {
+                                                Box {
                                                     Icon(
                                                         imageVector = if (selected) screen.selectedIcon else screen.icon,
                                                         contentDescription = screen.title,
+                                                    )
+                                                    CountBadge(
+                                                        count = favoritesCount,
+                                                        modifier = Modifier
+                                                            .align(Alignment.TopEnd)
+                                                            .offset(x = 10.dp, y = (-7).dp),
                                                     )
                                                 }
                                             } else {
@@ -291,7 +260,7 @@ fun FreeVibeRoot(
                                             selectedTextColor = MaterialTheme.colorScheme.primary,
                                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                                            indicatorColor = Color.Transparent,
                                         ),
                                     )
                                 }

@@ -32,6 +32,7 @@ import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.CollectionExporter
 import com.freevibe.service.SelectedContentHolder
+import com.freevibe.ui.components.AuraStateCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -217,20 +218,12 @@ fun CollectionsScreen(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Folder,
-                            null,
-                            Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "This collection is empty",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    AuraStateCard(
+                        icon = Icons.Default.Folder,
+                        title = "This collection is empty",
+                        description = "Save wallpapers from detail pages to turn this into a curated set.",
+                        modifier = Modifier.padding(24.dp),
+                    )
                 }
             } else {
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -280,26 +273,12 @@ fun CollectionsScreen(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.CreateNewFolder,
-                            null,
-                            Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "No collections yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Save wallpapers from the detail screen",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        )
-                    }
+                    AuraStateCard(
+                        icon = Icons.Default.CreateNewFolder,
+                        title = "No collections yet",
+                        description = "Use collections to group wallpapers by mood, room, season, or setup.",
+                        modifier = Modifier.padding(24.dp),
+                    )
                 }
             } else {
                 LazyColumn(
@@ -342,7 +321,7 @@ private fun CollectionCard(
 
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(

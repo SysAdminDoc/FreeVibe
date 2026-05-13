@@ -127,7 +127,7 @@ fun AiWallpaperScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                 highlightHeight = 100.dp,
                 shadowElevation = 6.dp,
@@ -186,7 +186,7 @@ fun AiWallpaperScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 10.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     Text(
@@ -210,7 +210,7 @@ fun AiWallpaperScreen(
                             IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
                                 Icon(
                                     if (apiKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = null,
+                                    contentDescription = if (apiKeyVisible) "Hide API key" else "Show API key",
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
@@ -246,7 +246,7 @@ fun AiWallpaperScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 Text(
@@ -284,7 +284,7 @@ fun AiWallpaperScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 Text(
@@ -346,8 +346,8 @@ fun AiWallpaperScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 10.dp)
                         .aspectRatio(9f / 16f)
-                        .clip(RoundedCornerShape(18.dp)),
-                    shape = RoundedCornerShape(18.dp),
+                        .clip(RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
                 )
             }
 
@@ -370,14 +370,14 @@ fun AiWallpaperScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(9f / 16f)
-                                .clip(RoundedCornerShape(18.dp)),
+                                .clip(RoundedCornerShape(12.dp)),
                             contentScale = ContentScale.Crop,
                         ) {
                             when (painter.state) {
                                 is AsyncImagePainter.State.Loading -> {
                                     ShimmerBox(
                                         modifier = Modifier.fillMaxSize(),
-                                        shape = RoundedCornerShape(18.dp),
+                                        shape = RoundedCornerShape(12.dp),
                                     )
                                 }
                                 is AsyncImagePainter.State.Error -> {

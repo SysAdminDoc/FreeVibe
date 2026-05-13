@@ -21,6 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.DownloadEntity
 import com.freevibe.service.DownloadProgress
+import com.freevibe.ui.components.AuraStateCard
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -94,11 +95,12 @@ fun DownloadsScreen(
 
             if (displayList.isEmpty() && activeDownloads.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Download, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                        Spacer(Modifier.height(12.dp))
-                        Text("No downloads yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    AuraStateCard(
+                        icon = Icons.Default.Download,
+                        title = "No downloads yet",
+                        description = "Saved wallpapers, sounds, and active transfers will appear here with file health and quick-open status.",
+                        modifier = Modifier.padding(24.dp),
+                    )
                 }
             } else {
                 LazyColumn(

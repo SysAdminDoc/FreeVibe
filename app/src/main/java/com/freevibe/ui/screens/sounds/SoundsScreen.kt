@@ -43,9 +43,13 @@ import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.stableKey
+import com.freevibe.ui.components.AuraStateAction
+import com.freevibe.ui.components.AuraStateCard
 import com.freevibe.ui.components.CompactSearchField
+import com.freevibe.ui.components.CountBadge
 import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.SearchHistoryDropdown
+import com.freevibe.ui.components.ShimmerSoundList
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -205,7 +209,7 @@ fun SoundsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                 highlightHeight = 56.dp,
                 shadowElevation = 6.dp,
@@ -281,20 +285,20 @@ fun SoundsScreen(
             // Content
             Box(modifier = Modifier.fillMaxSize()) {
                 if (state.error != null && state.sounds.isEmpty() && displayTopHits.isEmpty() && !state.isLoading && !state.isRefreshing) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(Icons.Default.CloudOff, contentDescription = "Error", Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
-                        Spacer(Modifier.height(12.dp))
-                        Text(state.error ?: "Error", color = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.height(16.dp))
-                        FilledTonalButton(onClick = { viewModel.refresh() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Retry", Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Retry")
-                        }
-                    }
+                    AuraStateCard(
+                        icon = Icons.Default.CloudOff,
+                        title = "Sounds could not refresh",
+                        description = state.error ?: "Aura could not reach the selected audio sources. Retry, or switch tabs to keep browsing cached picks.",
+                        tone = MaterialTheme.colorScheme.error,
+                        primaryAction = AuraStateAction(
+                            label = "Retry",
+                            icon = Icons.Default.Refresh,
+                            onClick = { viewModel.refresh() },
+                        ),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
+                    )
                 } else {
                     PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { viewModel.refresh() }) {
                         SoundsList(
@@ -402,14 +406,14 @@ private fun SoundFilterButton(
         onClick = onClick,
         modifier = Modifier.size(44.dp),
     ) {
-        BadgedBox(
-            badge = {
-                if (filterCount > 0) {
-                    Badge(containerColor = MaterialTheme.colorScheme.primary) { Text("$filterCount") }
-                }
-            },
-        ) {
+        Box {
             Icon(Icons.Default.Tune, contentDescription = "Refine sounds", modifier = Modifier.size(18.dp))
+            CountBadge(
+                count = filterCount,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 10.dp, y = (-8).dp),
+            )
         }
     }
 }
@@ -584,8 +588,16 @@ private fun SoundsList(
         // Loading spinner
         if ((isLoading || isRefreshing) && sounds.isEmpty() && topHits.isEmpty()) {
             item(key = "loading", contentType = "loading") {
-                Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AuraStateCard(
+                        icon = Icons.Default.GraphicEq,
+                        title = "Tuning the sound feed",
+                        description = "Aura is checking preview availability and ranking clean, usable audio before showing results.",
+                    )
+                    ShimmerSoundList(Modifier.fillMaxWidth())
                 }
             }
         }
@@ -594,29 +606,18 @@ private fun SoundsList(
         if (!isLoading && !isRefreshing && sounds.isEmpty() && topHits.isEmpty()) {
             item(key = "empty") {
                 val (icon, title, supportingText) = soundsEmptyState(selectedTab, query)
-                Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(icon, contentDescription = title, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(12.dp))
-                    Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    supportingText?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 32.dp),
+                AuraStateCard(
+                    icon = icon,
+                    title = title,
+                    description = supportingText ?: "Try another source or adjust the quality filter.",
+                    primaryAction = if (selectedTab == SoundTab.COMMUNITY && onUploadClick != null) {
+                        AuraStateAction(
+                            label = "Upload sound",
+                            icon = Icons.Default.Upload,
+                            onClick = onUploadClick,
                         )
-                    }
-                    if (selectedTab == SoundTab.COMMUNITY && onUploadClick != null) {
-                        Spacer(Modifier.height(16.dp))
-                        FilledTonalButton(onClick = onUploadClick) {
-                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Upload a sound")
-                        }
-                    }
-                }
+                    } else null,
+                )
             }
         }
 
@@ -700,7 +701,7 @@ private fun SoundCollectionCard(
         modifier = Modifier
             .width(168.dp)
             .height(104.dp),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.78f),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
         shadowElevation = 4.dp,
@@ -712,7 +713,7 @@ private fun SoundCollectionCard(
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(10.dp),
                 color = accent.copy(alpha = 0.16f),
                 modifier = Modifier.size(34.dp),
             ) {
@@ -788,13 +789,13 @@ private fun SoundCard(
     val badges = remember(sound, tab) { soundBadges(sound, tab) }
     Surface(
         color = if (isPlaying) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f) else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
             1.dp,
             if (isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.24f),
         ),
-        shadowElevation = if (isPlaying) 12.dp else 6.dp,
+        shadowElevation = if (isPlaying) 6.dp else 2.dp,
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress),
     ) {
         Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 12.dp)) {
@@ -1039,7 +1040,7 @@ private fun QuickApplySheet(
             if (!canApply) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f)),
                 ) {
                     Row(
@@ -1081,7 +1082,7 @@ private fun QuickApplyRow(label: String, icon: androidx.compose.ui.graphics.vect
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.45f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
     ) {

@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.freevibe.data.model.FavoriteEntity
 import com.freevibe.data.model.stableKey
+import com.freevibe.ui.components.AuraStateCard
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -258,7 +259,11 @@ fun FavoritesScreen(
             when (selectedTab) {
                 0 -> {
                     if (sortedWallpapers.isEmpty()) {
-                        EmptyState("No favorite wallpapers yet", Icons.Default.Wallpaper)
+                        EmptyState(
+                            title = "No favorite wallpapers yet",
+                            description = "Long-press a wallpaper in the feed or save from detail to build a personal library.",
+                            icon = Icons.Default.Wallpaper,
+                        )
                     } else {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(2),
@@ -320,7 +325,7 @@ fun FavoritesScreen(
                                                     .align(Alignment.TopEnd)
                                                     .padding(8.dp)
                                                     .size(26.dp)
-                                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                                    .clip(RoundedCornerShape(8.dp))
                                                     .background(
                                                         if (isSelected) MaterialTheme.colorScheme.primary
                                                         else MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
@@ -345,7 +350,11 @@ fun FavoritesScreen(
                 }
                 1 -> {
                     if (sortedSounds.isEmpty()) {
-                        EmptyState("No favorite sounds yet", Icons.Default.MusicNote)
+                        EmptyState(
+                            title = "No favorite sounds yet",
+                            description = "Save ringtones, notifications, and alarms here for quick playback and export.",
+                            icon = Icons.Default.MusicNote,
+                        )
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
@@ -424,12 +433,17 @@ fun FavoritesScreen(
 }
 
 @Composable
-private fun EmptyState(message: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun EmptyState(
+    title: String,
+    description: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-            Spacer(Modifier.height(12.dp))
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        AuraStateCard(
+            icon = icon,
+            title = title,
+            description = description,
+            modifier = Modifier.padding(24.dp),
+        )
     }
 }
