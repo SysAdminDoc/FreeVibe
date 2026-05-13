@@ -1,7 +1,5 @@
 package com.freevibe.ui.screens.aigenerate
 
-import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentSource
@@ -97,19 +95,12 @@ class AiWallpaperViewModel @Inject constructor(
         val wallpaper = _state.value.result ?: return
         viewModelScope.launch {
             _state.update { it.copy(isApplying = true, error = null) }
-            val path = Uri.parse(wallpaper.fullUrl).path
-            if (path == null) {
-                _state.update { it.copy(isApplying = false, error = "Image path not found.") }
-                return@launch
-            }
-            val bitmap = BitmapFactory.decodeFile(path)
-            if (bitmap == null) {
-                _state.update { it.copy(isApplying = false, error = "Failed to decode image.") }
-                return@launch
-            }
-            wallpaperApplier.applyFromBitmap(bitmap, target)
+            // Route through WallpaperApplier.applyByLocator so the disk read + decode + sampling
+            // all happen on the IO dispatcher inside the applier (the prior version decoded the
+            // full-resolution PNG on the Main coroutine context — a 3-4 MB PNG → ~10 MB bitmap
+            // synchronously on the UI thread). applyByLocator handles file:// URIs natively.
+            wallpaperApplier.applyByLocator(wallpaper.fullUrl, target)
                 .onSuccess {
-                    bitmap.recycle()
                     val label = when (target) {
                         WallpaperTarget.HOME -> "home screen"
                         WallpaperTarget.LOCK -> "lock screen"
@@ -118,8 +109,7 @@ class AiWallpaperViewModel @Inject constructor(
                     _state.update { it.copy(isApplying = false, applySuccess = "Applied to $label") }
                 }
                 .onFailure { e ->
-                    bitmap.recycle()
-                    _state.update { it.copy(isApplying = false, error = "Apply failed: ${e.message}") }
+                    _state.update { it.copy(isApplying = false, error = "Apply failed: ${e.message ?: "unknown"}") }
                 }
         }
     }

@@ -49,6 +49,34 @@ class WallpaperApplier @Inject constructor(
         }
     }
 
+    /**
+     * Apply a wallpaper from any locator — http(s) URL, file:// URI, content:// URI,
+     * or a bare absolute path. Earlier revisions only spoke HTTP via [applyFromUrl];
+     * callers that need to handle locally-stored wallpapers (AI-generated, gallery,
+     * parallax cache, user uploads) should use this entrypoint instead.
+     */
+    suspend fun applyByLocator(
+        locator: String,
+        target: WallpaperTarget = WallpaperTarget.BOTH,
+        cropRect: Rect? = null,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val bitmap = decodeFromLocator(locator)
+                ?: throw IllegalStateException("Failed to decode wallpaper image")
+            try {
+                val flag = when (target) {
+                    WallpaperTarget.HOME -> WallpaperManager.FLAG_SYSTEM
+                    WallpaperTarget.LOCK -> WallpaperManager.FLAG_LOCK
+                    WallpaperTarget.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                }
+                wallpaperManager.setBitmap(bitmap, cropRect, true, flag)
+                Unit
+            } finally {
+                if (!bitmap.isRecycled) bitmap.recycle()
+            }
+        }
+    }
+
     /** Apply wallpaper from an already-loaded bitmap */
     suspend fun applyFromBitmap(
         bitmap: Bitmap,
@@ -152,6 +180,69 @@ class WallpaperApplier @Inject constructor(
         return metrics.widthPixels to metrics.heightPixels
     }
 
+    /**
+     * Dispatch decode by scheme. Returns null on unknown scheme or decode failure.
+     * Visible for tests (internal).
+     */
+    internal suspend fun decodeFromLocator(locator: String): Bitmap? {
+        if (locator.isBlank()) return null
+        return when {
+            locator.startsWith("http://", ignoreCase = true) ||
+                locator.startsWith("https://", ignoreCase = true) ->
+                downloadBitmap(locator)
+            locator.startsWith("content://", ignoreCase = true) ->
+                decodeFromContentUri(locator)
+            locator.startsWith("file:", ignoreCase = true) -> {
+                // Both file:/path and file:///path produce a parseable Uri; we want the
+                // raw path for BitmapFactory.decodeFile.
+                val path = android.net.Uri.parse(locator).path
+                if (path.isNullOrBlank()) null else decodeLocalPath(path)
+            }
+            locator.startsWith("/") -> decodeLocalPath(locator)
+            else -> null
+        }
+    }
+
+    private suspend fun decodeFromContentUri(uri: String): Bitmap? = withContext(Dispatchers.IO) {
+        val parsed = runCatching { android.net.Uri.parse(uri) }.getOrNull() ?: return@withContext null
+        // Two-pass bounded decode mirrors downloadBitmap to avoid OOM on huge gallery picks.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching {
+            context.contentResolver.openInputStream(parsed)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+        val sampleSize = computeSampleSize(bounds.outWidth)
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        runCatching {
+            context.contentResolver.openInputStream(parsed)?.use { BitmapFactory.decodeStream(it, null, options) }
+        }.getOrNull()
+    }
+
+    private suspend fun decodeLocalPath(path: String): Bitmap? = withContext(Dispatchers.IO) {
+        val file = java.io.File(path)
+        if (!file.exists() || !file.canRead()) return@withContext null
+        // Cap local files at MAX_WALLPAPER_BYTES — even if the file is on user storage we
+        // don't want a runaway 200 MB PNG to wedge the WallpaperManager IPC.
+        if (file.length() > MAX_WALLPAPER_BYTES) return@withContext null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+        val sampleSize = computeSampleSize(bounds.outWidth)
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        BitmapFactory.decodeFile(path, options)
+    }
+
+    private fun computeSampleSize(srcWidth: Int): Int {
+        val targetWidth = (context.resources.displayMetrics.widthPixels * 2).coerceAtLeast(1)
+        var sampleSize = 1
+        var width = srcWidth
+        while (width / 2 >= targetWidth) {
+            sampleSize *= 2
+            width /= 2
+        }
+        return sampleSize
+    }
+
     private suspend fun downloadBitmap(url: String): Bitmap? = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).build()
         val response = okHttpClient.newCall(request).execute()
@@ -181,17 +272,8 @@ class WallpaperApplier @Inject constructor(
                 throw java.io.IOException("Invalid image: could not decode bounds")
             }
 
-            // Calculate inSampleSize to keep bitmap within 2x screen width
-            val screenWidth = context.resources.displayMetrics.widthPixels
-            val targetWidth = screenWidth * 2
-            var sampleSize = 1
-            if (bounds.outWidth > targetWidth) {
-                var width = bounds.outWidth
-                while (width / 2 >= targetWidth) {
-                    sampleSize *= 2
-                    width /= 2
-                }
-            }
+            // Calculate inSampleSize to keep bitmap within 2x screen width.
+            val sampleSize = computeSampleSize(bounds.outWidth)
 
             // Second pass: decode with sub-sampling
             val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }

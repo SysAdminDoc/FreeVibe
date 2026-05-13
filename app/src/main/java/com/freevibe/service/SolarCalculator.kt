@@ -22,13 +22,17 @@ object SolarCalculator {
      * @param lat  Latitude in degrees (-90..90, positive = North).
      * @param lon  Longitude in degrees (-180..180, positive = East).
      * @param dayOfYear  Day-of-year (1..366); defaults to today.
-     * @param utcOffsetHours  Local UTC offset in decimal hours; defaults to the device time zone.
+     * @param utcOffsetHours  Local UTC offset in decimal hours; defaults to the device's
+     *   *current* offset including DST. Earlier revisions used `rawOffset` directly which
+     *   silently dropped DST, shifting both sunrise and sunset by an hour for ~half the
+     *   year in any region that observes it. Always uses the offset for "right now"
+     *   rather than the DST status on `dayOfYear`, because tint is read in real time.
      */
     fun sunTimes(
         lat: Double,
         lon: Double,
         dayOfYear: Int = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR),
-        utcOffsetHours: Double = java.util.TimeZone.getDefault().rawOffset / 3_600_000.0,
+        utcOffsetHours: Double = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 3_600_000.0,
     ): SunTimes {
         // Fractional year in radians
         val gamma = 2.0 * PI / 365.0 * (dayOfYear - 1)
