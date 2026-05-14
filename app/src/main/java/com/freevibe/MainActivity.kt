@@ -1,6 +1,8 @@
 package com.freevibe
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.Wallpaper
+import com.freevibe.service.extractCollectionShareToken
 import com.freevibe.ui.FreeVibeRoot
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.theme.FreeVibeTheme
@@ -114,6 +117,7 @@ internal fun buildLaunchWallpaper(
 
 internal fun parseLaunchNavigation(intent: Intent?): LaunchNavigation? {
     if (intent == null) return null
+    parseCollectionImportNavigation(intent)?.let { return it }
 
     return buildLaunchNavigation(
         route = intent.getStringExtra(EXTRA_NAVIGATE_TO),
@@ -125,6 +129,37 @@ internal fun parseLaunchNavigation(intent: Intent?): LaunchNavigation? {
         height = intent.getIntExtra(EXTRA_DAILY_WALLPAPER_HEIGHT, 0),
     )
 }
+
+private fun parseCollectionImportNavigation(intent: Intent): LaunchNavigation? {
+    val data = intent.data
+    val token = data?.toString()?.let(::extractCollectionShareToken)
+    if (!token.isNullOrBlank()) {
+        return buildLaunchNavigation(route = Screen.Collections.createRoute(importToken = token))
+    }
+
+    val importUri = when {
+        intent.action == Intent.ACTION_SEND -> intent.collectionStreamUri()
+        intent.action == Intent.ACTION_VIEW && data?.isJsonLikeCollectionUri(intent.type) == true -> data
+        else -> null
+    } ?: return null
+
+    return buildLaunchNavigation(route = Screen.Collections.createRoute(importUri = importUri.toString()))
+}
+
+private fun Uri.isJsonLikeCollectionUri(intentType: String?): Boolean {
+    val asString = toString()
+    return intentType?.contains("json", ignoreCase = true) == true ||
+        asString.endsWith(".json", ignoreCase = true) ||
+        scheme.equals("content", ignoreCase = true)
+}
+
+@Suppress("DEPRECATION")
+private fun Intent.collectionStreamUri(): Uri? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {

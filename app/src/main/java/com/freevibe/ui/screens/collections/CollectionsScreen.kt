@@ -1,5 +1,10 @@
 package com.freevibe.ui.screens.collections
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -16,7 +21,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +40,7 @@ import com.freevibe.data.model.WallpaperCollectionItemEntity
 import com.freevibe.data.model.stableKey
 import com.freevibe.data.repository.CollectionRepository
 import com.freevibe.service.CollectionExporter
+import com.freevibe.service.CollectionImportResult
 import com.freevibe.service.SelectedContentHolder
 import com.freevibe.ui.components.AuraStateCard
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,9 +50,16 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed interface ShareCollectionEvent {
-    data class Ready(val uri: android.net.Uri, val collectionName: String) : ShareCollectionEvent
+    data class Ready(val intent: Intent, val collectionName: String) : ShareCollectionEvent
+    data class Message(val message: String) : ShareCollectionEvent
     data class Failure(val message: String) : ShareCollectionEvent
 }
+
+data class CollectionQrState(
+    val collectionName: String,
+    val shareLink: String,
+    val itemCount: Int,
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -56,11 +73,18 @@ class CollectionsViewModel @Inject constructor(
     val shareEvent: StateFlow<ShareCollectionEvent?> = _shareEvent.asStateFlow()
     fun consumeShareEvent() { _shareEvent.value = null }
 
+    private val _qrState = MutableStateFlow<CollectionQrState?>(null)
+    val qrState: StateFlow<CollectionQrState?> = _qrState.asStateFlow()
+    fun dismissQr() { _qrState.value = null }
+
     fun shareCollection(collection: WallpaperCollectionEntity) {
         viewModelScope.launch {
-            collectionExporter.prepareShareUri(collection.collectionId, collection.name)
-                .onSuccess { uri ->
-                    _shareEvent.value = ShareCollectionEvent.Ready(uri, collection.name)
+            collectionExporter.prepareShareBundle(collection.collectionId, collection.name)
+                .onSuccess { bundle ->
+                    _shareEvent.value = ShareCollectionEvent.Ready(
+                        collectionExporter.buildShareIntent(bundle),
+                        bundle.collectionName,
+                    )
                 }
                 .onFailure { e ->
                     _shareEvent.value = ShareCollectionEvent.Failure(
@@ -70,6 +94,56 @@ class CollectionsViewModel @Inject constructor(
         }
     }
 
+    fun showQr(collection: WallpaperCollectionEntity) {
+        viewModelScope.launch {
+            collectionExporter.publishShareLink(collection.collectionId, collection.name)
+                .onSuccess { link ->
+                    _qrState.value = CollectionQrState(
+                        collectionName = link.collectionName,
+                        shareLink = link.link,
+                        itemCount = link.itemCount,
+                    )
+                }
+                .onFailure { e ->
+                    _shareEvent.value = ShareCollectionEvent.Failure(
+                        e.message ?: "Couldn't create a share link for this collection.",
+                    )
+                }
+        }
+    }
+
+    fun importCollectionLink(input: String) {
+        viewModelScope.launch {
+            collectionExporter.importFromTokenOrLink(input).handleImportResult()
+        }
+    }
+
+    fun importCollectionFile(uri: Uri) {
+        viewModelScope.launch {
+            collectionExporter.importFromUri(uri).handleImportResult()
+        }
+    }
+
+    fun importCollectionQr(uri: Uri) {
+        viewModelScope.launch {
+            collectionExporter.importFromQrImage(uri).handleImportResult()
+        }
+    }
+
+    fun buildQrBitmap(link: String) = collectionExporter.buildQrBitmap(link)
+
+    private fun Result<CollectionImportResult>.handleImportResult() {
+        onSuccess { result ->
+            _selectedCollectionId.value = result.collectionId
+            _shareEvent.value = ShareCollectionEvent.Message(
+                "Imported ${result.itemCount} wallpapers into ${result.collectionName}."
+            )
+        }.onFailure { e ->
+            _shareEvent.value = ShareCollectionEvent.Failure(
+                e.message ?: "Couldn't import this collection.",
+            )
+        }
+    }
 
     val collections = collectionRepo.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -118,42 +192,50 @@ class CollectionsViewModel @Inject constructor(
 fun CollectionsScreen(
     onBack: () -> Unit,
     onWallpaperClick: (Wallpaper) -> Unit,
+    initialImportToken: String? = null,
+    initialImportUri: String? = null,
     viewModel: CollectionsViewModel = hiltViewModel(),
 ) {
     val collections by viewModel.collections.collectAsStateWithLifecycle()
     val selectedCollectionId by viewModel.selectedCollectionId.collectAsStateWithLifecycle()
     val selectedItems by viewModel.selectedItems.collectAsStateWithLifecycle()
     val selectedCollection = collections.find { it.collectionId == selectedCollectionId }
+    val qrState by viewModel.qrState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showImportSheet by remember { mutableStateOf(false) }
 
-    // Collection share (v6.1.0) — observe prepared Uri and launch the Android share sheet.
+    // Observe prepared share/import events and keep system intents out of recomposition.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val shareEvent by viewModel.shareEvent.collectAsStateWithLifecycle()
+    val jsonImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::importCollectionFile)
+    }
+    val qrImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::importCollectionQr)
+    }
+
+    LaunchedEffect(initialImportToken, initialImportUri) {
+        initialImportToken?.let(viewModel::importCollectionLink)
+        initialImportUri?.let { viewModel.importCollectionFile(Uri.parse(it)) }
+    }
+
     LaunchedEffect(shareEvent) {
         val event = shareEvent
         when (event) {
             is ShareCollectionEvent.Ready -> {
                 val intent = android.content.Intent.createChooser(
-                    com.freevibe.service.CollectionExporter.run {
-                        // Reuse the exporter instance that built the URI — we need the
-                        // typed Intent it builds (with correct MIME + grant flags).
-                        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(android.content.Intent.EXTRA_STREAM, event.uri)
-                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Aura collection: ${event.collectionName}")
-                            putExtra(
-                                android.content.Intent.EXTRA_TEXT,
-                                "Collection from the Aura wallpaper app — ${selectedItems.size} wallpapers."
-                            )
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                    },
+                    event.intent,
                     "Share \"${event.collectionName}\"",
                 ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
                 try { context.startActivity(intent) } catch (_: Exception) {
                     scope.launch { snackbarHostState.showSnackbar("No app to share to") }
                 }
+                viewModel.consumeShareEvent()
+            }
+            is ShareCollectionEvent.Message -> {
+                snackbarHostState.showSnackbar(event.message)
                 viewModel.consumeShareEvent()
             }
             is ShareCollectionEvent.Failure -> {
@@ -162,6 +244,36 @@ fun CollectionsScreen(
             }
             null -> Unit
         }
+    }
+
+    if (showImportSheet) {
+        ImportCollectionSheet(
+            onDismiss = { showImportSheet = false },
+            onImportLink = { link ->
+                showImportSheet = false
+                viewModel.importCollectionLink(link)
+            },
+            onOpenFile = {
+                showImportSheet = false
+                jsonImportLauncher.launch(arrayOf("application/json", "text/*"))
+            },
+            onOpenQrImage = {
+                showImportSheet = false
+                qrImportLauncher.launch(arrayOf("image/*"))
+            },
+        )
+    }
+
+    qrState?.let { state ->
+        CollectionQrDialog(
+            state = state,
+            qrBitmap = remember(state.shareLink) { viewModel.buildQrBitmap(state.shareLink).asImageBitmap() },
+            onCopyLink = {
+                clipboard.setText(AnnotatedString(state.shareLink))
+                scope.launch { snackbarHostState.showSnackbar("Collection link copied") }
+            },
+            onDismiss = viewModel::dismissQr,
+        )
     }
 
     Scaffold(
@@ -187,12 +299,20 @@ fun CollectionsScreen(
                             }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
-                                    text = { Text("Share collection") },
+                                    text = { Text("Share link and file") },
                                     onClick = {
                                         showMenu = false
                                         viewModel.shareCollection(selectedCollection)
                                     },
                                     leadingIcon = { Icon(Icons.Default.Share, null) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Show QR code") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.showQr(selectedCollection)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.QrCode2, null) },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Delete collection") },
@@ -203,6 +323,10 @@ fun CollectionsScreen(
                                     leadingIcon = { Icon(Icons.Default.Delete, null) },
                                 )
                             }
+                        }
+                    } else {
+                        IconButton(onClick = { showImportSheet = true }) {
+                            Icon(Icons.Default.FileDownload, "Import collection")
                         }
                     }
                 },
@@ -297,6 +421,133 @@ fun CollectionsScreen(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImportCollectionSheet(
+    onDismiss: () -> Unit,
+    onImportLink: (String) -> Unit,
+    onOpenFile: () -> Unit,
+    onOpenQrImage: () -> Unit,
+) {
+    var link by remember { mutableStateOf("") }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Import collection", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Paste an Aura collection link, open a shared JSON file, or scan a QR image.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = link,
+                onValueChange = { link = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Aura collection link") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+            )
+            Button(
+                onClick = { onImportLink(link) },
+                enabled = link.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Default.Link, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Import link")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onOpenFile,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Default.FileOpen, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("JSON")
+                }
+                OutlinedButton(
+                    onClick = onOpenQrImage,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("QR image")
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun CollectionQrDialog(
+    state: CollectionQrState,
+    qrBitmap: ImageBitmap,
+    onCopyLink: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.QrCode2, contentDescription = null) },
+        title = { Text("Collection QR code") },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = androidx.compose.ui.graphics.Color.White,
+                    tonalElevation = 0.dp,
+                ) {
+                    Image(
+                        bitmap = qrBitmap,
+                        contentDescription = "QR code for ${state.collectionName}",
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .size(220.dp),
+                    )
+                }
+                Text(
+                    "${state.collectionName} - ${state.itemCount} wallpapers",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    state.shareLink,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCopyLink, shape = RoundedCornerShape(10.dp)) {
+                Text("Copy link")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
+                Text("Done")
+            }
+        },
+    )
 }
 
 private fun WallpaperCollectionItemEntity.toWallpaper() = Wallpaper(

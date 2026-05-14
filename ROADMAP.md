@@ -283,9 +283,10 @@
 - Implementation complete for Firebase anonymous/community identity in `CreatorProfileRepository`, `CreatorProfileScreen`, Settings, and navigation.
 
 ### 4.4 Shareable Collections
-- Create a collection → generate a share link / QR code
-- Recipient can import the collection (sounds download on demand)
-- "Import Collection" scanner in the app
+- [x] Create a collection -> generate a share link / QR code
+- [x] Recipient can import the collection (media stays URL-backed and downloads on demand)
+- [x] "Import Collection" scanner in the app
+- Implementation complete in `CollectionExporter`, `CollectionsScreen`, `MainActivity`, and navigation. Supports Aura links, QR images, and shared JSON files.
 
 ---
 
