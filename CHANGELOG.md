@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.25.0
+- **Video timeline thumbnails**: Loop & Crop now renders a bounded strip of sampled video frames beneath the loop scrubber, with graceful fallback to the plain slider when extraction is unavailable.
+- **Frame sampling guardrails**: thumbnail positions are evenly spread across the clip and capped to six frames to avoid expensive work on long videos.
+- **Phase 5.2 completion**: roadmap now marks the video loop editor complete: thumbnails, loop range selection, loop preview, and FFmpeg trim/crop export are all implemented.
+
 ## v6.24.0
 - **Video loop trim editor**: the crop editor is now a Loop & Crop flow with start/end range controls and a preview that loops only the selected segment.
 - **Trimmed video export**: FFmpeg crop output now includes the selected `-ss`/`-t` range, so applied live wallpapers skip intros/outros instead of always exporting the full clip.
