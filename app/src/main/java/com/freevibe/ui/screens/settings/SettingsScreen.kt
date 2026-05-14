@@ -43,6 +43,7 @@ import com.freevibe.service.SourceMetrics
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.service.videoWallpaperMimeTypes
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.HighlightPill
@@ -139,7 +140,7 @@ fun SettingsScreen(
 
     // Video wallpaper picker
     val videoPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { viewModel.prepareVideoWallpaperFromUri(it) }
     }
@@ -191,7 +192,7 @@ fun SettingsScreen(
                         Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
                     }
                     null -> {
-                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Motion wallpaper selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
                     }
                 }
                 viewModel.clearVideoWallpaperSelectionResult()
@@ -343,21 +344,9 @@ fun SettingsScreen(
             )
             SettingsItem(
                 icon = Icons.Default.VideoFile,
-                title = "Video wallpaper",
-                subtitle = "Set a local video clip as live wallpaper",
-                onClick = { videoPickerLauncher.launch("video/*") },
-            )
-            SettingsItem(
-                icon = Icons.Default.Gif,
-                title = "GIF wallpaper",
-                subtitle = "Animated GIF import is not supported yet",
-                onClick = {
-                    Toast.makeText(
-                        context,
-                        "Animated GIF wallpapers are not supported yet. Pick a video clip instead.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                },
+                title = "Video or GIF wallpaper",
+                subtitle = "Import a local clip or animated GIF as live wallpaper",
+                onClick = { videoPickerLauncher.launch(videoWallpaperMimeTypes()) },
             )
             // v6.1.0 — parallax from user photo
             SettingsItem(

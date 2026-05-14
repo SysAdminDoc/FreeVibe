@@ -128,7 +128,7 @@ class SettingsViewModelTest {
         val uri = mockk<Uri>()
         val storage = mockk<VideoWallpaperStorage>()
         coEvery { storage.prepareFromUri(uri) } returns Result.failure(
-            IllegalStateException("Animated GIF wallpapers are not supported yet."),
+            IllegalStateException("Selected file is empty or invalid"),
         )
         val viewModel = createViewModel(
             cacheDir = createTempDirectory("settings-video-failure").toFile().also(tempDirs::add),
@@ -139,7 +139,7 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         val failure = viewModel.videoWallpaperSelectionResult.value as VideoWallpaperSelectionResult.Failure
-        assertEquals("Animated GIF wallpapers are not supported yet.", failure.message)
+        assertEquals("Selected file is empty or invalid", failure.message)
     }
 
     private fun createViewModel(

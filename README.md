@@ -5,7 +5,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-6.21.0-blue)
+![Version](https://img.shields.io/badge/version-6.22.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -18,7 +18,7 @@
 ## What Makes Aura Different
 
 - **Quality-ranked YouTube sounds** — ringtones, notifications, and alarms use intent-specific YouTube searches with tight duration windows and cleaner result filtering.
-- **Video wallpapers from multiple sources** — browse Reddit, Pexels, Pixabay, and YouTube with loop/battery/fit hints, preview, crop, and apply.
+- **Video wallpapers from multiple sources** — browse Reddit, Pexels, Pixabay, and YouTube, or import local videos/GIFs from your gallery.
 - **Multi-source personalization** — Wallhaven, Bing, Pexels, Pixabay, Reddit, YouTube, legacy Freesound attributions, and community uploads.
 - **Instant startup** — Discover feed is cached locally. On subsequent launches wallpapers appear immediately while fresh results load in the background.
 - **5 bottom nav tabs** — Wallpapers, Videos, Sounds, Favorites, Settings.
@@ -38,7 +38,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 |---------|-------------|
 | **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Bing & Reddit |
 | **Wallpaper Quality Filters** | Discover chips for For You, AMOLED, 4K+, Portrait, and Icon Safe with curated ranking |
-| **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview |
+| **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview or import local clips/GIFs |
 | **Video Quality Hints** | Loop-safe, low-battery, and phone-fit filters plus per-card motion hints |
 | **Video Crop Editor** | Convert landscape videos to portrait with draggable 9:16 crop overlay |
 | **Parallax Wallpapers** | ML Kit depth segmentation for layered tilt-responsive live wallpapers |

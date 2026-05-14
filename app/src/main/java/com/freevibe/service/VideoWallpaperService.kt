@@ -1,15 +1,24 @@
+@file:Suppress("DEPRECATION")
+
 package com.freevibe.service
 
+import android.graphics.Color
+import android.graphics.Movie
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 import com.freevibe.BuildConfig
+import java.io.File
+import kotlin.math.max
 
 /**
- * Live wallpaper service that plays a video file on the home/lock screen.
- * Uses center-crop rendering: video fills the screen, overflow is clipped,
- * aspect ratio is always preserved (no stretching).
+ * Live wallpaper service that plays a video or animated GIF on the home/lock screen.
+ * Uses center-crop rendering: motion fills the screen, overflow is clipped, and
+ * aspect ratio is always preserved.
  */
 class VideoWallpaperService : WallpaperService() {
 
@@ -17,6 +26,10 @@ class VideoWallpaperService : WallpaperService() {
 
     inner class VideoEngine : Engine() {
         private var mediaPlayer: MediaPlayer? = null
+        private var gifMovie: Movie? = null
+        private var gifStartedAtMs = 0L
+        private var gifFrameRunnable: Runnable? = null
+        private val gifHandler = Handler(Looper.getMainLooper())
         private var currentHolder: SurfaceHolder? = null
         private var lastModified: Long = 0
         private var lastPath: String? = null
@@ -72,7 +85,7 @@ class VideoWallpaperService : WallpaperService() {
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             super.onSurfaceDestroyed(holder)
             currentHolder = null
-            releasePlayer()
+            releasePlayback()
         }
 
         override fun onVisibilityChanged(visible: Boolean) {
@@ -80,7 +93,7 @@ class VideoWallpaperService : WallpaperService() {
             if (visible) {
                 val path = getVideoPath()
                 if (path != null) {
-                    val file = java.io.File(path)
+                    val file = File(path)
                     // Re-init if the user picked a different video OR the same path's
                     // contents changed. Path comparison guards against rare cases where
                     // two different files happen to share the same lastModified timestamp.
@@ -89,27 +102,36 @@ class VideoWallpaperService : WallpaperService() {
                         return
                     }
                 }
+                gifMovie?.let {
+                    currentHolder?.let { resumeGifPlayback(it) }
+                    return
+                }
                 try {
                     mediaPlayer?.let { if (!it.isPlaying) { it.seekTo(0); it.start() } }
                 } catch (_: Exception) {}
             } else {
+                pauseGifPlayback()
                 try { mediaPlayer?.pause() } catch (_: Exception) {}
             }
         }
 
         override fun onDestroy() {
             super.onDestroy()
-            releasePlayer()
+            releasePlayback()
         }
 
         private fun initializePlayer(holder: SurfaceHolder) {
-            releasePlayer()
+            releasePlayback()
             val path = getVideoPath() ?: return
-            val file = java.io.File(path)
+            val file = File(path)
             if (!file.exists()) return
             try {
                 lastModified = file.lastModified()
                 lastPath = path
+                if (file.extension.equals("gif", ignoreCase = true)) {
+                    initializeGifPlayback(holder, file)
+                    return
+                }
                 val speed = getPlaybackSpeed()
 
                 // Detect video dimensions before playback for accurate surface sizing
@@ -133,20 +155,8 @@ class VideoWallpaperService : WallpaperService() {
                 } catch (_: Exception) {}
 
                 // Set surface to screen size — this is the canvas the user sees
-                val sw = screenWidth.takeIf { it > 0 } ?: holder.surfaceFrame.width()
-                val sh = screenHeight.takeIf { it > 0 } ?: holder.surfaceFrame.height()
-                if (sw > 0 && sh > 0) {
-                    try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    try {
-                        holder.surface.setFrameRate(
-                            getFpsLimit(),
-                            android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                        )
-                    } catch (_: Exception) {
-                    }
-                }
+                val (sw, sh) = configureSurface(holder)
+                configureFrameRate(holder)
 
                 val safeHolder = object : SurfaceHolder by holder {
                     override fun setKeepScreenOn(screenOn: Boolean) {}
@@ -177,11 +187,107 @@ class VideoWallpaperService : WallpaperService() {
                     "Playing ${videoW}x${videoH} on ${sw}x${sh} screen, mode=SCALE_TO_FIT_WITH_CROPPING, path=$path")
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) android.util.Log.e("VideoWPService", "Init failed: ${e.message}")
-                releasePlayer()
+                releasePlayback()
             }
         }
 
-        private fun releasePlayer() {
+        private fun configureSurface(holder: SurfaceHolder): Pair<Int, Int> {
+            val sw = screenWidth.takeIf { it > 0 } ?: holder.surfaceFrame.width()
+            val sh = screenHeight.takeIf { it > 0 } ?: holder.surfaceFrame.height()
+            if (sw > 0 && sh > 0) {
+                try { holder.setFixedSize(sw, sh) } catch (_: Exception) {}
+            }
+            return sw to sh
+        }
+
+        private fun configureFrameRate(holder: SurfaceHolder) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                try {
+                    holder.surface.setFrameRate(
+                        getFpsLimit(),
+                        android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                    )
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+        private fun initializeGifPlayback(holder: SurfaceHolder, file: File) {
+            val movie = Movie.decodeFile(file.absolutePath)
+                ?: throw IllegalStateException("Selected GIF could not be decoded")
+            if (movie.width() <= 0 || movie.height() <= 0) {
+                throw IllegalStateException("Selected GIF has invalid dimensions")
+            }
+
+            val (sw, sh) = configureSurface(holder)
+            configureFrameRate(holder)
+            gifMovie = movie
+            gifStartedAtMs = SystemClock.uptimeMillis()
+            resumeGifPlayback(holder)
+
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(
+                    "VideoWPService",
+                    "Playing GIF ${movie.width()}x${movie.height()} on ${sw}x${sh} screen, path=${file.absolutePath}",
+                )
+            }
+        }
+
+        private fun resumeGifPlayback(holder: SurfaceHolder) {
+            pauseGifPlayback()
+            if (gifMovie == null) return
+            val frameRunnable = object : Runnable {
+                override fun run() {
+                    if (gifMovie == null || currentHolder != holder) return
+                    drawGifFrame(holder)
+                    gifHandler.postDelayed(this, 33L)
+                }
+            }
+            gifFrameRunnable = frameRunnable
+            gifHandler.post(frameRunnable)
+        }
+
+        private fun pauseGifPlayback() {
+            gifFrameRunnable?.let { gifHandler.removeCallbacks(it) }
+            gifFrameRunnable = null
+        }
+
+        private fun drawGifFrame(holder: SurfaceHolder) {
+            val movie = gifMovie ?: return
+            val canvas = try {
+                holder.lockCanvas()
+            } catch (_: Exception) {
+                null
+            } ?: return
+
+            try {
+                canvas.drawColor(Color.BLACK)
+                val duration = movie.duration().takeIf { it > 0 } ?: 1000
+                val time = ((SystemClock.uptimeMillis() - gifStartedAtMs) % duration).toInt()
+                movie.setTime(time)
+
+                val movieWidth = movie.width().coerceAtLeast(1)
+                val movieHeight = movie.height().coerceAtLeast(1)
+                val scale = max(
+                    canvas.width / movieWidth.toFloat(),
+                    canvas.height / movieHeight.toFloat(),
+                )
+                val dx = (canvas.width - movieWidth * scale) / 2f
+                val dy = (canvas.height - movieHeight * scale) / 2f
+
+                canvas.save()
+                canvas.translate(dx, dy)
+                canvas.scale(scale, scale)
+                movie.draw(canvas, 0f, 0f)
+                canvas.restore()
+            } finally {
+                try { holder.unlockCanvasAndPost(canvas) } catch (_: Exception) {}
+            }
+        }
+
+        private fun releasePlayback() {
+            pauseGifPlayback()
+            gifMovie = null
             mediaPlayer?.apply {
                 try { setOnPreparedListener(null) } catch (_: Exception) {}
                 try { if (isPlaying) stop() } catch (_: Exception) {}
