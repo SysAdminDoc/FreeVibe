@@ -237,6 +237,12 @@ fun SettingsScreen(
     var showYtBlockedEditor by remember { mutableStateOf(false) }
     var showDarkModeWallpaperPicker by remember { mutableStateOf(false) }
     var showLightModeWallpaperPicker by remember { mutableStateOf(false) }
+    var touchEffectStrength by remember {
+        mutableStateOf(
+            context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+                .getString("touch_effect_strength", "OFF") ?: "OFF"
+        )
+    }
     val selectedStyleCount = remember(userStyles) { countSelectedStyles(userStyles) }
     val configuredApiKeys = remember(
         wallhavenApiKey,
@@ -741,6 +747,41 @@ fun SettingsScreen(
                     // synchronously, so there is nothing to cancel by the time this button
                     // is reachable.
                     confirmButton = { TextButton(onClick = { showVfxPicker = false }) { Text("Close") } },
+                )
+            }
+            var showTouchEffectsPicker by remember { mutableStateOf(false) }
+            SettingsItem(
+                icon = Icons.Default.TouchApp,
+                title = "Touch effects",
+                subtitle = touchEffectSummary(touchEffectStrength),
+                onClick = { showTouchEffectsPicker = true },
+            )
+            if (showTouchEffectsPicker) {
+                val modes = listOf(
+                    "OFF" to "Off",
+                    "SUBTLE" to "Subtle ripples",
+                    "STRONG" to "Ripples + sparkles",
+                )
+                AlertDialog(
+                    onDismissRequest = { showTouchEffectsPicker = false },
+                    title = { Text("Touch effects") },
+                    text = {
+                        Column {
+                            modes.forEach { (key, label) ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = touchEffectStrength == key, onClick = {
+                                        touchEffectStrength = key
+                                        context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
+                                            .edit().putString("touch_effect_strength", key).apply()
+                                        showTouchEffectsPicker = false
+                                    })
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { showTouchEffectsPicker = false }) { Text("Close") } },
                 )
             }
             // Dark/light mode wallpaper pickers.
@@ -1894,6 +1935,12 @@ private fun userStylesSummary(raw: String): String {
 
 private fun stylePreferenceLabel(style: String): String =
     style.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+
+private fun touchEffectSummary(raw: String): String = when (raw.uppercase(java.util.Locale.ROOT)) {
+    "SUBTLE" -> "Subtle ripples on live wallpapers"
+    "STRONG" -> "Ripples and spark bursts on touch"
+    else -> "Off"
+}
 
 private fun formatInterval(minutes: Long): String = when {
     minutes < 60 -> "$minutes minutes"

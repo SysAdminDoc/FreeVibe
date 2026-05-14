@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.26.0
+- **Touch-reactive live wallpaper effects**: Weather live wallpapers now support transient touch ripples and spark bursts, rendered as bounded Canvas overlays.
+- **Settings control**: Settings > Smart Features adds Touch effects with Off, Subtle ripples, and Ripples + sparkles modes.
+- **Guardrails**: touch bursts are capped and expire quickly so inactive wallpapers do not keep extra work alive.
+
 ## v6.25.0
 - **Video timeline thumbnails**: Loop & Crop now renders a bounded strip of sampled video frames beneath the loop scrubber, with graceful fallback to the plain slider when extraction is unavailable.
 - **Frame sampling guardrails**: thumbnail positions are evenly spread across the clip and capped to six frames to avoid expensive work on long videos.
