@@ -1,11 +1,13 @@
 package com.freevibe.ui.screens.settings
 
 import android.Manifest
-import android.content.Context
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -40,14 +42,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.service.DailyWallpaperWorker
 import com.freevibe.service.SourceMetrics
+import com.freevibe.service.VIDEO_STATS_PREFS_NAME
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.WeatherUpdateWorker
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.service.effectiveVideoFpsLimit
+import com.freevibe.service.shouldUseVideoBatterySaver
+import com.freevibe.service.videoBatteryImpactSummary
 import com.freevibe.service.videoWallpaperMimeTypes
 import com.freevibe.ui.LiveWallpaperLaunchMode
 import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.HighlightPill
 import com.freevibe.ui.launchLiveWallpaperPicker
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -96,9 +103,17 @@ fun SettingsScreen(
     val stabilityAiKey by viewModel.stabilityAiKey.collectAsStateWithLifecycle()
     val showSketchyContent by viewModel.showSketchyContent.collectAsStateWithLifecycle()
     val showNsfwContent by viewModel.showNsfwContent.collectAsStateWithLifecycle()
+    val videoFpsOverlayEnabled by viewModel.videoFpsOverlayEnabled.collectAsStateWithLifecycle()
+    val videoAutoBatterySaver by viewModel.videoAutoBatterySaver.collectAsStateWithLifecycle()
     val cacheUsage by viewModel.cacheUsage.collectAsStateWithLifecycle()
     val diagnostics by viewModel.diagnostics.collectAsStateWithLifecycle()
     val videoWallpaperSelectionResult by viewModel.videoWallpaperSelectionResult.collectAsStateWithLifecycle()
+    val videoBatteryDashboard by rememberVideoBatteryDashboardState(
+        context = context,
+        requestedFps = videoFpsLimit,
+        fpsOverlayEnabled = videoFpsOverlayEnabled,
+        autoBatterySaverEnabled = videoAutoBatterySaver,
+    )
     var dailyWp by remember {
         mutableStateOf(
             context.getSharedPreferences("freevibe_weather_wp", Context.MODE_PRIVATE)
@@ -902,13 +917,42 @@ fun SettingsScreen(
         // Video Wallpapers
         SettingsSection(
             title = "Video Wallpapers",
-            description = "Keep motion smooth without spending battery on unnecessary frames.",
+            description = "Monitor live-wallpaper cost and keep motion responsive without wasting battery.",
         ) {
             var showFpsPicker by remember { mutableStateOf(false) }
+            VideoBatteryDashboardCard(
+                state = videoBatteryDashboard,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SettingsToggle(
+                icon = Icons.Default.BatteryChargingFull,
+                title = "Auto battery saver",
+                subtitle = if (videoAutoBatterySaver)
+                    "Caps video and GIF wallpapers at 15 FPS below 15% battery"
+                else
+                    "Keep the selected FPS limit even when battery is low",
+                checked = videoAutoBatterySaver,
+                onCheckedChange = { viewModel.setVideoAutoBatterySaver(it) },
+            )
+            SettingsToggle(
+                icon = Icons.Default.Speed,
+                title = "FPS overlay",
+                subtitle = if (videoFpsOverlayEnabled)
+                    "Show a small debug FPS readout on Canvas-rendered motion wallpapers"
+                else
+                    "Hidden unless you need to inspect frame pacing",
+                checked = videoFpsOverlayEnabled,
+                onCheckedChange = { viewModel.setVideoFpsOverlayEnabled(it) },
+            )
             SettingsItem(
                 icon = Icons.Default.Speed,
                 title = "FPS limit",
-                subtitle = "$videoFpsLimit FPS • balance smooth motion against battery use",
+                subtitle = videoBatteryImpactSummary(
+                    requestedFps = videoBatteryDashboard.requestedFps,
+                    effectiveFps = videoBatteryDashboard.effectiveFps,
+                    fpsOverlayEnabled = videoBatteryDashboard.fpsOverlayEnabled,
+                    lowBatterySaverActive = videoBatteryDashboard.lowBatterySaverActive,
+                ),
                 onClick = { showFpsPicker = true },
             )
             if (showFpsPicker) {
@@ -1508,6 +1552,256 @@ private fun IntervalPickerDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+private data class SettingsBatterySnapshot(
+    val percent: Int?,
+    val isCharging: Boolean,
+)
+
+private data class VideoBatteryDashboardState(
+    val batteryPercent: Int?,
+    val isCharging: Boolean,
+    val serviceFresh: Boolean,
+    val serviceVisible: Boolean,
+    val mediaType: String,
+    val requestedFps: Int,
+    val effectiveFps: Int,
+    val fpsOverlayEnabled: Boolean,
+    val lowBatterySaverActive: Boolean,
+    val scaleMode: String,
+)
+
+@Composable
+private fun rememberVideoBatteryDashboardState(
+    context: Context,
+    requestedFps: Int,
+    fpsOverlayEnabled: Boolean,
+    autoBatterySaverEnabled: Boolean,
+): State<VideoBatteryDashboardState> {
+    val appContext = remember(context) { context.applicationContext }
+    val state = remember(appContext, requestedFps, fpsOverlayEnabled, autoBatterySaverEnabled) {
+        mutableStateOf(
+            readVideoBatteryDashboardState(
+                context = appContext,
+                requestedFps = requestedFps,
+                fpsOverlayEnabled = fpsOverlayEnabled,
+                autoBatterySaverEnabled = autoBatterySaverEnabled,
+            ),
+        )
+    }
+    LaunchedEffect(appContext, requestedFps, fpsOverlayEnabled, autoBatterySaverEnabled) {
+        while (true) {
+            state.value = readVideoBatteryDashboardState(
+                context = appContext,
+                requestedFps = requestedFps,
+                fpsOverlayEnabled = fpsOverlayEnabled,
+                autoBatterySaverEnabled = autoBatterySaverEnabled,
+            )
+            delay(2_000L)
+        }
+    }
+    return state
+}
+
+private fun readVideoBatteryDashboardState(
+    context: Context,
+    requestedFps: Int,
+    fpsOverlayEnabled: Boolean,
+    autoBatterySaverEnabled: Boolean,
+): VideoBatteryDashboardState {
+    val battery = readSettingsBatterySnapshot(context)
+    val stats = context.getSharedPreferences(VIDEO_STATS_PREFS_NAME, Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    val lastSeenMs = stats.getLong("last_seen_ms", 0L)
+    val serviceFresh = lastSeenMs > 0L && now - lastSeenMs <= 45_000L
+    val statsBatteryPercent = if (serviceFresh && stats.contains("battery_percent")) {
+        stats.getInt("battery_percent", -1).takeIf { it >= 0 }
+    } else {
+        null
+    }
+    val batteryPercent = battery.percent ?: statsBatteryPercent
+    val isCharging = battery.isCharging || (serviceFresh && stats.getBoolean("charging", false))
+    val statsRequestedFps = if (serviceFresh) stats.getInt("requested_fps", requestedFps) else requestedFps
+    val localLowBatterySaver = shouldUseVideoBatterySaver(
+        batteryPercent = batteryPercent,
+        isCharging = isCharging,
+        autoSaverEnabled = autoBatterySaverEnabled,
+    )
+    val lowBatterySaverActive = localLowBatterySaver ||
+        (serviceFresh && stats.getBoolean("low_battery_saver_active", false))
+    val effectiveFps = if (serviceFresh) {
+        stats.getInt("effective_fps", effectiveVideoFpsLimit(statsRequestedFps, lowBatterySaverActive))
+    } else {
+        effectiveVideoFpsLimit(statsRequestedFps, lowBatterySaverActive)
+    }
+    return VideoBatteryDashboardState(
+        batteryPercent = batteryPercent,
+        isCharging = isCharging,
+        serviceFresh = serviceFresh,
+        serviceVisible = serviceFresh && stats.getBoolean("visible", false),
+        mediaType = if (serviceFresh) stats.getString("media_type", "none") ?: "none" else "none",
+        requestedFps = statsRequestedFps,
+        effectiveFps = effectiveFps,
+        fpsOverlayEnabled = fpsOverlayEnabled,
+        lowBatterySaverActive = lowBatterySaverActive,
+        scaleMode = if (serviceFresh) stats.getString("scale_mode", "zoom") ?: "zoom" else "zoom",
+    )
+}
+
+private fun readSettingsBatterySnapshot(context: Context): SettingsBatterySnapshot {
+    val intent = try {
+        context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    } catch (_: Exception) {
+        null
+    }
+    val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+    val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+    val percent = if (level >= 0 && scale > 0) {
+        ((level * 100f) / scale).toInt().coerceIn(0, 100)
+    } else {
+        null
+    }
+    val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+    val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+    return SettingsBatterySnapshot(
+        percent = percent,
+        isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL ||
+            plugged != 0,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VideoBatteryDashboardCard(
+    state: VideoBatteryDashboardState,
+    modifier: Modifier = Modifier,
+) {
+    val batteryLabel = state.batteryPercent?.let { "$it%" } ?: "Unknown"
+    val serviceLabel = when {
+        state.serviceVisible -> "Active"
+        state.serviceFresh -> "Paused"
+        else -> "No heartbeat"
+    }
+    val mediaLabel = when (state.mediaType) {
+        "gif" -> "GIF"
+        "video" -> "Video"
+        else -> "Idle"
+    }
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        ),
+        shadowElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                ) {
+                    Icon(
+                        Icons.Default.BatteryChargingFull,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(10.dp).size(20.dp),
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Battery dashboard", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        videoBatteryImpactSummary(
+                            requestedFps = state.requestedFps,
+                            effectiveFps = state.effectiveFps,
+                            fpsOverlayEnabled = state.fpsOverlayEnabled,
+                            lowBatterySaverActive = state.lowBatterySaverActive,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            state.batteryPercent?.let { percent ->
+                LinearProgressIndicator(
+                    progress = { percent / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = if (state.lowBatterySaverActive) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                VideoDashboardMetric(
+                    label = "Battery",
+                    value = batteryLabel,
+                    detail = if (state.isCharging) "Charging" else "Unplugged",
+                )
+                VideoDashboardMetric(
+                    label = "Service",
+                    value = serviceLabel,
+                    detail = mediaLabel,
+                )
+                VideoDashboardMetric(
+                    label = "Target",
+                    value = "${state.effectiveFps} FPS",
+                    detail = if (state.lowBatterySaverActive) "Auto-capped" else "Selected",
+                )
+                VideoDashboardMetric(
+                    label = "Presentation",
+                    value = if (state.scaleMode == "fit") "Fit" else "Fill",
+                    detail = if (state.fpsOverlayEnabled) "Overlay on" else "Overlay off",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoDashboardMetric(
+    label: String,
+    value: String,
+    detail: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.82f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 116.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(2.dp))
+            Text(value, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

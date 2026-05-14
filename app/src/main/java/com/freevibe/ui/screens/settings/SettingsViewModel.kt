@@ -107,6 +107,8 @@ class SettingsViewModel @Inject constructor(
     val ytAlarmsQuery = prefs.ytSoundQueryAlarms.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PreferencesManager.defaultAlarmQuery())
     val ytBlockedWords = prefs.ytSoundBlockedWords.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "compilation,mix,playlist,ranked,tier list,reaction,review,tutorial,how to,podcast,interview,live stream,part,episode")
     val videoFpsLimit = prefs.videoFpsLimit.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+    val videoFpsOverlayEnabled = prefs.videoFpsOverlayEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val videoAutoBatterySaver = prefs.videoAutoBatterySaver.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val wallhavenApiKey = prefs.wallhavenApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pexelsApiKey = prefs.pexelsApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val pixabayApiKey = prefs.pixabayApiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
@@ -223,6 +225,12 @@ class SettingsViewModel @Inject constructor(
 
     fun setVideoFpsLimit(fps: Int) = viewModelScope.launch {
         prefs.setVideoFpsLimit(fps)
+    }
+    fun setVideoFpsOverlayEnabled(enabled: Boolean) = viewModelScope.launch {
+        prefs.setVideoFpsOverlayEnabled(enabled)
+    }
+    fun setVideoAutoBatterySaver(enabled: Boolean) = viewModelScope.launch {
+        prefs.setVideoAutoBatterySaver(enabled)
     }
 
     fun setSchedulerEnabled(enabled: Boolean) = viewModelScope.launch {

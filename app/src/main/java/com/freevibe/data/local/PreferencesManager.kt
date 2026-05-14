@@ -4,6 +4,12 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.freevibe.service.VIDEO_AUTO_BATTERY_SAVER_PREF
+import com.freevibe.service.VIDEO_FPS_LIMIT_PREF
+import com.freevibe.service.VIDEO_FPS_OVERLAY_PREF
+import com.freevibe.service.VIDEO_PLAYBACK_SPEED_PREF
+import com.freevibe.service.VIDEO_PREFS_NAME
+import com.freevibe.service.sanitizeVideoFpsLimit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -148,22 +154,34 @@ class PreferencesManager @Inject constructor(
 
     val videoFpsLimit: Flow<Int> = get(Keys.VIDEO_FPS_LIMIT, 30)
     val videoPlaybackSpeed: Flow<Float> = get(Keys.VIDEO_PLAYBACK_SPEED, 1.0f)
+    val videoFpsOverlayEnabled: Flow<Boolean> = get(Keys.VIDEO_FPS_OVERLAY, false)
+    val videoAutoBatterySaver: Flow<Boolean> = get(Keys.VIDEO_AUTO_BATTERY_SAVER, true)
 
     suspend fun setVideoFpsLimit(fps: Int) {
         val sanitized = sanitizeVideoFpsLimit(fps)
         // Write SharedPreferences FIRST so VideoWallpaperService (which reads SP) always sees
         // the new value even if the suspending DataStore write gets cancelled mid-flight.
         // If cancellation happens between, DataStore catches up on the next successful write.
-        context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
-            .edit().putInt("video_fps_limit", sanitized).apply()
+        context.getSharedPreferences(VIDEO_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(VIDEO_FPS_LIMIT_PREF, sanitized).apply()
         set(Keys.VIDEO_FPS_LIMIT, sanitized)
     }
     suspend fun setVideoPlaybackSpeed(speed: Float) {
         // SharedPreferences first — same rationale as setVideoFpsLimit. WallpaperService
         // cannot easily subscribe to DataStore, so SP is the source of truth for the runtime.
-        context.getSharedPreferences("freevibe_prefs", Context.MODE_PRIVATE)
-            .edit().putFloat("video_playback_speed", speed).apply()
+        context.getSharedPreferences(VIDEO_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putFloat(VIDEO_PLAYBACK_SPEED_PREF, speed).apply()
         set(Keys.VIDEO_PLAYBACK_SPEED, speed)
+    }
+    suspend fun setVideoFpsOverlayEnabled(enabled: Boolean) {
+        context.getSharedPreferences(VIDEO_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(VIDEO_FPS_OVERLAY_PREF, enabled).apply()
+        set(Keys.VIDEO_FPS_OVERLAY, enabled)
+    }
+    suspend fun setVideoAutoBatterySaver(enabled: Boolean) {
+        context.getSharedPreferences(VIDEO_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(VIDEO_AUTO_BATTERY_SAVER_PREF, enabled).apply()
+        set(Keys.VIDEO_AUTO_BATTERY_SAVER, enabled)
     }
 
     // ── Effects / adaptive settings ─────────────────────────────
@@ -194,12 +212,6 @@ class PreferencesManager @Inject constructor(
 
     private suspend fun <T> set(key: Preferences.Key<T>, value: T) {
         dataStore.edit { it[key] = value }
-    }
-
-    private fun sanitizeVideoFpsLimit(fps: Int): Int = when {
-        fps <= 15 -> 15
-        fps >= 60 -> 60
-        else -> 30
     }
 
     private object Keys {
@@ -241,6 +253,8 @@ class PreferencesManager @Inject constructor(
         // Video wallpaper
         val VIDEO_FPS_LIMIT = intPreferencesKey("video_fps_limit")
         val VIDEO_PLAYBACK_SPEED = floatPreferencesKey("video_playback_speed")
+        val VIDEO_FPS_OVERLAY = booleanPreferencesKey("video_fps_overlay_enabled")
+        val VIDEO_AUTO_BATTERY_SAVER = booleanPreferencesKey("video_auto_battery_saver")
         // Effects / adaptive
         val ADAPTIVE_TINT = booleanPreferencesKey("adaptive_tint_enabled")
         val ADAPTIVE_TINT_INTENSITY = floatPreferencesKey("adaptive_tint_intensity")

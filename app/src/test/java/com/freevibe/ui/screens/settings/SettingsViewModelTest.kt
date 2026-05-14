@@ -210,6 +210,8 @@ class SettingsViewModelTest {
             every { prefs.ytSoundQueryAlarms } returns flowOf("alarm")
             every { prefs.ytSoundBlockedWords } returns flowOf("mix")
             every { prefs.videoFpsLimit } returns flowOf(30)
+            every { prefs.videoFpsOverlayEnabled } returns flowOf(false)
+            every { prefs.videoAutoBatterySaver } returns flowOf(true)
             every { prefs.wallhavenApiKey } returns flowOf("")
             every { prefs.pexelsApiKey } returns flowOf("")
             every { prefs.pixabayApiKey } returns flowOf("")
