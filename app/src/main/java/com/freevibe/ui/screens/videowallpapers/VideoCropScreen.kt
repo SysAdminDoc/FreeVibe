@@ -31,13 +31,52 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.media3.common.C
 import java.io.File
+import kotlin.math.roundToLong
 
 private val sharedHttpClient by lazy {
     okhttp3.OkHttpClient.Builder()
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .build()
+}
+
+internal data class VideoLoopRange(
+    val startMs: Long,
+    val endMs: Long,
+) {
+    val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0L)
+}
+
+internal fun resolveVideoLoopRange(
+    durationMs: Long,
+    startFraction: Float,
+    endFraction: Float,
+): VideoLoopRange {
+    val safeDuration = durationMs.coerceAtLeast(0L)
+    if (safeDuration <= MIN_VIDEO_LOOP_MS) return VideoLoopRange(0L, safeDuration)
+
+    val low = minOf(startFraction, endFraction).coerceIn(0f, 1f)
+    val high = maxOf(startFraction, endFraction).coerceIn(0f, 1f)
+    var startMs = (safeDuration * low).roundToLong().coerceIn(0L, safeDuration)
+    var endMs = (safeDuration * high).roundToLong().coerceIn(startMs, safeDuration)
+
+    if (endMs - startMs < MIN_VIDEO_LOOP_MS) {
+        val needed = MIN_VIDEO_LOOP_MS - (endMs - startMs)
+        val growEnd = needed.coerceAtMost(safeDuration - endMs)
+        endMs += growEnd
+        startMs = (startMs - (needed - growEnd)).coerceAtLeast(0L)
+    }
+
+    return VideoLoopRange(startMs, endMs.coerceAtMost(safeDuration))
+}
+
+internal fun formatVideoLoopTime(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(java.util.Locale.ROOT, "%d:%02d", minutes, seconds)
 }
 
 /**
@@ -85,9 +124,12 @@ fun VideoCropScreen(
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var videoWidth by remember { mutableIntStateOf(0) }
     var videoHeight by remember { mutableIntStateOf(0) }
+    var durationMs by remember { mutableLongStateOf(0L) }
     var scale by rememberSaveable { mutableFloatStateOf(1f) }
     var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
     var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
+    var trimStartFraction by rememberSaveable { mutableFloatStateOf(0f) }
+    var trimEndFraction by rememberSaveable { mutableFloatStateOf(1f) }
     var isCropping by remember { mutableStateOf(false) }
     var dimensionsReady by remember { mutableStateOf(false) }
 
@@ -96,6 +138,9 @@ fun VideoCropScreen(
         // Try ExoPlayer format first (polls for up to 5s)
         repeat(50) {
             kotlinx.coroutines.delay(100)
+            if (durationMs <= 0 && exoPlayer.duration > 0 && exoPlayer.duration != C.TIME_UNSET) {
+                durationMs = exoPlayer.duration
+            }
             exoPlayer.videoFormat?.let { format ->
                 if (format.width > 0 && format.height > 0) {
                     videoWidth = format.width
@@ -117,6 +162,8 @@ fun VideoCropScreen(
                     }
                     val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
                     val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                    val duration = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    if (duration > 0) durationMs = duration
                     val rotation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
                     if (w > 0 && h > 0) {
                         // Apply rotation — 90/270 degrees means width/height are swapped
@@ -137,6 +184,19 @@ fun VideoCropScreen(
         // Last resort: assume 1080x1920 portrait
         if (!dimensionsReady) {
             videoWidth = 1080; videoHeight = 1920; dimensionsReady = true
+        }
+    }
+    val loopRange = remember(durationMs, trimStartFraction, trimEndFraction) {
+        resolveVideoLoopRange(durationMs, trimStartFraction, trimEndFraction)
+    }
+    LaunchedEffect(exoPlayer, loopRange) {
+        if (loopRange.durationMs <= 0L) return@LaunchedEffect
+        exoPlayer.seekTo(loopRange.startMs)
+        while (true) {
+            kotlinx.coroutines.delay(120)
+            if (exoPlayer.currentPosition >= loopRange.endMs) {
+                exoPlayer.seekTo(loopRange.startMs)
+            }
         }
     }
 
@@ -181,7 +241,7 @@ fun VideoCropScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Crop Video") },
+                title = { Text("Loop & Crop") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -205,7 +265,7 @@ fun VideoCropScreen(
                 .padding(padding),
         ) {
             Text(
-                "Pinch to zoom, drag to position. Video must fill the screen.",
+                "Choose the loop segment, then pinch to crop and position the frame.",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -265,6 +325,19 @@ fun VideoCropScreen(
                 Text(String.format(java.util.Locale.ROOT, "%.0f%%", scale * 100), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
 
+            LoopTrimControls(
+                enabled = durationMs > MIN_VIDEO_LOOP_MS,
+                durationMs = durationMs,
+                loopRange = loopRange,
+                startFraction = trimStartFraction,
+                endFraction = trimEndFraction,
+                onRangeChange = { range ->
+                    trimStartFraction = range.start.coerceIn(0f, 1f)
+                    trimEndFraction = range.endInclusive.coerceIn(trimStartFraction, 1f)
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+
             Button(
                 onClick = {
                     if (isCropping) return@Button
@@ -275,6 +348,8 @@ fun VideoCropScreen(
                             videoWidth = videoWidth, videoHeight = videoHeight,
                             viewWidth = viewSize.width, viewHeight = viewSize.height,
                             scale = scale, panX = offsetX, panY = offsetY,
+                            loopStartMs = loopRange.startMs,
+                            loopEndMs = loopRange.endMs,
                         )
                         isCropping = false
                         if (result != null) onCropped(result)
@@ -292,9 +367,70 @@ fun VideoCropScreen(
                 } else {
                     Icon(Icons.Default.Crop, null, Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Crop & Apply")
+                    Text("Save Loop & Apply")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LoopTrimControls(
+    enabled: Boolean,
+    durationMs: Long,
+    loopRange: VideoLoopRange,
+    startFraction: Float,
+    endFraction: Float,
+    onRangeChange: (ClosedFloatingPointRange<Float>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Loop",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                if (enabled) {
+                    "${formatVideoLoopTime(loopRange.durationMs)} selected"
+                } else {
+                    "Full clip"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        RangeSlider(
+            value = startFraction..endFraction,
+            onValueChange = onRangeChange,
+            enabled = enabled,
+            valueRange = 0f..1f,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                formatVideoLoopTime(loopRange.startMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                formatVideoLoopTime(durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                formatVideoLoopTime(loopRange.endMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -333,6 +469,8 @@ private suspend fun cropVideoConstrained(
     scale: Float,
     panX: Float,
     panY: Float,
+    loopStartMs: Long = 0L,
+    loopEndMs: Long = 0L,
 ): File? = withContext(Dispatchers.IO) {
     try {
         val inputFile = if (videoUrl.startsWith("http")) {
@@ -422,6 +560,7 @@ private suspend fun cropVideoConstrained(
                     ffmpegPath.absolutePath,
                     "-y",
                     "-i", inputFile.absolutePath,
+                ) + videoTrimArgs(loopStartMs, loopEndMs) + listOf(
                     "-vf", "crop=$cropW:$cropH:$cropX:$cropY",
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
@@ -497,4 +636,21 @@ private suspend fun cropVideoConstrained(
     }
 }
 
+internal fun videoTrimArgs(
+    loopStartMs: Long,
+    loopEndMs: Long,
+): List<String> {
+    val safeStart = loopStartMs.coerceAtLeast(0L)
+    val duration = (loopEndMs - safeStart).coerceAtLeast(0L)
+    if (duration <= 0L) return emptyList()
+    return listOf(
+        "-ss", formatFfmpegSeconds(safeStart),
+        "-t", formatFfmpegSeconds(duration),
+    )
+}
+
+internal fun formatFfmpegSeconds(ms: Long): String =
+    String.format(java.util.Locale.ROOT, "%.3f", ms.coerceAtLeast(0L) / 1000.0)
+
+private const val MIN_VIDEO_LOOP_MS = 2_000L
 private const val MAX_VIDEO_INPUT_BYTES = 256L * 1024 * 1024

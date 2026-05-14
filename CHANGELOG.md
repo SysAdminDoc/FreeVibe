@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.24.0
+- **Video loop trim editor**: the crop editor is now a Loop & Crop flow with start/end range controls and a preview that loops only the selected segment.
+- **Trimmed video export**: FFmpeg crop output now includes the selected `-ss`/`-t` range, so applied live wallpapers skip intros/outros instead of always exporting the full clip.
+- **Loop helper coverage**: added focused tests for loop-range coercion and FFmpeg trim argument formatting.
+
 ## v6.23.0
 - **Video wallpaper presentation controls**: online video apply now offers Fill and Fit before setup. Fill keeps the premium full-screen crop behavior, while Fit preserves the complete frame with letterboxing.
 - **Runtime scale-mode support**: `VideoWallpaperService` now reads the selected scale mode for both MediaPlayer videos and canvas-rendered GIF wallpapers.

@@ -83,4 +83,39 @@ class VideoWallpapersViewModelTest {
             )
         )
     }
+
+    @Test
+    fun `resolveVideoLoopRange preserves requested range when valid`() {
+        val range = resolveVideoLoopRange(
+            durationMs = 20_000,
+            startFraction = 0.25f,
+            endFraction = 0.75f,
+        )
+
+        assertEquals(5_000, range.startMs)
+        assertEquals(15_000, range.endMs)
+        assertEquals(10_000, range.durationMs)
+    }
+
+    @Test
+    fun `resolveVideoLoopRange expands short selections to minimum loop`() {
+        val range = resolveVideoLoopRange(
+            durationMs = 10_000,
+            startFraction = 0.5f,
+            endFraction = 0.55f,
+        )
+
+        assertEquals(5_000, range.startMs)
+        assertEquals(7_000, range.endMs)
+        assertEquals(2_000, range.durationMs)
+    }
+
+    @Test
+    fun `videoTrimArgs formats ffmpeg time arguments`() {
+        assertEquals(
+            listOf("-ss", "1.250", "-t", "3.500"),
+            videoTrimArgs(loopStartMs = 1_250, loopEndMs = 4_750),
+        )
+        assertEquals(emptyList<String>(), videoTrimArgs(loopStartMs = 2_000, loopEndMs = 2_000))
+    }
 }
