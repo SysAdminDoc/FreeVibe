@@ -171,6 +171,8 @@ class UploadRepository @Inject constructor(
                 }
                 val sounds = snapshot.children.mapNotNull { child ->
                     val key = child.key ?: return@mapNotNull null
+                    val votes = child.child("votes").getValue(Int::class.java) ?: 0
+                    if (!shouldDisplayCommunityUpload(votes)) return@mapNotNull null
                     val nameVal = child.child("name").getValue(String::class.java) ?: return@mapNotNull null
                     val downloadUrl = child.child("downloadUrl").getValue(String::class.java) ?: return@mapNotNull null
                     val cat = child.child("category").getValue(String::class.java) ?: ""
@@ -317,6 +319,8 @@ internal fun sanitizeUploadStorageSegment(segment: String): String =
         .replace(STORAGE_SEGMENT_SANITIZE_REGEX, "_")
         .trim('_')
         .ifBlank { "user" }
+
+internal fun shouldDisplayCommunityUpload(votes: Int): Boolean = votes >= 0
 
 private fun Throwable.rethrowIfCancelled() {
     if (this is CancellationException) throw this

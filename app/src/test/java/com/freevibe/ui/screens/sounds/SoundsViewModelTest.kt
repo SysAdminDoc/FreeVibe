@@ -954,6 +954,7 @@ class SoundsViewModelTest {
             uploadRepo = mockk<UploadRepository>(relaxed = true),
             soundUrlResolver = soundUrlResolver,
             seasonalContentManager = SeasonalContentManager(),
+            communityAudioRecorder = mockk<com.freevibe.service.CommunityAudioRecorder>(relaxed = true),
         )
     }
 

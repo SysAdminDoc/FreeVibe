@@ -8,6 +8,7 @@
     <!-- Ringtone/Notification/Alarm -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />

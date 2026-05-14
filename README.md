@@ -5,7 +5,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-6.27.0-blue)
+![Version](https://img.shields.io/badge/version-6.28.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -47,7 +47,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 | **Weather Wallpapers** | Live weather effects overlay on wallpapers |
 | **Touch-Reactive Effects** | Optional ripple and sparkle bursts on live wallpaper touches |
 | **YouTube Sounds** | YouTube-first ringtone, notification, and alarm discovery with duration-aware searches powered by NewPipe + yt-dlp |
-| **Community Uploads** | Upload and share sounds via Firebase Storage |
+| **Community Uploads** | Pick or record sounds, tag them, vote on community picks, and share via Firebase Storage |
 | **Sound Source Badges** | Color-coded source indicators on every sound card |
 | **Sound Quality Filters** | Best, Clean, Short, Calm, and Punchy filters with intent-aware badges |
 | **Real-Time Waveform** | Mini waveform on each sound card tracks actual playback position |

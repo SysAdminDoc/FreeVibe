@@ -259,12 +259,13 @@
 *Problem: Content library doesn't grow. Users consume but don't contribute.*
 
 ### 4.1 User-Generated Sound Uploads
-- Record from microphone or pick from device
-- Upload to Firebase Storage, metadata to Firebase RTDB
-- Required fields: name, category (ringtone/notification/alarm), tags
-- Community voting (already exists) serves as moderation
-- Sounds with negative votes auto-hidden
-- Top-voted community sounds appear in "Community Picks" section
+- [x] Record from microphone or pick from device
+- [x] Upload to Firebase Storage, metadata to Firebase RTDB
+- [x] Required fields: name, category (ringtone/notification/alarm), tags
+- [x] Community voting serves as moderation
+- [x] Sounds with negative votes auto-hidden
+- [x] Top-voted community sounds appear in "Community Picks" section
+- Implementation complete in `SoundsScreen`, `SoundsViewModel`, `CommunityAudioRecorder`, `UploadRepository`, and `VoteRepository`.
 
 ### 4.2 User-Generated Wallpaper Uploads
 - Pick from gallery, crop to phone aspect ratio
