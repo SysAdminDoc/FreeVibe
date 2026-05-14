@@ -118,4 +118,14 @@ class VideoWallpapersViewModelTest {
         )
         assertEquals(emptyList<String>(), videoTrimArgs(loopStartMs = 2_000, loopEndMs = 2_000))
     }
+
+    @Test
+    fun `timelineFrameTimes spreads bounded frame samples across duration`() {
+        assertEquals(
+            listOf(0L, 2_000L, 4_000L, 6_000L),
+            timelineFrameTimes(durationMs = 6_001L, frameCount = 4),
+        )
+        assertEquals(emptyList<Long>(), timelineFrameTimes(durationMs = 0L, frameCount = 4))
+        assertEquals(6, timelineFrameTimes(durationMs = 60_000L, frameCount = 20).size)
+    }
 }

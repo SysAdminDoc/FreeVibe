@@ -5,7 +5,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-6.24.0-blue)
+![Version](https://img.shields.io/badge/version-6.25.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -41,7 +41,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview or import local clips/GIFs |
 | **Video Quality Hints** | Loop-safe, low-battery, and phone-fit filters plus per-card motion hints |
 | **Video Fit Modes** | Fill for full-screen crop or Fit to preserve the full frame |
-| **Video Loop & Crop Editor** | Trim intros/outros, preview the loop, and convert landscape videos to portrait |
+| **Video Loop & Crop Editor** | Trim intros/outros with frame thumbnails, preview the loop, and convert landscape videos to portrait |
 | **Parallax Wallpapers** | ML Kit depth segmentation for layered tilt-responsive live wallpapers |
 | **Weather Wallpapers** | Live weather effects overlay on wallpapers |
 | **YouTube Sounds** | YouTube-first ringtone, notification, and alarm discovery with duration-aware searches powered by NewPipe + yt-dlp |

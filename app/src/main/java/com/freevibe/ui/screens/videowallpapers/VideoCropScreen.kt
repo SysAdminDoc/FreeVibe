@@ -1,8 +1,10 @@
 package com.freevibe.ui.screens.videowallpapers
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -16,8 +18,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +85,19 @@ internal fun formatVideoLoopTime(ms: Long): String {
     return String.format(java.util.Locale.ROOT, "%d:%02d", minutes, seconds)
 }
 
+internal fun timelineFrameTimes(
+    durationMs: Long,
+    frameCount: Int,
+): List<Long> {
+    val safeDuration = durationMs.coerceAtLeast(0L)
+    val safeCount = frameCount.coerceIn(0, MAX_TIMELINE_FRAMES)
+    if (safeDuration <= 0L || safeCount <= 0) return emptyList()
+    if (safeCount == 1) return listOf(0L)
+    return (0 until safeCount).map { index ->
+        ((safeDuration - 1L) * (index / (safeCount - 1f))).roundToLong().coerceIn(0L, safeDuration - 1L)
+    }
+}
+
 /**
  * Video crop editor constrained to phone screen aspect ratio.
  * Pinch to zoom, drag to pan — video must always fill the viewport.
@@ -130,6 +149,7 @@ fun VideoCropScreen(
     var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
     var trimStartFraction by rememberSaveable { mutableFloatStateOf(0f) }
     var trimEndFraction by rememberSaveable { mutableFloatStateOf(1f) }
+    var timelineFrames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
     var isCropping by remember { mutableStateOf(false) }
     var dimensionsReady by remember { mutableStateOf(false) }
 
@@ -184,6 +204,15 @@ fun VideoCropScreen(
         // Last resort: assume 1080x1920 portrait
         if (!dimensionsReady) {
             videoWidth = 1080; videoHeight = 1920; dimensionsReady = true
+        }
+    }
+    LaunchedEffect(videoUrl, durationMs) {
+        timelineFrames = if (durationMs > 0L) {
+            withContext(Dispatchers.IO) {
+                extractTimelineFrames(videoUrl, durationMs)
+            }
+        } else {
+            emptyList()
         }
     }
     val loopRange = remember(durationMs, trimStartFraction, trimEndFraction) {
@@ -329,6 +358,7 @@ fun VideoCropScreen(
                 enabled = durationMs > MIN_VIDEO_LOOP_MS,
                 durationMs = durationMs,
                 loopRange = loopRange,
+                timelineFrames = timelineFrames,
                 startFraction = trimStartFraction,
                 endFraction = trimEndFraction,
                 onRangeChange = { range ->
@@ -379,6 +409,7 @@ private fun LoopTrimControls(
     enabled: Boolean,
     durationMs: Long,
     loopRange: VideoLoopRange,
+    timelineFrames: List<ImageBitmap>,
     startFraction: Float,
     endFraction: Float,
     onRangeChange: (ClosedFloatingPointRange<Float>) -> Unit,
@@ -405,13 +436,46 @@ private fun LoopTrimControls(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        RangeSlider(
-            value = startFraction..endFraction,
-            onValueChange = onRangeChange,
-            enabled = enabled,
-            valueRange = 0f..1f,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (timelineFrames.isNotEmpty()) 62.dp else 48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (timelineFrames.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clipToBounds(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    timelineFrames.forEach { frame ->
+                        Image(
+                            bitmap = frame,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.28f)),
+                )
+            }
+            RangeSlider(
+                value = startFraction..endFraction,
+                onValueChange = onRangeChange,
+                enabled = enabled,
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -432,6 +496,36 @@ private fun LoopTrimControls(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private fun extractTimelineFrames(
+    videoUrl: String,
+    durationMs: Long,
+): List<ImageBitmap> {
+    val times = timelineFrameTimes(durationMs, MAX_TIMELINE_FRAMES)
+    if (times.isEmpty()) return emptyList()
+    val retriever = MediaMetadataRetriever()
+    return try {
+        if (videoUrl.startsWith("http")) {
+            retriever.setDataSource(videoUrl, emptyMap())
+        } else {
+            retriever.setDataSource(videoUrl)
+        }
+        times.mapNotNull { timeMs ->
+            val frame = retriever.getFrameAtTime(
+                timeMs * 1000L,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            ) ?: return@mapNotNull null
+            val scaled = android.graphics.Bitmap.createScaledBitmap(frame, 160, 90, true)
+            if (scaled !== frame) frame.recycle()
+            scaled.asImageBitmap()
+        }
+    } catch (e: Exception) {
+        if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Timeline frames failed: ${e.message}")
+        emptyList()
+    } finally {
+        try { retriever.release() } catch (_: Exception) {}
     }
 }
 
@@ -653,4 +747,5 @@ internal fun formatFfmpegSeconds(ms: Long): String =
     String.format(java.util.Locale.ROOT, "%.3f", ms.coerceAtLeast(0L) / 1000.0)
 
 private const val MIN_VIDEO_LOOP_MS = 2_000L
+private const val MAX_TIMELINE_FRAMES = 6
 private const val MAX_VIDEO_INPUT_BYTES = 256L * 1024 * 1024

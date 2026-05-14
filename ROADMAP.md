@@ -29,7 +29,7 @@
 - [x] `VideoWallpaperService` now keeps the existing MediaPlayer path for videos and adds canvas-based animated GIF playback with the same center-crop presentation model.
 - [x] Removed the Settings dead-end that said GIF import was unsupported; gallery actions and fallback toasts now describe "motion wallpaper" instead of video-only import.
 - [x] Focused tests cover GIF detection, video/GIF picker MIME types, and extension preservation for GIF/WebM/3GP/MOV/MKV/MP4.
-- [ ] Remaining Phase 5.2 work: frame thumbnails in the loop timeline.
+- [x] Phase 5.2 Video Loop Editor is complete: frame thumbnails, loop range selection, loop preview, and FFmpeg trim/crop export are implemented.
 
 ---
 
@@ -39,7 +39,7 @@
 - [x] `VideoWallpaperService` reads the selected `scale_mode` and maps it to MediaPlayer scale modes for videos.
 - [x] Animated GIF live wallpapers honor the same scale mode in their canvas renderer, using center-crop Fill or letterboxed Fit.
 - [x] Scale-mode normalization is covered by focused unit tests so malformed stored values fall back to Fill.
-- [ ] Remaining Phase 5.2 work: frame thumbnails under the loop timeline scrubber.
+- [x] Phase 5.2 follow-up completed in v6.25.0: frame thumbnails now render under the loop scrubber with bounded sampling.
 
 ---
 
@@ -49,7 +49,16 @@
 - [x] The preview player seeks back to the selected loop start when it reaches the selected loop end, so users can judge the actual live-wallpaper segment before applying.
 - [x] FFmpeg export now receives `-ss` and `-t` arguments for the selected segment while preserving the existing crop transform.
 - [x] Focused tests cover loop-range coercion and FFmpeg trim argument formatting.
-- [ ] Remaining Phase 5.2 work: generate frame thumbnails under the timeline scrubber.
+- [x] Remaining Phase 5.2 frame-thumbnail timeline completed in v6.25.0.
+
+---
+
+## Implementation Pass - 2026-05-14 Video Timeline Thumbnails
+
+- [x] Completed the remaining Phase 5.2 frame-thumbnail slice: Loop & Crop now samples up to six frames across the clip and renders them beneath the range scrubber.
+- [x] Thumbnail extraction is bounded and failure-tolerant; if `MediaMetadataRetriever` cannot decode frames, the editor falls back to the existing loop slider.
+- [x] Focused tests cover frame-sampling positions and the six-frame cap.
+- [x] Phase 5.2 is now complete.
 
 ---
 
@@ -270,7 +279,7 @@
 
 ### 5.2 Video Loop Editor
 - [x] Visual timeline scrubber for loop range
-- [ ] Frame thumbnails under the timeline scrubber
+- [x] Frame thumbnails under the timeline scrubber
 - [x] Select loop start/end points
 - [x] Preview the loop before applying
 - [x] Crop via FFmpeg (already bundled)
