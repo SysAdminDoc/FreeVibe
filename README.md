@@ -5,7 +5,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-6.29.0-blue)
+![Version](https://img.shields.io/badge/version-6.30.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -39,6 +39,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 | **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Bing & Reddit |
 | **Wallpaper Quality Filters** | Discover chips for For You, AMOLED, 4K+, Portrait, and Icon Safe with curated ranking |
 | **Community Wallpapers** | Upload phone-cropped gallery images with tags, Palette colors, and community voting |
+| **Creator Profiles** | View upload stats, votes, followed creators, followed uploads, and top creator leaderboard |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview or import local clips/GIFs |
 | **Video Quality Hints** | Loop-safe, low-battery, and phone-fit filters plus per-card motion hints |
 | **Video Fit Modes** | Fill for full-screen crop or Fit to preserve the full frame |

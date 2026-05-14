@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.30.0
+- **Creator profiles**: Settings now links to a creator profile dashboard with current identity, upload count, total votes, saved favorites count, followed creators, followed uploads, and top creators leaderboard.
+- **Follow creators**: creator follows persist through Firebase RTDB and the profile screen surfaces new uploads from followed creators.
+- **OAuth guardrail**: Google sign-in remains disabled until the Firebase config includes an OAuth client; anonymous Firebase identity continues to back community uploads.
+
 ## v6.29.0
 - **Community wallpaper uploads**: Wallpapers now includes a Community source where users can pick gallery images, crop them automatically to the phone aspect ratio, and upload compressed JPEGs under 4 MB to Firebase Storage.
 - **Wallpaper upload metadata**: community uploads require name, category, and tags, then store Palette-derived colors, dimensions, uploader label, and Firebase RTDB metadata for discovery.

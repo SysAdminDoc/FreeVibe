@@ -182,6 +182,7 @@ class SettingsViewModelTest {
             wallpaperApplier = wallpaperApplier,
             videoWallpaperStorage = videoWallpaperStorage,
             sourceMetrics = com.freevibe.service.SourceMetrics(),
+            ioDispatcher = dispatcher,
         )
     }
 
