@@ -5,7 +5,7 @@
 
 <h1 align="center">Aura</h1>
 
-![Version](https://img.shields.io/badge/version-6.28.0-blue)
+![Version](https://img.shields.io/badge/version-6.29.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0+-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-7F52FF?logo=kotlin&logoColor=white)
@@ -38,6 +38,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 |---------|-------------|
 | **HD/4K Wallpapers** | Discover feed from Wallhaven, Pexels, Pixabay, Bing & Reddit |
 | **Wallpaper Quality Filters** | Discover chips for For You, AMOLED, 4K+, Portrait, and Icon Safe with curated ranking |
+| **Community Wallpapers** | Upload phone-cropped gallery images with tags, Palette colors, and community voting |
 | **Video Wallpapers** | Browse YouTube video wallpapers with ExoPlayer auto-preview or import local clips/GIFs |
 | **Video Quality Hints** | Loop-safe, low-battery, and phone-fit filters plus per-card motion hints |
 | **Video Fit Modes** | Fill for full-screen crop or Fit to preserve the full frame |
@@ -47,7 +48,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 | **Weather Wallpapers** | Live weather effects overlay on wallpapers |
 | **Touch-Reactive Effects** | Optional ripple and sparkle bursts on live wallpaper touches |
 | **YouTube Sounds** | YouTube-first ringtone, notification, and alarm discovery with duration-aware searches powered by NewPipe + yt-dlp |
-| **Community Uploads** | Pick or record sounds, tag them, vote on community picks, and share via Firebase Storage |
+| **Community Sound Uploads** | Pick or record sounds, tag them, vote on community picks, and share via Firebase Storage |
 | **Sound Source Badges** | Color-coded source indicators on every sound card |
 | **Sound Quality Filters** | Best, Clean, Short, Calm, and Punchy filters with intent-aware badges |
 | **Real-Time Waveform** | Mini waveform on each sound card tracks actual playback position |
@@ -76,7 +77,7 @@ Open in Android Studio and run. Core browsing works out of the box; optional pro
 | [Reddit](https://reddit.com) | 7 wallpaper + 4 video subreddits | None |
 | [YouTube](https://youtube.com) | Video wallpapers + active sound feed via NewPipe + yt-dlp | None |
 | [Freesound](https://freesound.org) | Legacy sound attribution for older favorites | Built-in key |
-| Firebase | Community uploads + voting | Built-in |
+| Firebase | Community wallpaper/sound uploads + voting | Built-in |
 
 ## Architecture
 

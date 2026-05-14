@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.29.0
+- **Community wallpaper uploads**: Wallpapers now includes a Community source where users can pick gallery images, crop them automatically to the phone aspect ratio, and upload compressed JPEGs under 4 MB to Firebase Storage.
+- **Wallpaper upload metadata**: community uploads require name, category, and tags, then store Palette-derived colors, dimensions, uploader label, and Firebase RTDB metadata for discovery.
+- **Wallpaper community moderation**: community wallpapers use the existing vote/hide controls and hide negative-score uploads from the feed.
+
 ## v6.28.0
 - **Community sound uploads completed**: Sounds > Community can now record from the microphone or pick an audio file, then require name, category, and searchable tags before upload.
 - **Community Picks**: top-voted community sounds surface in a dedicated section, while community results are sorted by vote count and hidden once the user hides them.
