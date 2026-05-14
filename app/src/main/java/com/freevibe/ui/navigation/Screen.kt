@@ -80,6 +80,12 @@ sealed class Screen(
         icon = Icons.Outlined.Settings,
         selectedIcon = Icons.Filled.Settings,
     )
+    data object CreatorProfile : Screen(
+        route = "creator_profile",
+        title = "Creator Profile",
+        icon = Icons.Outlined.Person,
+        selectedIcon = Icons.Filled.Person,
+    )
 
     // ── Wallpaper detail + editor ─────────────────────────────────
     data object WallpaperDetail : Screen(

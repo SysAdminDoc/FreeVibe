@@ -276,10 +276,11 @@
 - Implementation complete in `WallpaperUploadRepository`, `WallpapersViewModel`, and `WallpapersScreen`.
 
 ### 4.3 Creator Profiles
-- Optional: sign in with Google
-- Profile page: your uploads, total votes received, favorites count
-- "Follow" creators to see their new uploads
-- Top creators leaderboard
+- Deferred: optional Google sign-in until `google-services.json` includes an OAuth client / `default_web_client_id`; current repo config has no Google sign-in client to bind safely.
+- [x] Profile page: your uploads, total votes received, favorites count
+- [x] "Follow" creators to see their new uploads
+- [x] Top creators leaderboard
+- Implementation complete for Firebase anonymous/community identity in `CreatorProfileRepository`, `CreatorProfileScreen`, Settings, and navigation.
 
 ### 4.4 Shareable Collections
 - Create a collection → generate a share link / QR code

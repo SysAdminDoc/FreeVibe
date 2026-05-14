@@ -36,7 +36,18 @@ class CommunityIdentityProvider @Inject constructor(
     fun currentUserId(): String = auth?.currentUser?.uid ?: fallbackId
 
     fun currentUploaderLabel(): String =
-        auth?.currentUser?.uid?.take(8) ?: "local-${fallbackId.take(6)}"
+        auth?.currentUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: auth?.currentUser?.uid?.take(8)
+            ?: "local-${fallbackId.take(6)}"
+
+    fun currentAuthLabel(): String = when {
+        auth?.currentUser?.isAnonymous == true -> "Anonymous Firebase identity"
+        auth?.currentUser != null -> "Firebase identity"
+        else -> "Local identity"
+    }
+
+    fun hasGoogleOAuthClient(): Boolean =
+        context.resources.getIdentifier("default_web_client_id", "string", context.packageName) != 0
 
     fun knownIdentityIds(): List<String> =
         listOf(auth?.currentUser?.uid, fallbackId, legacyDeviceId)

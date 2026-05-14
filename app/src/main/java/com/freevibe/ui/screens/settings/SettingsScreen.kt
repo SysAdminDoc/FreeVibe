@@ -64,6 +64,7 @@ fun SettingsScreen(
     onCategoriesClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
     onCollectionsClick: () -> Unit = {},
+    onCreatorProfileClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -411,6 +412,12 @@ fun SettingsScreen(
                 title = "Collections",
                 subtitle = "Organize wallpapers into folders",
                 onClick = onCollectionsClick,
+            )
+            SettingsItem(
+                icon = Icons.Default.Person,
+                title = "Creator profile",
+                subtitle = "Uploads, votes, follows, and leaderboard",
+                onClick = onCreatorProfileClick,
             )
             // #2: Wallpaper history — opens browsable grid
             if (wallpaperHistory.isNotEmpty()) {

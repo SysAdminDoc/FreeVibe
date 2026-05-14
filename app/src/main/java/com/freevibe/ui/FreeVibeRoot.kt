@@ -30,6 +30,7 @@ import com.freevibe.data.remote.toWallpaper
 import com.freevibe.ui.navigation.Screen
 import com.freevibe.ui.screens.categories.CategoriesScreen
 import com.freevibe.ui.screens.collections.CollectionsScreen
+import com.freevibe.ui.screens.community.CreatorProfileScreen
 import com.freevibe.ui.screens.videowallpapers.VideoWallpapersScreen
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -386,6 +387,7 @@ fun FreeVibeRoot(
                     onCategoriesClick = { navController.navigate(Screen.Categories.route) { launchSingleTop = true } },
                     onHistoryClick = { navController.navigate(Screen.WallpaperHistory.route) { launchSingleTop = true } },
                     onCollectionsClick = { navController.navigate(Screen.Collections.route) { launchSingleTop = true } },
+                    onCreatorProfileClick = { navController.navigate(Screen.CreatorProfile.route) { launchSingleTop = true } },
                 )
             }
 
@@ -888,6 +890,13 @@ fun FreeVibeRoot(
                     onWallpaperClick = { wallpaper ->
                         navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
+                )
+            }
+
+            // ── Creator Profile ─────────────────────────────────
+            composable(Screen.CreatorProfile.route) {
+                CreatorProfileScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
 

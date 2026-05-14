@@ -6,6 +6,7 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.local.WallpaperCacheManager
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.repository.CollectionRepository
+import com.freevibe.di.IoDispatcher
 import com.freevibe.service.AutoWallpaperWorker
 import com.freevibe.service.OfflineFavoritesManager
 import com.freevibe.service.SourceMetrics
@@ -15,7 +16,7 @@ import com.freevibe.service.WallpaperApplier
 import com.freevibe.service.WallpaperHistoryManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,6 +44,7 @@ class SettingsViewModel @Inject constructor(
     private val wallpaperApplier: WallpaperApplier,
     private val videoWallpaperStorage: VideoWallpaperStorage,
     private val sourceMetrics: SourceMetrics,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
     private val _parallaxGalleryResult = MutableStateFlow<ParallaxGalleryResult?>(null)
@@ -284,7 +286,7 @@ class SettingsViewModel @Inject constructor(
     fun setLightModeWallpaperId(id: String) = viewModelScope.launch { prefs.setLightModeWallpaperId(id) }
 
     fun clearCache() = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             val cacheDir = context.cacheDir
             cacheDir.listFiles()?.forEach { file ->
                 if (file.name != "trimmed") {
@@ -298,7 +300,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun refreshCacheUsage() = viewModelScope.launch {
-        _cacheUsage.value = withContext(Dispatchers.IO) {
+        _cacheUsage.value = withContext(ioDispatcher) {
             val cacheBytes = context.cacheDir
                 .takeIf { it.exists() }
                 ?.walkTopDown()
