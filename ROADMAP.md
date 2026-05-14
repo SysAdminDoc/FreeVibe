@@ -71,6 +71,15 @@
 
 ---
 
+## Implementation Pass - 2026-05-14 Video Battery Dashboard
+
+- [x] Completed Phase 5.5: Settings > Video Wallpapers now has a live battery dashboard with device battery, service heartbeat, active media type, effective FPS, scale mode, and estimated impact.
+- [x] `VideoWallpaperService` publishes lightweight telemetry and applies an automatic 15 FPS cap when battery is below 15% and the phone is not charging.
+- [x] Added a dev FPS overlay toggle for Canvas-rendered motion wallpaper frames and kept the existing hardware video path battery-aware through `Surface.setFrameRate`.
+- [x] Focused tests cover FPS sanitization, low-battery saver activation, effective FPS capping, and dashboard impact copy.
+
+---
+
 ## Implementation Pass - 2026-04-25 Product Polish
 
 - [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
@@ -311,10 +320,10 @@
 - [x] Override `onTouchEvent` in `WallpaperService.Engine`
 
 ### 5.5 Battery Dashboard
-- Real-time battery usage from video wallpaper service
-- FPS counter overlay (dev mode)
-- Estimated battery impact per setting (FPS limit, resolution, effects)
-- Auto-reduce quality when battery < 15%
+- [x] Real-time battery usage from video wallpaper service
+- [x] FPS counter overlay (dev mode)
+- [x] Estimated battery impact per setting (FPS limit, resolution, effects)
+- [x] Auto-reduce quality when battery < 15%
 
 ---
 

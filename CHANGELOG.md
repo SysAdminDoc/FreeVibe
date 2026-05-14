@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.27.0
+- **Video battery dashboard**: Settings > Video Wallpapers now shows live device battery, wallpaper-service heartbeat, effective FPS, media type, presentation mode, and estimated impact.
+- **Auto battery saver**: Video/GIF live wallpapers can automatically cap playback at 15 FPS when the device drops below 15% battery and is not charging.
+- **Debug FPS overlay**: Canvas-rendered motion wallpapers can show a compact FPS readout for development and frame-pacing checks.
+
 ## v6.26.0
 - **Touch-reactive live wallpaper effects**: Weather live wallpapers now support transient touch ripples and spark bursts, rendered as bounded Canvas overlays.
 - **Settings control**: Settings > Smart Features adds Touch effects with Off, Subtle ripples, and Ripples + sparkles modes.
