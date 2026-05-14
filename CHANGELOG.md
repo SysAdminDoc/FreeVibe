@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.22.0
+- **Local video/GIF wallpapers**: Video Wallpapers and Settings now open a single system picker for local `video/*` clips and animated GIFs, then copy the selection into Aura-managed storage for live wallpaper setup.
+- **Animated GIF live wallpaper playback**: `VideoWallpaperService` now detects `.gif` selections and renders them through a bounded canvas loop while keeping the existing MediaPlayer path for videos.
+- **Import UX cleanup**: removed the dead "GIF not supported" Settings entry, updated gallery actions and fallback toasts to use motion-wallpaper copy, and expanded storage tests for GIF/MOV/MKV extension handling.
+
 ## v6.21.0
 - **YouTube-only sound feed**: Sounds browsing and in-tab search now use YouTube results only. Audius is removed from the active Sounds experience and user-facing source copy; legacy Freesound attribution remains only for older saved content.
 - **Intent-specific YouTube discovery**: default sound searches now seed from `Ringtones`, `Notifications`, and `Alarms`, then add one precise sound-effect query per tab. Duration filters clamp notifications to very short clips, keep alarms short and direct, and avoid long ringtone compilations.

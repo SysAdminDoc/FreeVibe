@@ -22,6 +22,17 @@
 
 ---
 
+## Implementation Pass - 2026-05-14 Gallery Video/GIF Import
+
+- [x] Completed the actionable Phase 5.1 gallery import slice: Video Wallpapers and Settings now use `ActivityResultContracts.OpenDocument()` with both `video/*` and `image/gif`.
+- [x] Local videos and animated GIFs are copied into Aura-managed storage as `live_wallpaper.<ext>` and selected through `VideoWallpaperService`.
+- [x] `VideoWallpaperService` now keeps the existing MediaPlayer path for videos and adds canvas-based animated GIF playback with the same center-crop presentation model.
+- [x] Removed the Settings dead-end that said GIF import was unsupported; gallery actions and fallback toasts now describe "motion wallpaper" instead of video-only import.
+- [x] Focused tests cover GIF detection, video/GIF picker MIME types, and extension preservation for GIF/WebM/3GP/MOV/MKV/MP4.
+- [ ] Remaining Phase 5.1/5.2 work: a true video loop editor with start/end trim, frame timeline preview, and per-apply fit/fill/crop controls.
+
+---
+
 ## Implementation Pass - 2026-04-25 Product Polish
 
 - [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
@@ -231,10 +242,10 @@
 ## Phase 5 — Video Wallpaper Evolution
 
 ### 5.1 Gallery Video/GIF Support
-- `ActivityResultContracts.GetContent("video/*")` and `("image/gif")`
-- Copy to app storage, set via `VideoWallpaperService`
-- Trim start/end for loop selection (reuse audio trimmer UX pattern with video)
-- Fit/fill/crop controls before applying
+- [x] `ActivityResultContracts.OpenDocument()` accepts `video/*` and `image/gif`
+- [x] Copy to app storage, set via `VideoWallpaperService`
+- [ ] Trim start/end for loop selection (reuse audio trimmer UX pattern with video)
+- [ ] Fit/fill/crop controls before applying
 - This is the most requested feature for video wallpaper apps
 
 ### 5.2 Video Loop Editor

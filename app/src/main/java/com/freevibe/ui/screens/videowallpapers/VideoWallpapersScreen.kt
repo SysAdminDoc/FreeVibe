@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.repository.matchesHiddenIds
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.service.videoWallpaperMimeTypes
 import com.freevibe.ui.components.AuraStateAction
 import com.freevibe.ui.components.AuraStateCard
 import com.freevibe.ui.components.CompactSearchField
@@ -188,7 +189,7 @@ fun VideoWallpapersScreen(
         if (state.focusFilter != VideoFocusFilter.BEST) 1 else 0
     }
     val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { viewModel.prepareGalleryVideoWallpaper(it) }
     }
@@ -234,7 +235,7 @@ fun VideoWallpapersScreen(
                         Toast.makeText(context, "Choose 'Aura Video Wallpaper' in the picker, then tap Set wallpaper.", Toast.LENGTH_LONG).show()
                     }
                     null -> {
-                        Toast.makeText(context, "Video selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Motion wallpaper selected. Open Settings > Wallpaper > Live Wallpapers to finish setup.", Toast.LENGTH_LONG).show()
                     }
                 }
                 viewModel.clearGallerySelectionResult()
@@ -331,10 +332,10 @@ fun VideoWallpapersScreen(
             }
 
             FilledTonalIconButton(
-                onClick = { galleryLauncher.launch("video/*") },
+                onClick = { galleryLauncher.launch(videoWallpaperMimeTypes()) },
                 modifier = Modifier.size(34.dp),
             ) {
-                Icon(Icons.Default.FolderOpen, "From gallery", modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.FolderOpen, "Video or GIF from gallery", modifier = Modifier.size(16.dp))
             }
 
         }
@@ -368,7 +369,7 @@ fun VideoWallpapersScreen(
                             description = state.error ?: "Aura could not load live wallpaper candidates. Retry or choose a clip from your gallery.",
                             tone = MaterialTheme.colorScheme.error,
                             primaryAction = AuraStateAction("Retry", Icons.Default.Refresh) { viewModel.refresh() },
-                            secondaryAction = AuraStateAction("From gallery", Icons.Default.FolderOpen) { galleryLauncher.launch("video/*") },
+                            secondaryAction = AuraStateAction("From gallery", Icons.Default.FolderOpen) { galleryLauncher.launch(videoWallpaperMimeTypes()) },
                             modifier = Modifier.padding(24.dp),
                         )
                     }

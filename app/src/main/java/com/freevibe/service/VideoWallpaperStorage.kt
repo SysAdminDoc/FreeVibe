@@ -17,6 +17,8 @@ sealed interface VideoWallpaperSelectionResult {
     data class Failure(val message: String) : VideoWallpaperSelectionResult
 }
 
+internal fun videoWallpaperMimeTypes(): Array<String> = arrayOf("video/*", "image/gif")
+
 internal fun isGifVideoWallpaperSelection(
     mimeType: String?,
     fileName: String?,
@@ -41,9 +43,12 @@ internal fun resolveVideoWallpaperExtension(
         .orEmpty()
     val normalizedName = fileName?.lowercase(Locale.ROOT).orEmpty()
     return when {
+        isGifVideoWallpaperSelection(normalizedMime, normalizedName) -> "gif"
         normalizedMime == "video/webm" || normalizedName.endsWith(".webm") -> "webm"
         normalizedMime == "video/3gpp" || normalizedName.endsWith(".3gp") -> "3gp"
         normalizedMime == "video/ogg" || normalizedName.endsWith(".ogv") -> "ogv"
+        normalizedMime == "video/quicktime" || normalizedName.endsWith(".mov") -> "mov"
+        normalizedMime == "video/x-matroska" || normalizedName.endsWith(".mkv") -> "mkv"
         else -> "mp4"
     }
 }
@@ -57,12 +62,6 @@ class VideoWallpaperStorage @Inject constructor(
         runCatching {
             val resolver = context.contentResolver
             val mimeType = resolver.getType(uri)
-            if (isGifVideoWallpaperSelection(mimeType, uri.lastPathSegment)) {
-                throw UnsupportedOperationException(
-                    "Animated GIF wallpapers are not supported yet. Pick a video clip instead.",
-                )
-            }
-
             val extension = resolveVideoWallpaperExtension(mimeType, uri.lastPathSegment)
             val targetFile = managedVideoFile(extension)
             val tempFile = File(targetFile.parentFile, "${targetFile.name}.tmp")
@@ -72,7 +71,7 @@ class VideoWallpaperStorage @Inject constructor(
                     tempFile.outputStream().use { output -> input.copyTo(output) }
                 } ?: throw IOException("Could not open the selected file")
 
-                validatePreparedVideo(tempFile)
+                validatePreparedMotionFile(tempFile)
                 commitPreparedVideo(tempFile, targetFile)
                 persistSelectedVideoWallpaper(targetFile)
                 targetFile
@@ -93,7 +92,7 @@ class VideoWallpaperStorage @Inject constructor(
 
             try {
                 writer(tempFile)
-                validatePreparedVideo(tempFile)
+                validatePreparedMotionFile(tempFile)
                 commitPreparedVideo(tempFile, targetFile)
                 persistSelectedVideoWallpaper(targetFile)
                 targetFile
@@ -104,7 +103,7 @@ class VideoWallpaperStorage @Inject constructor(
         }
     }
 
-    private fun validatePreparedVideo(file: File) {
+    private fun validatePreparedMotionFile(file: File) {
         if (!file.exists() || file.length() < 1024) {
             throw IOException("Selected file is empty or invalid")
         }
