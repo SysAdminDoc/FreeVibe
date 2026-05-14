@@ -1,6 +1,7 @@
 package com.freevibe.ui.screens.sounds
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.ContentSource
@@ -20,6 +21,7 @@ import com.freevibe.data.remote.toSound
 import com.freevibe.service.AudioPlaybackManager
 import com.freevibe.service.AudioPreviewCache
 import com.freevibe.service.BundledContentProvider
+import com.freevibe.service.CommunityAudioRecorder
 import com.freevibe.service.DownloadManager
 import com.freevibe.service.SeasonalContentManager
 import com.freevibe.service.SelectedContentHolder
@@ -62,6 +64,9 @@ data class SoundsUiState(
     val uploadProgress: Float = 0f,
     val searchReturnTab: SoundTab = SoundTab.RINGTONES,
     val qualityFilter: SoundQualityFilter = SoundQualityFilter.BEST,
+    val isRecordingUpload: Boolean = false,
+    val recordingStartedAtMs: Long = 0L,
+    val recordedUploadUri: Uri? = null,
 )
 
 enum class SoundTab { RINGTONES, NOTIFICATIONS, ALARMS, YOUTUBE, COMMUNITY, SEARCH }
@@ -84,6 +89,7 @@ class SoundsViewModel @Inject constructor(
     val uploadRepo: UploadRepository,
     private val soundUrlResolver: SoundUrlResolver,
     private val seasonalContentManager: SeasonalContentManager,
+    private val communityAudioRecorder: CommunityAudioRecorder,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SoundsUiState())
@@ -125,6 +131,7 @@ class SoundsViewModel @Inject constructor(
 
     private val _communityUploads = MutableStateFlow<List<Sound>>(emptyList())
     val communityUploads = _communityUploads.asStateFlow()
+    val hiddenIds = voteRepo.hiddenIds
 
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress = _playbackProgress.asStateFlow()
@@ -725,10 +732,74 @@ class SoundsViewModel @Inject constructor(
         }
     }
 
+    fun startCommunityRecording() {
+        if (_state.value.isRecordingUpload) return
+        communityAudioRecorder.start()
+            .onSuccess {
+                _state.update {
+                    it.copy(
+                        isRecordingUpload = true,
+                        recordingStartedAtMs = System.currentTimeMillis(),
+                        recordedUploadUri = null,
+                        error = null,
+                    )
+                }
+            }
+            .onFailure { e ->
+                _state.update {
+                    it.copy(error = "Recording failed: ${e.message ?: "microphone unavailable"}")
+                }
+            }
+    }
+
+    fun stopCommunityRecording() {
+        if (!_state.value.isRecordingUpload) return
+        communityAudioRecorder.stop()
+            .onSuccess { uri ->
+                _state.update {
+                    it.copy(
+                        isRecordingUpload = false,
+                        recordingStartedAtMs = 0L,
+                        recordedUploadUri = uri,
+                        applySuccess = "Recording ready to upload",
+                    )
+                }
+            }
+            .onFailure { e ->
+                _state.update {
+                    it.copy(
+                        isRecordingUpload = false,
+                        recordingStartedAtMs = 0L,
+                        error = e.message ?: "Recording could not be saved",
+                    )
+                }
+            }
+    }
+
+    fun discardCommunityRecording() {
+        communityAudioRecorder.cancel()
+        _state.update {
+            it.copy(
+                isRecordingUpload = false,
+                recordingStartedAtMs = 0L,
+                recordedUploadUri = null,
+            )
+        }
+    }
+
+    fun consumeRecordedUpload() {
+        _state.update { it.copy(recordedUploadUri = null) }
+    }
+
+    fun reportRecordingPermissionDenied() {
+        _state.update { it.copy(error = "Microphone permission is required to record a community sound") }
+    }
+
     override fun onCleared() {
         loadJob?.cancel()
         progressJob?.cancel()
         communityJob?.cancel()
+        communityAudioRecorder.cancel()
         audioPlaybackManager.stop()
         super.onCleared()
     }

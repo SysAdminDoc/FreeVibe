@@ -1,5 +1,7 @@
 package com.freevibe.ui.screens.sounds
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,12 +41,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.ContentType
 import com.freevibe.data.model.Sound
 import com.freevibe.data.model.stableKey
+import com.freevibe.data.repository.matchesHiddenIds
 import com.freevibe.ui.components.AuraStateAction
 import com.freevibe.ui.components.AuraStateCard
 import com.freevibe.ui.components.CompactSearchField
@@ -52,6 +56,8 @@ import com.freevibe.ui.components.CountBadge
 import com.freevibe.ui.components.GlassCard
 import com.freevibe.ui.components.SearchHistoryDropdown
 import com.freevibe.ui.components.ShimmerSoundList
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,11 +73,38 @@ fun SoundsScreen(
     val previewReadyIds by viewModel.previewReadyIds.collectAsStateWithLifecycle()
     val topHits by viewModel.topHits.collectAsStateWithLifecycle()
     val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
-    val displayTopHits = remember(topHits, state.selectedTab, state.query, state.qualityFilter) {
-        if (state.selectedTab == SoundTab.RINGTONES && state.query.isBlank()) {
-            rankSounds(topHits, SoundTab.RINGTONES, state.qualityFilter).take(5)
+    val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle(initialValue = emptySet())
+    val communityVoteIds = remember(state.sounds, state.selectedTab) {
+        if (state.selectedTab == SoundTab.COMMUNITY) {
+            state.sounds.map { it.stableKey() }.distinct()
         } else {
             emptyList()
+        }
+    }
+    val communityVoteFlow = remember(communityVoteIds) {
+        if (communityVoteIds.isEmpty()) flowOf(emptyMap<String, Int>()) else viewModel.voteRepo.getVoteCounts(communityVoteIds)
+    }
+    val voteCounts by communityVoteFlow.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val displaySounds = remember(state.sounds, state.selectedTab, hiddenIds, voteCounts) {
+        if (state.selectedTab == SoundTab.COMMUNITY) {
+            state.sounds
+                .filter { !matchesHiddenIds(hiddenIds, it.stableKey(), it.id) }
+                .sortedByDescending { voteCounts[it.stableKey()] ?: 0 }
+        } else {
+            state.sounds
+        }
+    }
+    val displayTopHits = remember(topHits, displaySounds, voteCounts, state.selectedTab, state.query, state.qualityFilter) {
+        when {
+            state.selectedTab == SoundTab.RINGTONES && state.query.isBlank() -> {
+                rankSounds(topHits, SoundTab.RINGTONES, state.qualityFilter).take(5)
+            }
+            state.selectedTab == SoundTab.COMMUNITY && state.query.isBlank() -> {
+                displaySounds
+                    .filter { (voteCounts[it.stableKey()] ?: 0) > 0 }
+                    .take(5)
+            }
+            else -> emptyList()
         }
     }
     var searchQuery by remember { mutableStateOf("") }
@@ -103,6 +136,35 @@ fun SoundsScreen(
     val createAudioPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> uri?.let(onCreateRingtone) }
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.startCommunityRecording()
+        else viewModel.reportRecordingPermissionDenied()
+    }
+    val startRecording: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.startCommunityRecording()
+        } else {
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(state.recordedUploadUri) {
+        state.recordedUploadUri?.let { uri ->
+            selectedAudioUri = uri
+            showUploadDialog = true
+            viewModel.consumeRecordedUpload()
+        }
+    }
+
+    if (state.isRecordingUpload) {
+        RecordingDialog(
+            startedAtMs = state.recordingStartedAtMs,
+            onStop = viewModel::stopCommunityRecording,
+            onDiscard = viewModel::discardCommunityRecording,
+        )
+    }
 
     // Upload dialog
     val uploadUri = selectedAudioUri
@@ -110,9 +172,9 @@ fun SoundsScreen(
         UploadDialog(
             isUploading = state.isUploading,
             uploadProgress = state.uploadProgress,
-            onUpload = { name, category ->
+            onUpload = { name, category, tags ->
                 awaitingUploadResult = true
-                viewModel.uploadSound(uploadUri, name, category)
+                viewModel.uploadSound(uploadUri, name, category, tags)
             },
             onDismiss = {
                 if (!state.isUploading) {
@@ -178,7 +240,7 @@ fun SoundsScreen(
         state.applySuccess?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() }
     }
     LaunchedEffect(state.error) {
-        if (state.sounds.isNotEmpty() || displayTopHits.isNotEmpty()) {
+        if (displaySounds.isNotEmpty() || displayTopHits.isNotEmpty()) {
             state.error?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() }
         }
     }
@@ -191,6 +253,14 @@ fun SoundsScreen(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (state.selectedTab == SoundTab.COMMUNITY) {
+                    SmallFloatingActionButton(
+                        onClick = startRecording,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Icon(Icons.Default.Mic, "Record community sound", modifier = Modifier.size(20.dp))
+                    }
+                }
                 SmallFloatingActionButton(
                     onClick = { uploadAudioPickerLauncher.launch("audio/*") },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -286,7 +356,7 @@ fun SoundsScreen(
 
             // Content
             Box(modifier = Modifier.fillMaxSize()) {
-                if (state.error != null && state.sounds.isEmpty() && displayTopHits.isEmpty() && !state.isLoading && !state.isRefreshing) {
+                if (state.error != null && displaySounds.isEmpty() && displayTopHits.isEmpty() && !state.isLoading && !state.isRefreshing) {
                     AuraStateCard(
                         icon = Icons.Default.CloudOff,
                         title = "Sounds could not refresh",
@@ -304,7 +374,7 @@ fun SoundsScreen(
                 } else {
                     PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = { viewModel.refresh() }) {
                         SoundsList(
-                            sounds = state.sounds,
+                            sounds = displaySounds,
                             selectedTab = state.selectedTab,
                             query = state.query,
                             isLoading = state.isLoading,
@@ -321,6 +391,7 @@ fun SoundsScreen(
                             onLoadMore = { viewModel.loadMore() },
                             playbackProgress = playbackProgress,
                             topHits = displayTopHits,
+                            voteCounts = voteCounts,
                             collections = if (state.query.isBlank()) {
                                 val base = soundCollectionsFor(state.selectedTab)
                                 val seasonal = viewModel.seasonalTheme
@@ -338,6 +409,9 @@ fun SoundsScreen(
                             } else emptyList(),
                             onCollectionClick = { collection -> viewModel.search(collection.query) },
                             onUploadClick = { uploadAudioPickerLauncher.launch("audio/*") },
+                            onRecordClick = startRecording,
+                            onUpvote = { sound -> viewModel.upvote(sound.stableKey()) },
+                            onDownvote = { sound -> viewModel.downvote(sound.stableKey()) },
                         )
                     }
                 }
@@ -506,9 +580,13 @@ private fun SoundsList(
     onLoadMore: () -> Unit,
     playbackProgress: Float,
     topHits: List<Sound>,
+    voteCounts: Map<String, Int> = emptyMap(),
     collections: List<SoundCollectionSpec>,
     onCollectionClick: (SoundCollectionSpec) -> Unit,
     onUploadClick: (() -> Unit)? = null,
+    onRecordClick: (() -> Unit)? = null,
+    onUpvote: ((Sound) -> Unit)? = null,
+    onDownvote: ((Sound) -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(filterKey) { listState.scrollToItem(0) }
@@ -539,7 +617,7 @@ private fun SoundsList(
             }
         }
 
-        // Top 5 This Week (Ringtones tab only)
+        // Featured sound section for ringtones and ranked community uploads.
         if (topHits.isNotEmpty()) {
             item(key = "tophits_header", contentType = "header") {
                 Row(
@@ -547,21 +625,33 @@ private fun SoundsList(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(vertical = 6.dp),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = "Trending", Modifier.size(20.dp), tint = Color(0xFFFF4444))
-                    Text("Top 5 This Week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Icon(
+                        if (selectedTab == SoundTab.COMMUNITY) Icons.Default.Groups else Icons.AutoMirrored.Filled.TrendingUp,
+                        contentDescription = if (selectedTab == SoundTab.COMMUNITY) "Community picks" else "Trending",
+                        Modifier.size(20.dp),
+                        tint = if (selectedTab == SoundTab.COMMUNITY) MaterialTheme.colorScheme.primary else Color(0xFFFF4444),
+                    )
+                    Text(
+                        if (selectedTab == SoundTab.COMMUNITY) "Community Picks" else "Top 5 This Week",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
             items(topHits, key = { "hit_${it.stableKey()}" }, contentType = { "sound_card" }) { sound ->
                 SoundCard(
                     sound = sound,
-                    tab = SoundTab.RINGTONES,
+                    tab = if (selectedTab == SoundTab.COMMUNITY) SoundTab.COMMUNITY else SoundTab.RINGTONES,
                     isPlaying = playingId == sound.stableKey(),
                     isResolving = sound.stableKey() == resolvingId,
                     isPreviewReady = sound.stableKey() in previewReadyIds,
                     playbackProgress = if (playingId == sound.stableKey()) playbackProgress else 0f,
+                    voteCount = voteCounts[sound.stableKey()],
                     onClick = { onSoundClick(sound) },
                     onLongPress = { onLongPress(sound) },
                     onPlayClick = { onPlayClick(sound) },
+                    onUpvote = onUpvote?.let { { it(sound) } },
+                    onDownvote = onDownvote?.let { { it(sound) } },
                 )
             }
             item(key = "tophits_divider", contentType = "divider") {
@@ -581,9 +671,12 @@ private fun SoundsList(
                 isResolving = sound.stableKey() == resolvingId,
                 isPreviewReady = sound.stableKey() in previewReadyIds,
                 playbackProgress = if (playingId == sound.stableKey()) playbackProgress else 0f,
+                voteCount = voteCounts[sound.stableKey()],
                 onClick = { onSoundClick(sound) },
                 onLongPress = { onLongPress(sound) },
                 onPlayClick = { onPlayClick(sound) },
+                onUpvote = onUpvote?.let { { it(sound) } },
+                onDownvote = onDownvote?.let { { it(sound) } },
             )
         }
 
@@ -617,6 +710,13 @@ private fun SoundsList(
                             label = "Upload sound",
                             icon = Icons.Default.Upload,
                             onClick = onUploadClick,
+                        )
+                    } else null,
+                    secondaryAction = if (selectedTab == SoundTab.COMMUNITY && onRecordClick != null) {
+                        AuraStateAction(
+                            label = "Record",
+                            icon = Icons.Default.Mic,
+                            onClick = onRecordClick,
                         )
                     } else null,
                 )
@@ -785,9 +885,12 @@ private fun SoundCard(
     isResolving: Boolean = false,
     isPreviewReady: Boolean = false,
     playbackProgress: Float = 0f,
+    voteCount: Int? = null,
     onClick: () -> Unit,
     onLongPress: () -> Unit = {},
     onPlayClick: () -> Unit,
+    onUpvote: (() -> Unit)? = null,
+    onDownvote: (() -> Unit)? = null,
 ) {
     val showUploader = sound.uploaderName.isNotEmpty() &&
         sound.uploaderName != "Unknown" &&
@@ -933,6 +1036,45 @@ private fun SoundCard(
             if (isPlaying && sound.duration > 0) {
                 Spacer(Modifier.height(6.dp))
                 MiniWaveform(sound.duration, true, playbackProgress, Modifier.fillMaxWidth().padding(start = 52.dp))
+            }
+
+            if (sound.source == ContentSource.COMMUNITY && (onUpvote != null || onDownvote != null)) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 52.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    onUpvote?.let {
+                        OutlinedButton(
+                            onClick = it,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp),
+                        ) {
+                            Icon(Icons.Default.ThumbUp, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                if ((voteCount ?: 0) > 0) "+${voteCount ?: 0}" else "Upvote",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                    onDownvote?.let {
+                        TextButton(
+                            onClick = it,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(34.dp),
+                        ) {
+                            Icon(Icons.Default.VisibilityOff, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Hide", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
             }
         }
     }
@@ -1114,25 +1256,82 @@ private fun QuickApplyRow(label: String, icon: androidx.compose.ui.graphics.vect
 // -- Upload Dialog --
 
 @Composable
+private fun RecordingDialog(
+    startedAtMs: Long,
+    onStop: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    var elapsedMs by remember(startedAtMs) { mutableStateOf(0L) }
+    LaunchedEffect(startedAtMs) {
+        while (true) {
+            elapsedMs = (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+            delay(250L)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = {},
+        icon = { Icon(Icons.Default.Mic, contentDescription = null) },
+        title = { Text("Recording sound") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    formatRecordingElapsed(elapsedMs),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                LinearProgressIndicator(
+                    progress = { (elapsedMs / 60_000f).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "Record up to 60 seconds, then add a name, category, and tags before sharing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onStop, shape = RoundedCornerShape(10.dp)) {
+                Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Stop")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDiscard, shape = RoundedCornerShape(10.dp)) {
+                Text("Discard")
+            }
+        },
+    )
+}
+
+@Composable
 private fun UploadDialog(
     isUploading: Boolean,
     uploadProgress: Float,
-    onUpload: (name: String, category: String) -> Unit,
+    onUpload: (name: String, category: String, tags: List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("ringtone") }
+    var tagsText by remember { mutableStateOf("") }
     val categories = listOf("ringtone" to "Ringtone", "notification" to "Notification", "alarm" to "Alarm")
+    val parsedTags = remember(tagsText) {
+        tagsText.split(',', '#')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isUploading) onDismiss() },
-        title = { Text("Upload Sound") },
+        title = { Text("Upload sound") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Sound Name") },
+                    label = { Text("Sound name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -1143,9 +1342,19 @@ private fun UploadDialog(
                             selected = selectedCategory == key,
                             onClick = { selectedCategory = key },
                             label = { Text(label) },
+                            shape = RoundedCornerShape(8.dp),
                         )
                     }
                 }
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("Tags") },
+                    placeholder = { Text("calm, chime, short") },
+                    supportingText = { Text("Comma-separated tags help people find it.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 if (isUploading) {
                     LinearProgressIndicator(
                         progress = { uploadProgress },
@@ -1161,15 +1370,24 @@ private fun UploadDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onUpload(name.ifBlank { "Untitled" }, selectedCategory) },
-                enabled = !isUploading,
+                onClick = { onUpload(name.trim(), selectedCategory, parsedTags) },
+                enabled = !isUploading && name.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
             ) { Text("Upload") }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
                 enabled = !isUploading,
+                shape = RoundedCornerShape(10.dp),
             ) { Text("Cancel") }
         },
     )
+}
+
+private fun formatRecordingElapsed(elapsedMs: Long): String {
+    val totalSeconds = (elapsedMs / 1000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }

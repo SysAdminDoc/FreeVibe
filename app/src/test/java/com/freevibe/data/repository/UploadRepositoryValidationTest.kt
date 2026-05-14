@@ -59,4 +59,11 @@ class UploadRepositoryValidationTest {
         assertEquals("user_123", sanitizeUploadStorageSegment("user/123"))
         assertEquals("user", sanitizeUploadStorageSegment("   "))
     }
+
+    @Test
+    fun `shouldDisplayCommunityUpload hides negative vote scores`() {
+        assertTrue(shouldDisplayCommunityUpload(0))
+        assertTrue(shouldDisplayCommunityUpload(12))
+        assertFalse(shouldDisplayCommunityUpload(-1))
+    }
 }

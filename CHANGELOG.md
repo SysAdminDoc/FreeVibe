@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.28.0
+- **Community sound uploads completed**: Sounds > Community can now record from the microphone or pick an audio file, then require name, category, and searchable tags before upload.
+- **Community Picks**: top-voted community sounds surface in a dedicated section, while community results are sorted by vote count and hidden once the user hides them.
+- **Moderation polish**: negative-score community uploads are filtered out of the feed, and sound cards expose upvote/hide actions for uploaded content.
+
 ## v6.27.0
 - **Video battery dashboard**: Settings > Video Wallpapers now shows live device battery, wallpaper-service heartbeat, effective FPS, media type, presentation mode, and estimated impact.
 - **Auto battery saver**: Video/GIF live wallpapers can automatically cap playback at 15 FPS when the device drops below 15% battery and is not charging.
