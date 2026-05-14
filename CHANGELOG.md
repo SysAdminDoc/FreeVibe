@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.31.0
+- **Shareable collections**: wallpaper collections now publish Firebase-backed Aura links, include those links in the system share sheet, and can display scannable QR codes.
+- **Collection import**: Collections now has an import action for pasted Aura links, shared JSON files, and QR images, with imported media remaining URL-backed until opened or applied.
+- **Deep-link support**: `aura://collection/import/{token}` and shared JSON intents route directly into the Collections import flow.
+
 ## v6.30.0
 - **Creator profiles**: Settings now links to a creator profile dashboard with current identity, upload count, total votes, saved favorites count, followed creators, followed uploads, and top creators leaderboard.
 - **Follow creators**: creator follows persist through Firebase RTDB and the profile screen surfaces new uploads from followed creators.

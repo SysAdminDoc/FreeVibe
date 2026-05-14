@@ -38,8 +38,8 @@ android {
         applicationId = "com.freevibe"
         minSdk = 26
         targetSdk = 35
-        versionCode = 110
-        versionName = "6.30.0"
+        versionCode = 111
+        versionName = "6.31.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -159,6 +159,9 @@ dependencies {
 
     // Serialization
     implementation(libs.serialization.json)
+
+    // QR code generation/decoding for shareable collection links
+    implementation("com.google.zxing:core:3.5.3")
 
     // Glance Widgets
     implementation(libs.glance.appwidget)

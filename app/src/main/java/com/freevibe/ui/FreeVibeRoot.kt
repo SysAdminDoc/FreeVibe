@@ -884,12 +884,28 @@ fun FreeVibeRoot(
             }
 
             // ── Collections ────────────────────────────────────
-            composable(Screen.Collections.route) {
+            composable(
+                route = Screen.Collections.destinationPattern,
+                arguments = listOf(
+                    navArgument("importToken") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("importUri") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { backStackEntry ->
                 CollectionsScreen(
                     onBack = { navController.popBackStack() },
                     onWallpaperClick = { wallpaper ->
                         navController.navigate(Screen.WallpaperDetail.createRoute(wallpaper)) { launchSingleTop = true }
                     },
+                    initialImportToken = backStackEntry.arguments?.getString("importToken")?.ifBlank { null },
+                    initialImportUri = backStackEntry.arguments?.getString("importUri")?.ifBlank { null },
                 )
             }
 

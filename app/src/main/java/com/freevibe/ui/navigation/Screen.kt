@@ -291,7 +291,16 @@ sealed class Screen(
         title = "Collections",
         icon = Icons.Filled.Folder,
         selectedIcon = Icons.Filled.Folder,
-    )
+        destinationPattern = "collections?importToken={importToken}&importUri={importUri}",
+    ) {
+        fun createRoute(importToken: String? = null, importUri: String? = null): String {
+            val params = buildList {
+                importToken?.takeIf { it.isNotBlank() }?.let { add("importToken=${Uri.encode(it)}") }
+                importUri?.takeIf { it.isNotBlank() }?.let { add("importUri=${Uri.encode(it)}") }
+            }
+            return if (params.isEmpty()) route else "$route?${params.joinToString("&")}"
+        }
+    }
 
     // ── Wallpaper History ───────────────────────────────────────
     data object WallpaperHistory : Screen(
