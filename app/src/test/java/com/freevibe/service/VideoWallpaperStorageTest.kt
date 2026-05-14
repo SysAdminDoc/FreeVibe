@@ -28,4 +28,11 @@ class VideoWallpaperStorageTest {
     fun `video wallpaper picker accepts video and gif mime types`() {
         assertEquals(listOf("video/*", "image/gif"), videoWallpaperMimeTypes().toList())
     }
+
+    @Test
+    fun `video wallpaper scale mode defaults safely`() {
+        assertEquals(VIDEO_WALLPAPER_SCALE_MODE_FIT, normalizeVideoWallpaperScaleMode(" FIT "))
+        assertEquals(VIDEO_WALLPAPER_SCALE_MODE_ZOOM, normalizeVideoWallpaperScaleMode("crop"))
+        assertEquals(VIDEO_WALLPAPER_SCALE_MODE_ZOOM, normalizeVideoWallpaperScaleMode(null))
+    }
 }

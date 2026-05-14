@@ -4,6 +4,11 @@ All notable changes to Aura will be documented in this file.
 
 ## Unreleased
 
+## v6.23.0
+- **Video wallpaper presentation controls**: online video apply now offers Fill and Fit before setup. Fill keeps the premium full-screen crop behavior, while Fit preserves the complete frame with letterboxing.
+- **Runtime scale-mode support**: `VideoWallpaperService` now reads the selected scale mode for both MediaPlayer videos and canvas-rendered GIF wallpapers.
+- **Roadmap closure**: Phase 5.1 fit/fill/crop controls are now represented in the apply flow; remaining video work is the deeper loop trim/timeline editor.
+
 ## v6.22.0
 - **Local video/GIF wallpapers**: Video Wallpapers and Settings now open a single system picker for local `video/*` clips and animated GIFs, then copy the selection into Aura-managed storage for live wallpaper setup.
 - **Animated GIF live wallpaper playback**: `VideoWallpaperService` now detects `.gif` selections and renders them through a bounded canvas loop while keeping the existing MediaPlayer path for videos.
