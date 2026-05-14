@@ -9,6 +9,7 @@ import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.remote.pexels.PexelsApi
 import com.freevibe.data.repository.YouTubeRepository
 import com.freevibe.data.repository.VoteRepository
+import com.freevibe.service.VIDEO_WALLPAPER_SCALE_MODE_ZOOM
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -227,7 +228,10 @@ class VideoWallpapersViewModel @Inject constructor(
         }
     }
 
-    fun applyVideoWallpaper(item: VideoWallpaperItem) {
+    fun applyVideoWallpaper(
+        item: VideoWallpaperItem,
+        scaleMode: String = VIDEO_WALLPAPER_SCALE_MODE_ZOOM,
+    ) {
         viewModelScope.launch {
             _state.update { it.copy(isApplying = item.id) }
             try {
@@ -284,7 +288,7 @@ class VideoWallpapersViewModel @Inject constructor(
                     if (com.freevibe.BuildConfig.DEBUG) Log.d("VideoWP", "Downloaded: ${cacheFile.length() / 1024}KB")
                 }.getOrElse { throw it }
 
-                launchOrExportVideoWallpaper(context, file)
+                launchOrExportVideoWallpaper(context, file, scaleMode = scaleMode)
                 _state.update { it.copy(isApplying = null) }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e

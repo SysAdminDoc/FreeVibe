@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -38,8 +39,11 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.freevibe.data.repository.matchesHiddenIds
+import com.freevibe.service.VIDEO_WALLPAPER_SCALE_MODE_FIT
+import com.freevibe.service.VIDEO_WALLPAPER_SCALE_MODE_ZOOM
 import com.freevibe.service.VideoWallpaperSelectionResult
 import com.freevibe.service.VideoWallpaperService
+import com.freevibe.service.normalizeVideoWallpaperScaleMode
 import com.freevibe.service.videoWallpaperMimeTypes
 import com.freevibe.ui.components.AuraStateAction
 import com.freevibe.ui.components.AuraStateCard
@@ -94,11 +98,15 @@ data class VideoWallpapersState(
     val degradedSources: List<String> = emptyList(),
 )
 
-internal fun persistSelectedVideoWallpaper(context: Context, file: File) {
+internal fun persistSelectedVideoWallpaper(
+    context: Context,
+    file: File,
+    scaleMode: String = VIDEO_WALLPAPER_SCALE_MODE_ZOOM,
+) {
     context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
         .edit()
         .putString("video_path", file.absolutePath)
-        .putString("scale_mode", "zoom")
+        .putString("scale_mode", normalizeVideoWallpaperScaleMode(scaleMode))
         .apply()
 }
 
@@ -122,8 +130,13 @@ internal suspend fun exportVideoToGallery(context: Context, file: File): Uri? = 
     }
 }
 
-internal suspend fun launchOrExportVideoWallpaper(context: Context, file: File, isCropped: Boolean = false) {
-    persistSelectedVideoWallpaper(context, file)
+internal suspend fun launchOrExportVideoWallpaper(
+    context: Context,
+    file: File,
+    isCropped: Boolean = false,
+    scaleMode: String = VIDEO_WALLPAPER_SCALE_MODE_ZOOM,
+) {
+    persistSelectedVideoWallpaper(context, file, scaleMode)
     when (
         withContext(Dispatchers.Main) {
             launchLiveWallpaperPicker(
@@ -500,6 +513,7 @@ fun VideoWallpapersScreen(
     confirmItem?.let { item ->
         val streamUrl = viewModel.getStreamUrl(item.id)
         val needsCrop = item.hasDimensions && item.isLandscape
+        var selectedScaleMode by remember(item.id) { mutableStateOf(VIDEO_WALLPAPER_SCALE_MODE_ZOOM) }
         AlertDialog(
             onDismissRequest = { confirmItem = null },
             title = { Text("Video Wallpaper") },
@@ -512,11 +526,38 @@ fun VideoWallpapersScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text("${item.loopBadge()} · ${item.batteryBadge()} · ${item.fitBadge(state.orientation)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Presentation",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    VideoPresentationSelector(
+                        selectedScaleMode = selectedScaleMode,
+                        onSelectScaleMode = { selectedScaleMode = it },
+                    )
+                    Spacer(Modifier.height(8.dp))
                     if (needsCrop) {
-                        Text("This is a landscape video. Crop recommended to avoid stretching.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            if (selectedScaleMode == VIDEO_WALLPAPER_SCALE_MODE_FIT) {
+                                "Fit preserves the full landscape frame with letterboxing. Crop creates a portrait version."
+                            } else {
+                                "Fill crops landscape edges to avoid stretching. Use Crop for more control."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (selectedScaleMode == VIDEO_WALLPAPER_SCALE_MODE_FIT) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        )
                     } else {
-                        Text("Choose how to apply this video wallpaper.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Fill uses the whole screen; Fit keeps the full frame visible.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             },
@@ -525,7 +566,7 @@ fun VideoWallpapersScreen(
                     if (streamUrl != null) {
                         if (needsCrop) {
                             // Landscape: Crop is primary action
-                            OutlinedButton(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply Anyway") }
+                            OutlinedButton(onClick = { viewModel.applyVideoWallpaper(item, selectedScaleMode); confirmItem = null }) { Text("Apply") }
                             Button(onClick = {
                                 confirmItem = null
                                 cropItem = item to streamUrl
@@ -544,10 +585,10 @@ fun VideoWallpapersScreen(
                                 Spacer(Modifier.width(4.dp))
                                 Text("Crop")
                             }
-                            Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
+                            Button(onClick = { viewModel.applyVideoWallpaper(item, selectedScaleMode); confirmItem = null }) { Text("Apply") }
                         }
                     } else {
-                        Button(onClick = { viewModel.applyVideoWallpaper(item); confirmItem = null }) { Text("Apply") }
+                        Button(onClick = { viewModel.applyVideoWallpaper(item, selectedScaleMode); confirmItem = null }) { Text("Apply") }
                     }
                 }
             },
@@ -826,6 +867,64 @@ private fun videoFocusLabel(filter: VideoFocusFilter): String = when (filter) {
     VideoFocusFilter.LOOP_SAFE -> "Loop-safe"
     VideoFocusFilter.LOW_BATTERY -> "Low battery"
     VideoFocusFilter.PHONE_FIT -> "Phone fit"
+}
+
+@Composable
+private fun VideoPresentationSelector(
+    selectedScaleMode: String,
+    onSelectScaleMode: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PresentationModeButton(
+            selected = selectedScaleMode == VIDEO_WALLPAPER_SCALE_MODE_ZOOM,
+            onClick = { onSelectScaleMode(VIDEO_WALLPAPER_SCALE_MODE_ZOOM) },
+            icon = Icons.Default.CropFree,
+            label = "Fill",
+            modifier = Modifier.weight(1f),
+        )
+        PresentationModeButton(
+            selected = selectedScaleMode == VIDEO_WALLPAPER_SCALE_MODE_FIT,
+            onClick = { onSelectScaleMode(VIDEO_WALLPAPER_SCALE_MODE_FIT) },
+            icon = Icons.Default.FitScreen,
+            label = "Fit",
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PresentationModeButton(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 44.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                Color.Transparent
+            },
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable

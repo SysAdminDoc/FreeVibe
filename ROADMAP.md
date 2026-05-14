@@ -29,7 +29,17 @@
 - [x] `VideoWallpaperService` now keeps the existing MediaPlayer path for videos and adds canvas-based animated GIF playback with the same center-crop presentation model.
 - [x] Removed the Settings dead-end that said GIF import was unsupported; gallery actions and fallback toasts now describe "motion wallpaper" instead of video-only import.
 - [x] Focused tests cover GIF detection, video/GIF picker MIME types, and extension preservation for GIF/WebM/3GP/MOV/MKV/MP4.
-- [ ] Remaining Phase 5.1/5.2 work: a true video loop editor with start/end trim, frame timeline preview, and per-apply fit/fill/crop controls.
+- [ ] Remaining Phase 5.2 work: a true video loop editor with start/end trim, frame timeline preview, and loop preview before applying.
+
+---
+
+## Implementation Pass - 2026-05-14 Video Fit/Fill Apply Controls
+
+- [x] Completed the Phase 5.1 fit/fill/crop control slice for online video wallpapers: the apply confirmation now exposes Fill and Fit presentation choices before setup, alongside the existing Crop path.
+- [x] `VideoWallpaperService` reads the selected `scale_mode` and maps it to MediaPlayer scale modes for videos.
+- [x] Animated GIF live wallpapers honor the same scale mode in their canvas renderer, using center-crop Fill or letterboxed Fit.
+- [x] Scale-mode normalization is covered by focused unit tests so malformed stored values fall back to Fill.
+- [ ] Remaining Phase 5.2 work: start/end trim, frame timeline thumbnails, and loop preview before applying.
 
 ---
 
@@ -245,7 +255,7 @@
 - [x] `ActivityResultContracts.OpenDocument()` accepts `video/*` and `image/gif`
 - [x] Copy to app storage, set via `VideoWallpaperService`
 - [ ] Trim start/end for loop selection (reuse audio trimmer UX pattern with video)
-- [ ] Fit/fill/crop controls before applying
+- [x] Fit/fill/crop controls before applying
 - This is the most requested feature for video wallpaper apps
 
 ### 5.2 Video Loop Editor

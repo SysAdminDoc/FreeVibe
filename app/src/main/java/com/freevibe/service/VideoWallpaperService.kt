@@ -38,6 +38,8 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun getPrefs() = getSharedPreferences("freevibe_live_wp", MODE_PRIVATE)
         private fun getVideoPath(): String? = getPrefs().getString("video_path", null)
+        private fun getScaleMode(): String =
+            normalizeVideoWallpaperScaleMode(getPrefs().getString("scale_mode", VIDEO_WALLPAPER_SCALE_MODE_ZOOM))
         private fun getPlaybackSpeed(): Float =
             getSharedPreferences("freevibe_prefs", MODE_PRIVATE)
                 .getFloat("video_playback_speed", 1.0f).takeIf { it > 0 } ?: 1.0f
@@ -133,6 +135,7 @@ class VideoWallpaperService : WallpaperService() {
                     return
                 }
                 val speed = getPlaybackSpeed()
+                val scaleMode = getScaleMode()
 
                 // Detect video dimensions before playback for accurate surface sizing
                 var videoW = 0
@@ -167,9 +170,15 @@ class VideoWallpaperService : WallpaperService() {
                     setDisplay(safeHolder)
                     isLooping = true
                     setVolume(0f, 0f)
-                    // SCALE_TO_FIT_WITH_CROPPING: scale video uniformly to fill the surface,
-                    // center it, and crop overflow. This preserves aspect ratio.
-                    try { setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING) } catch (_: Exception) {}
+                    try {
+                        setVideoScalingMode(
+                            if (scaleMode == VIDEO_WALLPAPER_SCALE_MODE_FIT) {
+                                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                            } else {
+                                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                            },
+                        )
+                    } catch (_: Exception) {}
                     setOnPreparedListener { mp ->
                         // If MediaMetadataRetriever didn't get dimensions, read from MediaPlayer
                         if (videoW <= 0 || videoH <= 0) {
@@ -184,7 +193,7 @@ class VideoWallpaperService : WallpaperService() {
                 }
 
                 if (BuildConfig.DEBUG) android.util.Log.d("VideoWPService",
-                    "Playing ${videoW}x${videoH} on ${sw}x${sh} screen, mode=SCALE_TO_FIT_WITH_CROPPING, path=$path")
+                    "Playing ${videoW}x${videoH} on ${sw}x${sh} screen, mode=$scaleMode, path=$path")
             } catch (e: Exception) {
                 if (BuildConfig.DEBUG) android.util.Log.e("VideoWPService", "Init failed: ${e.message}")
                 releasePlayback()
@@ -228,7 +237,7 @@ class VideoWallpaperService : WallpaperService() {
             if (BuildConfig.DEBUG) {
                 android.util.Log.d(
                     "VideoWPService",
-                    "Playing GIF ${movie.width()}x${movie.height()} on ${sw}x${sh} screen, path=${file.absolutePath}",
+                    "Playing GIF ${movie.width()}x${movie.height()} on ${sw}x${sh} screen, mode=${getScaleMode()}, path=${file.absolutePath}",
                 )
             }
         }
@@ -268,10 +277,13 @@ class VideoWallpaperService : WallpaperService() {
 
                 val movieWidth = movie.width().coerceAtLeast(1)
                 val movieHeight = movie.height().coerceAtLeast(1)
-                val scale = max(
-                    canvas.width / movieWidth.toFloat(),
-                    canvas.height / movieHeight.toFloat(),
-                )
+                val scaleX = canvas.width / movieWidth.toFloat()
+                val scaleY = canvas.height / movieHeight.toFloat()
+                val scale = if (getScaleMode() == VIDEO_WALLPAPER_SCALE_MODE_FIT) {
+                    minOf(scaleX, scaleY)
+                } else {
+                    max(scaleX, scaleY)
+                }
                 val dx = (canvas.width - movieWidth * scale) / 2f
                 val dy = (canvas.height - movieHeight * scale) / 2f
 

@@ -17,7 +17,16 @@ sealed interface VideoWallpaperSelectionResult {
     data class Failure(val message: String) : VideoWallpaperSelectionResult
 }
 
+internal const val VIDEO_WALLPAPER_SCALE_MODE_ZOOM = "zoom"
+internal const val VIDEO_WALLPAPER_SCALE_MODE_FIT = "fit"
+
 internal fun videoWallpaperMimeTypes(): Array<String> = arrayOf("video/*", "image/gif")
+
+internal fun normalizeVideoWallpaperScaleMode(scaleMode: String?): String =
+    when (scaleMode?.trim()?.lowercase(Locale.ROOT)) {
+        VIDEO_WALLPAPER_SCALE_MODE_FIT -> VIDEO_WALLPAPER_SCALE_MODE_FIT
+        else -> VIDEO_WALLPAPER_SCALE_MODE_ZOOM
+    }
 
 internal fun isGifVideoWallpaperSelection(
     mimeType: String?,
@@ -139,7 +148,7 @@ class VideoWallpaperStorage @Inject constructor(
         context.getSharedPreferences("freevibe_live_wp", Context.MODE_PRIVATE)
             .edit()
             .putString("video_path", file.absolutePath)
-            .putString("scale_mode", "zoom")
+            .putString("scale_mode", VIDEO_WALLPAPER_SCALE_MODE_ZOOM)
             .apply()
     }
 }
