@@ -29,7 +29,7 @@
 - [x] `VideoWallpaperService` now keeps the existing MediaPlayer path for videos and adds canvas-based animated GIF playback with the same center-crop presentation model.
 - [x] Removed the Settings dead-end that said GIF import was unsupported; gallery actions and fallback toasts now describe "motion wallpaper" instead of video-only import.
 - [x] Focused tests cover GIF detection, video/GIF picker MIME types, and extension preservation for GIF/WebM/3GP/MOV/MKV/MP4.
-- [ ] Remaining Phase 5.2 work: a true video loop editor with start/end trim, frame timeline preview, and loop preview before applying.
+- [ ] Remaining Phase 5.2 work: frame thumbnails in the loop timeline.
 
 ---
 
@@ -39,7 +39,17 @@
 - [x] `VideoWallpaperService` reads the selected `scale_mode` and maps it to MediaPlayer scale modes for videos.
 - [x] Animated GIF live wallpapers honor the same scale mode in their canvas renderer, using center-crop Fill or letterboxed Fit.
 - [x] Scale-mode normalization is covered by focused unit tests so malformed stored values fall back to Fill.
-- [ ] Remaining Phase 5.2 work: start/end trim, frame timeline thumbnails, and loop preview before applying.
+- [ ] Remaining Phase 5.2 work: frame thumbnails under the loop timeline scrubber.
+
+---
+
+## Implementation Pass - 2026-05-14 Video Loop Trim Editor
+
+- [x] Completed the Phase 5.1/5.2 loop trim slice: the video crop editor is now a Loop & Crop flow with start/end range controls.
+- [x] The preview player seeks back to the selected loop start when it reaches the selected loop end, so users can judge the actual live-wallpaper segment before applying.
+- [x] FFmpeg export now receives `-ss` and `-t` arguments for the selected segment while preserving the existing crop transform.
+- [x] Focused tests cover loop-range coercion and FFmpeg trim argument formatting.
+- [ ] Remaining Phase 5.2 work: generate frame thumbnails under the timeline scrubber.
 
 ---
 
@@ -254,15 +264,16 @@
 ### 5.1 Gallery Video/GIF Support
 - [x] `ActivityResultContracts.OpenDocument()` accepts `video/*` and `image/gif`
 - [x] Copy to app storage, set via `VideoWallpaperService`
-- [ ] Trim start/end for loop selection (reuse audio trimmer UX pattern with video)
+- [x] Trim start/end for loop selection (reuse audio trimmer UX pattern with video)
 - [x] Fit/fill/crop controls before applying
 - This is the most requested feature for video wallpaper apps
 
 ### 5.2 Video Loop Editor
-- Visual timeline scrubber with frame thumbnails
-- Select loop start/end points
-- Preview the loop before applying
-- Crop via FFmpeg (already bundled)
+- [x] Visual timeline scrubber for loop range
+- [ ] Frame thumbnails under the timeline scrubber
+- [x] Select loop start/end points
+- [x] Preview the loop before applying
+- [x] Crop via FFmpeg (already bundled)
 - Useful for YouTube videos with intros/outros
 
 ### 5.3 VFX Particle Overlays
