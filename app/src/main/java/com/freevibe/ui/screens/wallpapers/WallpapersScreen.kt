@@ -1,5 +1,8 @@
 package com.freevibe.ui.screens.wallpapers
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,6 +130,17 @@ fun WallpapersScreen(
     var showSearchHistory by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var showFiltersSheet by remember { mutableStateOf(false) }
+    var showWallpaperUploadDialog by remember { mutableStateOf(false) }
+    var selectedWallpaperUploadUri by remember { mutableStateOf<Uri?>(null) }
+    var awaitingWallpaperUploadResult by remember { mutableStateOf(false) }
+    val wallpaperUploadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            selectedWallpaperUploadUri = uri
+            showWallpaperUploadDialog = true
+        }
+    }
     val wallpaperFilterCount = remember(state.selectedTab, state.selectedColor, state.discoverFilter, state.topRange) {
         buildList {
             if (state.selectedTab == WallpaperTab.DISCOVER && state.discoverFilter != WallpaperDiscoverFilter.FOR_YOU) {
@@ -157,6 +171,39 @@ fun WallpapersScreen(
             state.error?.let {
                 snackbarHostState.showSnackbar(it)
                 viewModel.clearError()
+            }
+        }
+    }
+    if (showWallpaperUploadDialog && selectedWallpaperUploadUri != null) {
+        WallpaperUploadDialog(
+            isUploading = state.isUploadingWallpaper,
+            uploadProgress = state.wallpaperUploadProgress,
+            onUpload = { name, category, tags ->
+                awaitingWallpaperUploadResult = true
+                selectedWallpaperUploadUri?.let { uri ->
+                    viewModel.uploadCommunityWallpaper(
+                        localUri = uri,
+                        name = name,
+                        category = category,
+                        tags = tags,
+                    )
+                }
+            },
+            onDismiss = {
+                if (!state.isUploadingWallpaper) {
+                    showWallpaperUploadDialog = false
+                    selectedWallpaperUploadUri = null
+                    awaitingWallpaperUploadResult = false
+                }
+            },
+        )
+        LaunchedEffect(state.isUploadingWallpaper, state.applySuccess, state.error) {
+            if (awaitingWallpaperUploadResult && !state.isUploadingWallpaper) {
+                awaitingWallpaperUploadResult = false
+            }
+            if (!state.isUploadingWallpaper && state.applySuccess == "Wallpaper upload complete") {
+                showWallpaperUploadDialog = false
+                selectedWallpaperUploadUri = null
             }
         }
     }
@@ -439,6 +486,7 @@ fun WallpapersScreen(
                                 title = when {
                                     state.selectedTab == WallpaperTab.SEARCH -> "No results for \"${state.query}\""
                                     state.selectedTab == WallpaperTab.COLOR -> "No wallpapers matched this tone"
+                                    state.selectedTab == WallpaperTab.COMMUNITY -> "No community wallpapers yet"
                                     state.selectedTab == WallpaperTab.PIXABAY -> "Pixabay needs a key before it can load"
                                     else -> "Nothing is ready to show here yet"
                                 },
@@ -447,24 +495,32 @@ fun WallpapersScreen(
                                         "Try a broader term, fewer keywords, or jump back into Discover for curated results."
                                     state.selectedTab == WallpaperTab.COLOR ->
                                         "Try another tone or return to Discover for a wider mix."
+                                    state.selectedTab == WallpaperTab.COMMUNITY ->
+                                        "Upload a gallery image to seed the community feed."
                                     state.selectedTab == WallpaperTab.PIXABAY ->
                                         "Add your Pixabay API key in Settings to unlock this source."
                                     else ->
                                         "Refresh the feed or switch sources to keep browsing."
                                 },
                                 primaryAction = WallpaperStateAction(
-                                    label = if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                    label = if (state.selectedTab == WallpaperTab.COMMUNITY) {
+                                        "Upload wallpaper"
+                                    } else if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
                                         "Back to Discover"
                                     } else {
                                         "Refresh"
                                     },
-                                    icon = if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                    icon = if (state.selectedTab == WallpaperTab.COMMUNITY) {
+                                        Icons.Default.Upload
+                                    } else if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
                                         Icons.Default.Explore
                                     } else {
                                         Icons.Default.Refresh
                                     },
                                     onClick = {
-                                        if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
+                                        if (state.selectedTab == WallpaperTab.COMMUNITY) {
+                                            wallpaperUploadLauncher.launch("image/*")
+                                        } else if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
                                             viewModel.selectTab(WallpaperTab.DISCOVER)
                                         } else {
                                             viewModel.refresh()
@@ -521,7 +577,9 @@ fun WallpapersScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = 80.dp),
+            showUpload = state.selectedTab == WallpaperTab.COMMUNITY,
             showThemeMatch = state.selectedTab == WallpaperTab.DISCOVER,
+            onUpload = { wallpaperUploadLauncher.launch("image/*") },
             onThemeMatch = { viewModel.matchMyTheme() },
             onSurpriseMe = { viewModel.loadRandom() },
         )
@@ -1313,10 +1371,103 @@ private data class DiscoverCollectionShortcut(
     val tint: Color,
 )
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WallpaperUploadDialog(
+    isUploading: Boolean,
+    uploadProgress: Float,
+    onUpload: (name: String, category: String, tags: List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("other") }
+    var tagsText by remember { mutableStateOf("") }
+    val categories = listOf(
+        "other" to "General",
+        "amoled" to "AMOLED",
+        "minimal" to "Minimal",
+        "nature" to "Nature",
+        "abstract" to "Abstract",
+        "city" to "City",
+        "space" to "Space",
+    )
+    val parsedTags = remember(tagsText) {
+        tagsText.split(',', '#')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!isUploading) onDismiss() },
+        title = { Text("Upload wallpaper") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Wallpaper name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Category", style = MaterialTheme.typography.labelMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    categories.forEach { (key, label) ->
+                        FilterChip(
+                            selected = selectedCategory == key,
+                            onClick = { selectedCategory = key },
+                            label = { Text(label) },
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("Tags") },
+                    placeholder = { Text("dark, gradient, lock screen") },
+                    supportingText = { Text("Aura crops to your screen ratio, compresses under 4 MB, and extracts colors.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (isUploading) {
+                    LinearProgressIndicator(
+                        progress = { uploadProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        "${(uploadProgress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onUpload(name.trim(), selectedCategory, parsedTags) },
+                enabled = !isUploading && name.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
+            ) { Text("Upload") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isUploading,
+                shape = RoundedCornerShape(10.dp),
+            ) { Text("Cancel") }
+        },
+    )
+}
+
 @Composable
 private fun FloatingActionTray(
     modifier: Modifier = Modifier,
+    showUpload: Boolean,
     showThemeMatch: Boolean,
+    onUpload: () -> Unit,
     onThemeMatch: () -> Unit,
     onSurpriseMe: () -> Unit,
 ) {
@@ -1325,6 +1476,14 @@ private fun FloatingActionTray(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.End,
     ) {
+        if (showUpload) {
+            FloatingActionRow(
+                icon = Icons.Default.Upload,
+                label = "Upload",
+                tint = MaterialTheme.colorScheme.secondary,
+                onClick = onUpload,
+            )
+        }
         if (showThemeMatch) {
             FloatingActionRow(
                 icon = Icons.Default.Palette,
@@ -1377,6 +1536,7 @@ private fun wallpaperHeaderEyebrow(
     }
     WallpaperTab.SEARCH -> "Cross-source search"
     WallpaperTab.COLOR -> "Color-focused browsing"
+    WallpaperTab.COMMUNITY -> "Community uploads"
     else -> "${wallpaperTabLabel(tab)} source"
 }
 
@@ -1387,6 +1547,7 @@ private fun wallpaperHeaderTitle(
     WallpaperTab.DISCOVER -> "Discover wallpapers"
     WallpaperTab.SEARCH -> if (query.isNotBlank()) "Results for \"$query\"" else "Search results"
     WallpaperTab.COLOR -> "Browse by tone"
+    WallpaperTab.COMMUNITY -> "Community wallpapers"
     else -> wallpaperTabLabel(tab)
 }
 
@@ -1419,6 +1580,7 @@ private fun wallpaperHeaderSubtitle(
     WallpaperTab.PEXELS -> "Clean photography and motion-friendly imagery from Pexels."
     WallpaperTab.PIXABAY -> "Free-use imagery with a broad catalog once your source is configured."
     WallpaperTab.REDDIT -> "Community-driven finds, trending daily picks, and unexpected standouts."
+    WallpaperTab.COMMUNITY -> "User-uploaded phone-ready wallpapers with tags, colors, and community voting."
 }
 
 private fun wallpaperTabIcon(tab: WallpaperTab): androidx.compose.ui.graphics.vector.ImageVector = when (tab) {
@@ -1427,6 +1589,7 @@ private fun wallpaperTabIcon(tab: WallpaperTab): androidx.compose.ui.graphics.ve
     WallpaperTab.PIXABAY -> Icons.Default.Collections
     WallpaperTab.REDDIT -> Icons.Default.Public
     WallpaperTab.WALLHAVEN -> Icons.Default.ImageSearch
+    WallpaperTab.COMMUNITY -> Icons.Default.Groups
     WallpaperTab.COLOR -> Icons.Default.Palette
     WallpaperTab.SEARCH -> Icons.Default.Search
 }
@@ -1438,6 +1601,7 @@ private fun wallpaperTabLabel(tab: WallpaperTab): String =
         WallpaperTab.PIXABAY -> "Pixabay"
         WallpaperTab.REDDIT -> "Reddit"
         WallpaperTab.WALLHAVEN -> "Wallhaven"
+        WallpaperTab.COMMUNITY -> "Community"
         WallpaperTab.COLOR -> "Color"
         WallpaperTab.SEARCH -> "Search"
     }

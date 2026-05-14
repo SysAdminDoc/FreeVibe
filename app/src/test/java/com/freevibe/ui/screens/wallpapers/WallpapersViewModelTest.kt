@@ -490,6 +490,7 @@ class WallpapersViewModelTest {
             applyFeedbackBus = mockk(relaxed = true),
             voteRepo = voteRepo,
             seasonalContentManager = SeasonalContentManager(),
+            wallpaperUploadRepo = mockk(relaxed = true),
         )
     }
 

@@ -268,11 +268,12 @@
 - Implementation complete in `SoundsScreen`, `SoundsViewModel`, `CommunityAudioRecorder`, `UploadRepository`, and `VoteRepository`.
 
 ### 4.2 User-Generated Wallpaper Uploads
-- Pick from gallery, crop to phone aspect ratio
-- Upload to Firebase Storage (compressed, max 4MB)
-- Tags, categories, color extraction (automatic via Palette API)
-- Community voting for quality control
-- "Community" tab in Wallpapers
+- [x] Pick from gallery, crop to phone aspect ratio
+- [x] Upload to Firebase Storage (compressed, max 4MB)
+- [x] Tags, categories, color extraction (automatic via Palette API)
+- [x] Community voting for quality control
+- [x] "Community" tab in Wallpapers
+- Implementation complete in `WallpaperUploadRepository`, `WallpapersViewModel`, and `WallpapersScreen`.
 
 ### 4.3 Creator Profiles
 - Optional: sign in with Google

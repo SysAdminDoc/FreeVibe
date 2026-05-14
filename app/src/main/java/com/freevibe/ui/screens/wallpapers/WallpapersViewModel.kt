@@ -3,6 +3,7 @@ package com.freevibe.ui.screens.wallpapers
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import android.net.Uri
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.data.model.ContentSource
 import com.freevibe.data.model.FavoriteIdentity
@@ -16,6 +17,7 @@ import com.freevibe.data.repository.RedditRepository
 import com.freevibe.data.repository.SearchHistoryRepository
 import com.freevibe.data.repository.VoteRepository
 import com.freevibe.data.repository.WallpaperRepository
+import com.freevibe.data.repository.WallpaperUploadRepository
 import com.freevibe.data.remote.toFavoriteEntity
 import com.freevibe.data.remote.toWallpaper
 import com.freevibe.service.ApplyFeedbackBus
@@ -56,9 +58,11 @@ data class WallpapersUiState(
     val topRange: String = "1M",             // Wallhaven toplist time range
     val discoverFilter: WallpaperDiscoverFilter = WallpaperDiscoverFilter.FOR_YOU,
     val browseTab: WallpaperTab = WallpaperTab.DISCOVER,
+    val isUploadingWallpaper: Boolean = false,
+    val wallpaperUploadProgress: Float = 0f,
 )
 
-enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, COLOR, SEARCH }
+enum class WallpaperTab { DISCOVER, PEXELS, PIXABAY, REDDIT, WALLHAVEN, COMMUNITY, COLOR, SEARCH }
 
 @HiltViewModel
 class WallpapersViewModel @Inject constructor(
@@ -80,6 +84,7 @@ class WallpapersViewModel @Inject constructor(
     private val applyFeedbackBus: ApplyFeedbackBus,
     val voteRepo: VoteRepository,
     private val seasonalContentManager: SeasonalContentManager,
+    private val wallpaperUploadRepo: WallpaperUploadRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WallpapersUiState())
@@ -544,6 +549,59 @@ class WallpapersViewModel @Inject constructor(
         }
     }
 
+    fun uploadCommunityWallpaper(
+        localUri: Uri,
+        name: String,
+        category: String,
+        tags: List<String>,
+    ) {
+        if (_state.value.isUploadingWallpaper) return
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    isUploadingWallpaper = true,
+                    wallpaperUploadProgress = 0f,
+                    error = null,
+                    errorSource = null,
+                )
+            }
+            wallpaperUploadRepo.uploadWallpaper(
+                localUri = localUri,
+                name = name,
+                category = category,
+                tags = tags,
+                onProgress = { progress ->
+                    _state.update { state -> state.copy(wallpaperUploadProgress = progress) }
+                },
+            ).onSuccess { wallpaper ->
+                cacheManager.cache("community_wallpapers_recent", listOf(wallpaper))
+                _state.update {
+                    val shouldInsert = it.selectedTab == WallpaperTab.COMMUNITY
+                    it.copy(
+                        isUploadingWallpaper = false,
+                        wallpaperUploadProgress = 0f,
+                        applySuccess = "Wallpaper upload complete",
+                        wallpapers = if (shouldInsert) {
+                            (listOf(wallpaper) + it.wallpapers).distinctBy { candidate -> candidate.stableKey() }
+                        } else {
+                            it.wallpapers
+                        },
+                    )
+                }
+                fetchTopVoted(listOf(wallpaper))
+            }.onFailure { e ->
+                _state.update {
+                    it.copy(
+                        isUploadingWallpaper = false,
+                        wallpaperUploadProgress = 0f,
+                        error = "Upload failed: ${e.message ?: "try another image"}",
+                        errorSource = WallpaperTab.COMMUNITY.name,
+                    )
+                }
+            }
+        }
+    }
+
     // -- Collections --
 
     val collections = collectionRepo.getAll()
@@ -633,18 +691,23 @@ class WallpapersViewModel @Inject constructor(
                     WallpaperTab.PEXELS -> wallpaperRepo.getPexelsCurated(currentPage)
                     WallpaperTab.REDDIT -> redditRepo.getMultiSubreddit()
                     WallpaperTab.WALLHAVEN -> wallpaperRepo.getWallhaven(page = currentPage, topRange = _state.value.topRange)
+                    WallpaperTab.COMMUNITY -> wallpaperUploadRepo.getCommunityWallpapers()
                     WallpaperTab.SEARCH -> wallpaperRepo.searchAll(_state.value.query, page = currentPage)
                     WallpaperTab.COLOR -> wallpaperRepo.searchByColor(_state.value.selectedColor ?: "", currentPage)
                 }
                 val preferredResolution = prefs.preferredResolution.first()
                 val activeFilter = if (currentTab == WallpaperTab.DISCOVER) _state.value.discoverFilter else WallpaperDiscoverFilter.FOR_YOU
                 val combined = if (loadMore) _state.value.wallpapers + result.items else result.items
-                val rankedWallpapers = rankWallpapers(
-                    wallpapers = combined,
-                    filter = activeFilter,
-                    preferredResolution = preferredResolution,
-                    userStyles = userStyles,
-                )
+                val rankedWallpapers = if (currentTab == WallpaperTab.COMMUNITY) {
+                    combined.distinctBy { it.stableKey() }
+                } else {
+                    rankWallpapers(
+                        wallpapers = combined,
+                        filter = activeFilter,
+                        preferredResolution = preferredResolution,
+                        userStyles = userStyles,
+                    )
+                }
                 val preserveExistingDiscoverFeed =
                     currentTab == WallpaperTab.DISCOVER &&
                         !loadMore &&
@@ -663,6 +726,9 @@ class WallpapersViewModel @Inject constructor(
                 }
                 if (currentTab == WallpaperTab.DISCOVER && (!loadMore || _topVoted.value.isEmpty())) {
                     fetchTopVoted(result.items)
+                }
+                if (currentTab == WallpaperTab.COMMUNITY && result.items.isNotEmpty()) {
+                    cacheManager.cache("community_wallpapers_$currentPage", result.items)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
