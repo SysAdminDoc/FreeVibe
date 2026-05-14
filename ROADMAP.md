@@ -62,6 +62,15 @@
 
 ---
 
+## Implementation Pass - 2026-05-14 Touch-Reactive Effects
+
+- [x] Completed Phase 5.4 for Weather live wallpapers: touch down events now spawn bounded ripple/spark burst overlays.
+- [x] Added Settings > Smart Features > Touch effects with Off, Subtle ripples, and Ripples + sparkles modes.
+- [x] Touch bursts expire quickly and are capped so the renderer remains battery-conscious.
+- [x] Focused tests cover touch-effect preference parsing.
+
+---
+
 ## Implementation Pass - 2026-04-25 Product Polish
 
 - [x] Confirmed 2.4 gap is already resolved: Settings > Wallpapers > "Style preferences" (`SettingsScreen.kt` line 375) opens a `FilterChip` dialog backed by `prefs.setUserStyles()` — re-entry from Settings was already wired in a prior session and is fully functional.
@@ -296,10 +305,10 @@
 - Battery impact: minimal (simple Canvas draws, 30 FPS cap)
 
 ### 5.4 Touch-Reactive Effects
-- Water ripple effect on touch (Canvas displacement)
-- Sparkle/particle burst at touch point
-- Configurable in Settings (off/subtle/strong)
-- Override `onTouchEvent` in `WallpaperService.Engine`
+- [x] Water ripple effect on touch (Canvas overlay)
+- [x] Sparkle/particle burst at touch point
+- [x] Configurable in Settings (off/subtle/strong)
+- [x] Override `onTouchEvent` in `WallpaperService.Engine`
 
 ### 5.5 Battery Dashboard
 - Real-time battery usage from video wallpaper service

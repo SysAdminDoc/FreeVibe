@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import com.freevibe.data.remote.weather.WeatherEffect
 
@@ -25,6 +26,7 @@ class WeatherWallpaperService : WallpaperService() {
     inner class WeatherEngine : Engine() {
         private var renderer: WeatherParticleRenderer? = null
         private var vfxRenderer: VfxParticleRenderer? = null
+        private var touchRenderer: TouchEffectRenderer? = null
         private var wallpaperBitmap: Bitmap? = null
         private var scaledBitmap: Bitmap? = null
         private val bitmapLock = Any()
@@ -51,6 +53,7 @@ class WeatherWallpaperService : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
+            setTouchEventsEnabled(true)
             loadWallpaperBitmap()
         }
 
@@ -58,6 +61,7 @@ class WeatherWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             renderer = WeatherParticleRenderer(width, height)
             vfxRenderer = VfxParticleRenderer(width, height)
+            touchRenderer = TouchEffectRenderer(width, height)
             synchronized(bitmapLock) {
                 val oldScaled = scaledBitmap
                 scaledBitmap = wallpaperBitmap?.let { scaleBitmap(it, width, height) }
@@ -65,6 +69,7 @@ class WeatherWallpaperService : WallpaperService() {
             }
             loadWeatherFromPrefs()
             loadVfxFromPrefs()
+            loadTouchEffectsFromPrefs()
             loadAdaptiveTintFromPrefs()
             if (visible) scheduleDraw()
         }
@@ -75,10 +80,23 @@ class WeatherWallpaperService : WallpaperService() {
             if (visible) {
                 loadWeatherFromPrefs()
                 loadVfxFromPrefs()
+                loadTouchEffectsFromPrefs()
                 loadAdaptiveTintFromPrefs()
                 scheduleDraw()
             } else {
                 handler.removeCallbacks(drawRunner)
+            }
+        }
+
+        override fun onTouchEvent(event: MotionEvent) {
+            super.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN,
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    val pointerIndex = event.actionIndex.coerceIn(0, event.pointerCount - 1)
+                    touchRenderer?.onTouch(event.getX(pointerIndex), event.getY(pointerIndex))
+                    if (visible) scheduleDraw()
+                }
             }
         }
 
@@ -152,6 +170,11 @@ class WeatherWallpaperService : WallpaperService() {
             } catch (_: Exception) {
                 vfxRenderer?.setEffect(VfxParticleRenderer.VfxEffect.NONE)
             }
+        }
+
+        private fun loadTouchEffectsFromPrefs() {
+            val prefs = getSharedPreferences("freevibe_weather_wp", MODE_PRIVATE)
+            touchRenderer?.setStrength(parseTouchEffectStrength(prefs.getString("touch_effect_strength", "OFF")))
         }
 
         private fun loadWeatherFromPrefs() {
@@ -257,6 +280,10 @@ class WeatherWallpaperService : WallpaperService() {
                     // Draw VFX overlay (fireflies, sakura, etc.)
                     vfxRenderer?.update()
                     vfxRenderer?.draw(canvas)
+
+                    // Draw short-lived touch ripples/spark bursts.
+                    touchRenderer?.update()
+                    touchRenderer?.draw(canvas)
                 }
             } catch (_: Exception) {
             } finally {
