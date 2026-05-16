@@ -46,6 +46,9 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
     lateinit var communityIdentityProvider: CommunityIdentityProvider
 
     @Inject
+    lateinit var voteRepository: com.freevibe.data.repository.VoteRepository
+
+    @Inject
     lateinit var systemThemeListener: com.freevibe.service.SystemThemeListener
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -152,6 +155,11 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
         appScope.launch {
             try {
                 communityIdentityProvider.ensureSignedIn()
+                // Refresh admin Custom Claim once the user is signed in. This is the
+                // server-side source of truth for moderation privileges (the legacy
+                // device-ID hash fallback in VoteRepository stays during the
+                // migration window per ROADMAP N-2).
+                voteRepository.refreshAdminFromClaims()
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 // Firebase auth can fail at launch (airplane mode, cold-start network race, etc).

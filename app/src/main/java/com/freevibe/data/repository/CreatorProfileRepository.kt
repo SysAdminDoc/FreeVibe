@@ -6,8 +6,7 @@ import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.stableKey
 import com.freevibe.service.CommunityIdentityProvider
 import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -59,7 +58,7 @@ class CreatorProfileRepository @Inject constructor(
     private val favoritesRepo: FavoritesRepository,
 ) {
     private val database by lazy {
-        try { Firebase.database.reference } catch (_: Exception) { null }
+        try { FirebaseDatabase.getInstance().reference } catch (_: Exception) { null }
     }
 
     suspend fun getDashboard(limit: Int = 80): CreatorProfileDashboard = withContext(Dispatchers.IO) {
@@ -242,7 +241,7 @@ internal fun aggregateCreatorStats(
 
 private suspend fun VoteRepository.getVoteCountsOnce(ids: List<String>): Map<String, Int> {
     if (ids.isEmpty()) return emptyMap()
-    val db = try { Firebase.database.reference.child("votes") } catch (_: Exception) { return emptyMap() }
+    val db = try { FirebaseDatabase.getInstance().reference.child("votes") } catch (_: Exception) { return emptyMap() }
     return ids.distinct().chunked(50).flatMap { chunk ->
         coroutineScope {
             chunk.map { id ->

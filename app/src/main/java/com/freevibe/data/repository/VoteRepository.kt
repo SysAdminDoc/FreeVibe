@@ -3,6 +3,7 @@ package com.freevibe.data.repository
 import android.content.Context
 import android.util.Log
 import com.freevibe.service.CommunityIdentityProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -26,6 +27,22 @@ private val FIREBASE_KEY_REGEX = Regex("[.#$\\[\\]/]")
 
 internal fun sanitizeVoteKey(id: String): String =
     id.replace(FIREBASE_KEY_REGEX, "_")
+
+/**
+ * Pure-JVM admin-precedence rule. Tested by [com.freevibe.data.repository.AdminPrecedenceTest].
+ * Roadmap N-2: server-side Custom Claim is always authoritative; legacy device-hash and
+ * UID allowlists are migration fallbacks only.
+ */
+internal fun computeIsAdmin(
+    adminFromClaims: Boolean,
+    deviceIdHash: String,
+    currentUserId: String,
+    adminDeviceIdHashes: Set<String>,
+    adminUserIds: Set<String>,
+): Boolean =
+    adminFromClaims ||
+        deviceIdHash in adminDeviceIdHashes ||
+        currentUserId in adminUserIds
 
 internal fun matchesHiddenIds(hiddenIds: Set<String>, vararg candidateIds: String?): Boolean =
     candidateIds.asSequence()
@@ -72,25 +89,72 @@ class VoteRepository @Inject constructor(
 
     /**
      * Admin device IDs stored as SHA-256 hashes so plaintext IDs aren't in the APK.
-     * TODO: Move admin authorization to Firebase Custom Claims / Security Rules.
-     *       Client-side checks are spoofable on rooted devices.
+     *
+     * Roadmap N-2: server-side `admin: true` Firebase Custom Claim is the canonical
+     * source of truth — checked first by [refreshAdminFromClaims] and cached in
+     * [_adminFromClaims]. This hash list remains as a one-cycle migration fallback
+     * so existing admin devices keep working until the matching ID token refreshes
+     * with the claim attached. Remove the hash list and `adminUserIds` once every
+     * admin has rotated through a Custom-Claim-bearing ID token (typical: 1 hour
+     * after backend deploys the claim).
      */
     private val adminDeviceIdHashes = setOf(
         "70221777b62eabc52f5d0625fe7fd27f6a96f1a314231f0a33e7db98cb7da49b",
         "8d5c02d2bc8767d04eb1cdc9a662a16a735fb130374d6c98b189ff787b78f80c",
     )
 
-    /** Admin Firebase UIDs can be added here until custom claims/rules are in place */
+    /** Admin Firebase UIDs can be added here as a legacy fallback alongside custom claims. */
     private val adminUserIds = emptySet<String>()
+
+    private val auth: FirebaseAuth? by lazy {
+        try { FirebaseAuth.getInstance() } catch (_: Exception) { null }
+    }
+
+    /** Cached Custom Claim state from the user's most-recently-refreshed ID token. */
+    private val _adminFromClaims = MutableStateFlow(false)
 
     private fun sha256(input: String): String {
         val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Force a fresh ID token from Firebase Auth and read the `admin` Custom Claim.
+     * Call from a coroutine after sign-in, after a known privilege change, or on
+     * app startup. The RTDB security rules are the actual enforcement layer; this
+     * client check just controls UI affordances (e.g. showing the moderation menu).
+     */
+    suspend fun refreshAdminFromClaims(): Boolean {
+        val token = try {
+            // forceRefresh=true asks Firebase Auth to round-trip a fresh token so newly-set
+            // server-side claims become visible without waiting for the 1 h token lifetime.
+            auth?.currentUser?.getIdToken(true)?.await()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (com.freevibe.BuildConfig.DEBUG) Log.w("VoteRepo", "refreshAdminFromClaims failed: ${e.message}")
+            null
+        }
+        val isAdminClaim = token?.claims?.get("admin") == true
+        _adminFromClaims.value = isAdminClaim
+        return isAdminClaim
+    }
+
+    /**
+     * Best-effort admin check. Order of precedence:
+     *  1. Cached `admin` Custom Claim from the user's ID token (Firebase Auth, server-side).
+     *  2. Legacy SHA-256 device-ID allowlist (one-cycle migration fallback).
+     *  3. Legacy `adminUserIds` Firebase UID allowlist.
+     *
+     * Always pair with RTDB Security Rules — the client check is spoofable; rules are not.
+     */
     val isAdmin: Boolean
-        get() = identityProvider.currentUserId() in adminUserIds ||
-            sha256(identityProvider.legacyDeviceId) in adminDeviceIdHashes
+        get() = computeIsAdmin(
+            adminFromClaims = _adminFromClaims.value,
+            deviceIdHash = sha256(identityProvider.legacyDeviceId),
+            currentUserId = identityProvider.currentUserId(),
+            adminDeviceIdHashes = adminDeviceIdHashes,
+            adminUserIds = adminUserIds,
+        )
 
     // ── Local hidden IDs (user's personal downvotes) ──
 

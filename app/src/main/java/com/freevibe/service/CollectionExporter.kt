@@ -9,8 +9,7 @@ import androidx.core.content.FileProvider
 import com.freevibe.data.local.CollectionDao
 import com.freevibe.data.model.WallpaperCollectionEntity
 import com.freevibe.data.model.WallpaperCollectionItemEntity
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.database.FirebaseDatabase
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -53,7 +52,7 @@ class CollectionExporter @Inject constructor(
 ) {
     private val adapter = moshi.adapter(CollectionExportFile::class.java).indent("  ")
     private val database by lazy {
-        try { Firebase.database.reference } catch (_: Exception) { null }
+        try { FirebaseDatabase.getInstance().reference } catch (_: Exception) { null }
     }
 
     suspend fun prepareShareBundle(collectionId: Long, collectionName: String): Result<CollectionShareBundle> =

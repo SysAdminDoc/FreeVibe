@@ -9,10 +9,9 @@ import com.freevibe.data.model.Sound
 import com.freevibe.service.CommunityIdentityProvider
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.storage.ktx.storage
+import com.google.firebase.storage.FirebaseStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
@@ -56,10 +55,10 @@ class UploadRepository @Inject constructor(
     )
 
     private val storage by lazy {
-        try { Firebase.storage } catch (_: Exception) { null }
+        try { FirebaseStorage.getInstance() } catch (_: Exception) { null }
     }
     private val database by lazy {
-        try { Firebase.database } catch (_: Exception) { null }
+        try { FirebaseDatabase.getInstance() } catch (_: Exception) { null }
     }
     private val uploadsRef by lazy { database?.reference?.child("community_sounds") }
 

@@ -2,8 +2,7 @@ package com.freevibe.service
 
 import android.content.Context
 import android.provider.Settings
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
@@ -15,7 +14,7 @@ class CommunityIdentityProvider @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val auth by lazy {
-        try { Firebase.auth } catch (_: Exception) { null }
+        try { FirebaseAuth.getInstance() } catch (_: Exception) { null }
     }
     private val prefs by lazy {
         context.getSharedPreferences("aura_community_identity", Context.MODE_PRIVATE)
