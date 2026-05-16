@@ -82,6 +82,21 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
         warmCommunityIdentity()
         startSystemThemeListener()
         initYtDlp()
+        enqueueAuraOriginalsDownload()
+    }
+
+    /**
+     * Roadmap N-5: schedule the Aura Originals CC0 sound pack download on Wi-Fi.
+     * Worker is enqueued every cold start with KEEP policy, so existing successful
+     * downloads aren't redone and the pack converges idempotently.
+     */
+    private fun enqueueAuraOriginalsDownload() {
+        try {
+            com.freevibe.service.AuraOriginalsDownloader.enqueue(this)
+        } catch (e: Exception) {
+            // Must never crash app startup on a WorkManager queue failure.
+            if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "AuraOriginals enqueue failed: ${e.message}")
+        }
     }
 
     private fun initYtDlp() {
