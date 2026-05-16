@@ -199,6 +199,11 @@ dependencies {
     implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
 
-    // ML Kit Subject Segmentation (parallax depth wallpaper)
-    implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
+    // ML Kit Subject Segmentation — GA replacement for the long-running
+    // selfie-segmentation beta. API 24+, multi-subject, unbundled (the model is
+    // downloaded on first use via Google Play services). Roadmap N-3.
+    implementation("com.google.mlkit:segmentation-subject:16.0.0-beta1")
+    // ModuleInstallClient lets us proactively download the unbundled segmenter
+    // model so parallax wallpapers don't fail silently on first apply.
+    implementation("com.google.android.gms:play-services-base:18.5.0")
 }

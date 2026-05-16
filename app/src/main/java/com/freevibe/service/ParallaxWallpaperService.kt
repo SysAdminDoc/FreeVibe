@@ -14,15 +14,23 @@ import android.os.Looper
 import android.service.wallpaper.WallpaperService
 import android.view.SurfaceHolder
 import com.freevibe.BuildConfig
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.segmentation.Segmentation
-import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 
 /**
  * Live wallpaper service that creates a parallax/depth effect by splitting
  * a wallpaper image into foreground and background layers using ML Kit
- * Selfie Segmentation, then shifting layers at different rates based
- * on device tilt (accelerometer).
+ * Subject Segmentation (multi-subject, GA — replaced the long-running
+ * selfie-segmentation beta per ROADMAP N-3), then shifting layers at
+ * different rates based on device tilt (accelerometer).
+ *
+ * The segmenter model is unbundled — downloaded on first use via Google Play
+ * services. We proactively request the install at engine creation so the
+ * first apply isn't a silent no-op.
  *
  * Falls back to displaying the image normally if segmentation fails.
  */
@@ -40,7 +48,7 @@ class ParallaxWallpaperService : WallpaperService() {
         private var backgroundLayer: Bitmap? = null
         private var foregroundLayer: Bitmap? = null
         private var fallbackBitmap: Bitmap? = null
-        private var activeSegmenter: com.google.mlkit.vision.segmentation.Segmenter? = null
+        private var activeSegmenter: SubjectSegmenter? = null
 
         private var screenWidth = 0
         private var screenHeight = 0
@@ -73,6 +81,37 @@ class ParallaxWallpaperService : WallpaperService() {
             super.onCreate(surfaceHolder)
             sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager
             accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            requestSegmenterModuleInstall()
+        }
+
+        /**
+         * The Subject Segmentation model ships unbundled via Google Play services.
+         * Asking for it once at engine create avoids the first-apply silent failure
+         * mode where segmenter.process() returns MlKitException.UNAVAILABLE because
+         * the module hasn't been delivered yet.
+         */
+        private fun requestSegmenterModuleInstall() {
+            try {
+                // Use a placeholder client to declare the module dependency. We don't
+                // care about the install Task's result; downstream segmenter.process
+                // already handles the not-yet-installed case by falling back to the
+                // single-image path. This is best-effort warm-up only.
+                val placeholderClient = SubjectSegmentation.getClient(
+                    SubjectSegmenterOptions.Builder().enableForegroundConfidenceMask().build(),
+                )
+                val request = ModuleInstallRequest.newBuilder()
+                    .addApi(placeholderClient)
+                    .build()
+                ModuleInstall.getClient(applicationContext)
+                    .installModules(request)
+                    .addOnCompleteListener {
+                        try { placeholderClient.close() } catch (_: Exception) {}
+                    }
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.w("ParallaxWP", "Segmenter module install request failed: ${e.message}")
+                }
+            }
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -209,15 +248,19 @@ class ParallaxWallpaperService : WallpaperService() {
                 val previous = activeSegmenter
                 activeSegmenter = null
                 try { previous?.close() } catch (_: Exception) {}
-                val options = SelfieSegmenterOptions.Builder()
-                    .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
+                // Subject Segmentation returns one foreground-confidence mask (sum of
+                // all detected subjects). Per-subject masks are also available but
+                // Aura collapses everything in front of the background into a single
+                // parallax foreground, matching the previous selfie-segmenter behavior.
+                val options = SubjectSegmenterOptions.Builder()
+                    .enableForegroundConfidenceMask()
                     .build()
-                val segmenter = Segmentation.getClient(options)
+                val segmenter = SubjectSegmentation.getClient(options)
                 activeSegmenter = segmenter
                 val inputImage = InputImage.fromBitmap(bitmap, 0)
 
                 segmenter.process(inputImage)
-                    .addOnSuccessListener { mask ->
+                    .addOnSuccessListener { result ->
                         // Guard against double-close if a newer segmenter already took over
                         synchronized(bitmapLock) {
                             if (activeSegmenter === segmenter) activeSegmenter = null
@@ -225,6 +268,18 @@ class ParallaxWallpaperService : WallpaperService() {
                         try { segmenter.close() } catch (_: Exception) {}
                         if (destroyed || bitmap.isRecycled) return@addOnSuccessListener
                         try {
+                            // The foreground-confidence mask matches the input bitmap's
+                            // dimensions when enableForegroundConfidenceMask() is set,
+                            // so no width/height remapping is needed (a simplification
+                            // over the old selfie-segmenter which returned a smaller mask).
+                            val floatBuffer = result.foregroundConfidenceMask
+                                ?: run {
+                                    if (BuildConfig.DEBUG) {
+                                        android.util.Log.w("ParallaxWP", "No foreground mask in result, using fallback")
+                                    }
+                                    return@addOnSuccessListener
+                                }
+
                             // Extract pixels under lock to prevent race with recycleBitmaps()
                             val pixels: IntArray
                             val bmpW: Int
@@ -239,31 +294,18 @@ class ParallaxWallpaperService : WallpaperService() {
                                 bgBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
                             }
 
-                            val maskBuffer = mask.buffer
-                            val maskWidth = mask.width
-                            val maskHeight = mask.height
-                            maskBuffer.rewind()
-                            val floatBuffer = maskBuffer.asFloatBuffer()
-
+                            floatBuffer.rewind()
                             val fgPixels = IntArray(bmpW * bmpH)
+                            val maskLimit = floatBuffer.limit()
 
-                            for (y in 0 until bmpH) {
-                                for (x in 0 until bmpW) {
-                                    val idx = y * bmpW + x
-                                    val mx = (x * maskWidth / bmpW).coerceIn(0, maskWidth - 1)
-                                    val my = (y * maskHeight / bmpH).coerceIn(0, maskHeight - 1)
-                                    val maskIdx = my * maskWidth + mx
-                                    val confidence = if (maskIdx < floatBuffer.limit()) {
-                                        floatBuffer.get(maskIdx)
-                                    } else 0f
-
-                                    if (confidence > 0.5f) {
-                                        val srcPixel = pixels[idx]
-                                        val a = (confidence * 255f).toInt().coerceIn(0, 255)
-                                        fgPixels[idx] = (a shl 24) or (srcPixel and 0x00FFFFFF)
-                                    } else {
-                                        fgPixels[idx] = 0
-                                    }
+                            for (i in 0 until bmpW * bmpH) {
+                                val confidence = if (i < maskLimit) floatBuffer.get(i) else 0f
+                                if (confidence > 0.5f) {
+                                    val srcPixel = pixels[i]
+                                    val a = (confidence * 255f).toInt().coerceIn(0, 255)
+                                    fgPixels[i] = (a shl 24) or (srcPixel and 0x00FFFFFF)
+                                } else {
+                                    fgPixels[i] = 0
                                 }
                             }
 
@@ -288,7 +330,7 @@ class ParallaxWallpaperService : WallpaperService() {
                             }
 
                             if (BuildConfig.DEBUG) {
-                                android.util.Log.d("ParallaxWP", "Segmentation succeeded: ${bmpW}x${bmpH}, mask ${maskWidth}x${maskHeight}")
+                                android.util.Log.d("ParallaxWP", "Subject segmentation succeeded: ${bmpW}x${bmpH}, mask cap $maskLimit")
                             }
                         } catch (e: Exception) {
                             if (BuildConfig.DEBUG) android.util.Log.e("ParallaxWP", "Segment result error: ${e.message}")
@@ -300,7 +342,7 @@ class ParallaxWallpaperService : WallpaperService() {
                         }
                         try { segmenter.close() } catch (_: Exception) {}
                         if (destroyed) return@addOnFailureListener
-                        if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "Segmentation failed, using fallback: ${e.message}")
+                        if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "Subject segmentation failed, using fallback: ${e.message}")
                         synchronized(bitmapLock) {
                             if (generation != segmentGeneration) return@addOnFailureListener
                             val oldBg = backgroundLayer
