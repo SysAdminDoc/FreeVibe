@@ -3,8 +3,8 @@
 > Open-source Android personalization: wallpapers, video wallpapers, ringtones, sounds.
 > Stay the OSS alternative to Zedge: no ads, no surprise charges, no dark patterns.
 
-**Version:** 2026-05-16 (supersedes 2026-05-XX AI Wallpaper pass).
-**Code version at write:** v6.31.0 / versionCode 111.
+**Version:** 2026-05-16-rev2 (added Implementation Pass for autonomous N-2..N-5 batch).
+**Code version at write:** v6.31.0 / versionCode 111 (build pending verification).
 **Charter:** personalization, AMOLED-first, free-by-default, multi-source content aggregation, community-fed catalog, polite live wallpapers (battery-aware, pause-on-invisible).
 
 ---
@@ -91,7 +91,15 @@ Preserved verbatim from prior passes; do not edit unless a regression occurred.
 
 ## Now — execute this cycle
 
-Five items. Each is dependency-coupled or unblocks the rest of the backlog. None are speculative.
+Five items. Four landed in the 2026-05-16 autonomous batch (N-2..N-5, marked
+`[~]` and detailed in the Implementation Log). N-1 remains; it requires a build
+environment that can run `./gradlew :app:assembleDebug`.
+
+- [ ] **N-1** — Toolchain upgrade triad (AGP/Gradle/Kotlin/Compose BOM/Hilt). Deferred from the 2026-05-16 pass; needs JDK+SDK to verify.
+- [~] **N-2** — Firebase BoM 34.13.0 + Custom Claims admin path. Code + rules shipped; deploy `database.rules.json` + grant claims to existing admins to complete the rollout.
+- [~] **N-3** — Subject Segmentation + AGSL pipeline scaffold. Code shipped; concrete AGSL effects ship in NX-1/NX-2 follow-ups.
+- [~] **N-4** — Photo Picker + monochrome themed icon. Code shipped. WallpaperDescription scaffolding is comment-only until N-1 unlocks compileSdk 36.
+- [~] **N-5** — Aura Originals manifest schema + first-launch downloader. Infrastructure shipped; curation pass adds the actual sound entries to `assets/aura_originals_manifest.json`.
 
 ### N-1. Toolchain upgrade triad (AGP 9 + Gradle 9 + Kotlin 2.3 + Compose BOM May 2026 + Hilt 2.59)
 
@@ -467,6 +475,97 @@ Kept verbatim — these are the receipts.
 ## Implementation Log (preserved release-pass entries)
 
 These are the dated receipts. The newest entries supersede the oldest where they overlap; do not edit prior entries.
+
+### 2026-05-16 — Autonomous N-2..N-5 batch (build verification pending)
+
+Four Now-tier items landed as code; the remaining Now item (N-1 toolchain triad)
+is deferred because the executing environment had no Android SDK / JDK available
+to validate the upgrades. Static review only; runtime verification next session.
+
+**N-4 — Photo Picker + monochrome icon + WallpaperDescription scaffold (commit `b0ae1fe`)**
+- WallpapersScreen community upload + CollectionsScreen QR import switched
+  from `GetContent("image/*")` / `OpenDocument(arrayOf("image/*"))` to
+  `PickVisualMedia.ImageOnly`. No `READ_MEDIA_IMAGES` permission prompt;
+  scoped-storage compliant.
+- Vector `drawable/ic_launcher_monochrome.xml` added; `mipmap-anydpi-v26/ic_launcher{,_round}.xml`
+  declare `<monochrome>` layer. Android 13+ themed icons now use the Aura "A" silhouette.
+- `xml/{video,parallax,weather}_wallpaper.xml` annotated with TODO comments
+  pointing to N-4/N-1 for when compileSdk 36 unlocks the Android 16
+  WallpaperDescription / WallpaperInstance API.
+
+**N-2 — Firebase BoM 34.13.0 + Custom Claims admin path (commit `c9ca405`)**
+- Firebase BoM 33.7.0 → 34.13.0 (closes CVE-2024-7254 transitive protobuf risk).
+- Removed deprecated `firebase-{auth,database,storage}-ktx` artifacts; migrated 5
+  files to canonical `FirebaseAuth.getInstance()`, `FirebaseDatabase.getInstance()`,
+  `FirebaseStorage.getInstance()`.
+- New `VoteRepository.refreshAdminFromClaims()` forces ID-token refresh and
+  caches the `admin` Custom Claim in `_adminFromClaims` StateFlow.
+- `isAdmin` getter now consults Custom Claim first, with legacy device-ID hash
+  + UID allowlist as one-cycle migration fallbacks. Precedence captured in
+  pure `computeIsAdmin` helper, covered by `AdminPrecedenceTest` (6 cases).
+- `FreeVibeApp.warmCommunityIdentity()` calls `refreshAdminFromClaims` after
+  sign-in so admin status syncs on every cold launch.
+- `database.rules.json` (new) — proposed RTDB Security Rules enforcing
+  `auth.token.admin === true` server-side for moderation paths. Mirrors the
+  client check; this is the actual enforcement layer.
+- `docs/firebase-admin-claims.md` (new) — operator runbook for granting/revoking
+  the claim via the Admin SDK and removing the device-hash fallback once all
+  admins have rotated tokens.
+- Resolves the pre-existing `VoteRepository.kt:75` TODO.
+
+**N-3 — Subject Segmentation API + AGSL pipeline scaffold (commit `61443fc`)**
+- Dependency: `com.google.mlkit:segmentation-selfie:16.0.0-beta6` →
+  `com.google.mlkit:segmentation-subject:16.0.0-beta1` (GA replacement of the
+  two-year selfie-segmentation beta). Added `play-services-base:18.5.0` for
+  `ModuleInstallClient`.
+- `ParallaxWallpaperService` migrated to `SubjectSegmenter` +
+  `SubjectSegmenterOptions.enableForegroundConfidenceMask()`. The new mask is
+  sized to the input bitmap, so the pixel-to-mask coordinate remap is gone
+  (simpler + faster).
+- `requestSegmenterModuleInstall()` proactively warms the unbundled model at
+  engine create so the first parallax apply isn't silently no-op while Play
+  services downloads the module.
+- All lifecycle guards from the prior path preserved: per-segmenter tracking,
+  double-close protection, generation counter, bitmap-lock during pixel read.
+- New `AgslEffectPipeline.kt` — API-33+ gated `RuntimeShader` pipeline with a
+  Canvas fallback. Public surface is `apply(bitmap, effect)` over an
+  `AgslEffect` sealed catalog (IDENTITY, DEPTH_SHADE today). Single GPU-effect
+  surface to be consumed by wallpaper editor, weather service, and parallax
+  service in future passes. `AgslEffectPipelineTest` (3) covers AGSL source
+  validity + out-of-range uniform handling.
+
+**N-5 — Aura Originals manifest + first-launch downloader (commit `cbc9db2`)**
+- `assets/aura_originals_manifest.json` — versioned schema; ships empty.
+- `AuraOriginalsManifest.kt` — Moshi model + DI loader.
+- `AuraOriginalsDownloader.kt` — `CoroutineWorker` that downloads each manifest
+  entry over HTTPS, sha256-verifies before atomic rename, enforces 5 MB
+  per-file + 80 MB total caps, runs on UNMETERED constraint by default,
+  exponential backoff on failure, idempotent across cold starts.
+- `FreeVibeApp.onCreate` enqueues with `ExistingWorkPolicy.KEEP` so the
+  pack converges over multiple Wi-Fi sessions without redoing work.
+- `docs/aura-originals-curation.md` — curation workflow + CC0 license
+  compliance + retroactive removal via manifest revisions.
+- `AuraOriginalsDownloaderTest` (5) covers extension guessing + sha256
+  matching/mismatch/blank-rejection.
+- DB schema stays at v14 — bundled tracking reuses the existing
+  `FavoriteEntity.offlinePath` convention. Room v15 deferred until the
+  curation list lands.
+
+**N-1 deferral (toolchain triad)**
+- AGP 9 / Gradle 9 / Kotlin 2.3 / KSP2 / Compose BOM 2026.05 / Hilt 2.59
+  upgrade NOT performed this pass. The autonomous executor had no Android
+  SDK or JDK available to validate the changes, and a "blind" toolchain
+  bump on this scale typically surfaces Compose stability annotations and
+  KSP2 incremental-cache regressions that only a clean build can catch.
+  Re-pick this item in a session that can run `./gradlew :app:assembleDebug`.
+
+**Push status**
+- All four feat commits land locally on `main`. `git push origin main`
+  blocked: the executor's git credential is `MavenImaging`, but
+  `https://github.com/SysAdminDoc/Aura.git` rejects with 403. Owner must
+  push (or grant the executor's GitHub account write access to the repo).
+
+---
 
 ### 2026-05-XX — Phase 3.1 AI Wallpaper Generation
 - v6.14.0; `StabilityAiApi` Retrofit interface (multipart binary), `AiWallpaperRepository` (9:16 PNG, atomic write, `pruneOldFiles(50)`), `AiStyle` enum (8 presets), `AiWallpaperViewModel` (Hilt + DataStore key), `AiWallpaperScreen` (GlassCard, animated key field, prompt, style chips, shimmer, result apply/save).
