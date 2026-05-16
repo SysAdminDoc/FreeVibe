@@ -1,0 +1,8 @@
+{
+  "_schema": "https://aura.example/schemas/aura-originals-v1",
+  "_comment": "Aura Originals — curated CC0 sound pack. Roadmap N-5. Empty for now; populate during the curation pass. Each entry's sha256 must match the actual file delivered from `url` or the downloader will reject it.",
+  "version": 1,
+  "manifestRevision": "2026-05-16-empty",
+  "totalBytes": 0,
+  "sounds": []
+}
