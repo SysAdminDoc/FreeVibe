@@ -1,0 +1,77 @@
+{
+  "_comment": "Aura RTDB Security Rules. Roadmap N-2. Deploy via `firebase deploy --only database`.",
+  "_comment2": "Source of truth for community moderation authorization. Mirrors the client-side VoteRepository.isAdmin check but is the actual enforcement layer (client checks are spoofable on rooted devices).",
+  "_comment3": "All admin actions are gated on `auth.token.admin === true` — a Custom Claim set via Firebase Admin SDK from a trusted backend (Cloud Function, Cloud Run, or one-off script). Grant a UID with `admin.auth().setCustomUserClaims(uid, { admin: true })`.",
+  "rules": {
+    "votes": {
+      "$contentId": {
+        ".read": true,
+        ".write": "auth != null",
+        "upvotes": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "voters": {
+          "$voterId": {
+            ".validate": "newData.val() === true && (auth.uid === $voterId || auth.token.admin === true)"
+          }
+        }
+      }
+    },
+    "voters": {
+      "_comment": "Legacy path kept for backward compatibility with installs that read it directly.",
+      "$contentId": {
+        ".read": true,
+        "$voterId": {
+          ".write": "auth != null && (auth.uid === $voterId || auth.token.admin === true)",
+          ".validate": "newData.val() === true"
+        }
+      }
+    },
+    "moderation": {
+      ".read": true,
+      "$contentId": {
+        "_comment": "Only Custom-Claim admins can globally hide a piece of content.",
+        ".write": "auth != null && auth.token.admin === true",
+        ".validate": "newData.val() === true"
+      }
+    },
+    "community_sounds": {
+      ".read": true,
+      "$uploadId": {
+        ".write": "auth != null && (!data.exists() || data.child('uploaderUid').val() === auth.uid || auth.token.admin === true)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "category": { ".validate": "newData.isString() && newData.val().matches(/^(ringtone|notification|alarm)$/)" },
+        "tags": {
+          "$idx": { ".validate": "newData.isString() && newData.val().length <= 24" }
+        }
+      }
+    },
+    "community_wallpapers": {
+      ".read": true,
+      "$uploadId": {
+        ".write": "auth != null && (!data.exists() || data.child('uploaderUid').val() === auth.uid || auth.token.admin === true)",
+        "name": { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "category": { ".validate": "newData.isString() && newData.val().matches(/^(abstract|amoled|nature|minimal|city|space|other)$/)" }
+      }
+    },
+    "creator_profiles": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || auth.token.admin === true)"
+      }
+    },
+    "creator_follows": {
+      ".read": "auth != null",
+      "$followerUid": {
+        ".write": "auth != null && auth.uid === $followerUid"
+      }
+    },
+    "collection_shares": {
+      "_comment": "Shareable-collection JSON payloads exposed via aura://collection/import/{token}.",
+      "$token": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('createdByUid').val() === auth.uid || auth.token.admin === true)"
+      }
+    }
+  }
+}

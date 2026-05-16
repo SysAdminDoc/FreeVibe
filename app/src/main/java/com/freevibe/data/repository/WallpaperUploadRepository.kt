@@ -13,10 +13,9 @@ import com.freevibe.data.model.Wallpaper
 import com.freevibe.service.ColorExtractor
 import com.freevibe.service.CommunityIdentityProvider
 import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
-import com.google.firebase.storage.ktx.storage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -74,10 +73,10 @@ class WallpaperUploadRepository @Inject constructor(
     )
 
     private val storage by lazy {
-        try { Firebase.storage } catch (_: Exception) { null }
+        try { FirebaseStorage.getInstance() } catch (_: Exception) { null }
     }
     private val database by lazy {
-        try { Firebase.database } catch (_: Exception) { null }
+        try { FirebaseDatabase.getInstance() } catch (_: Exception) { null }
     }
     private val wallpapersRef by lazy { database?.reference?.child("community_wallpapers") }
 

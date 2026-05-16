@@ -179,10 +179,14 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
 
     // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-database-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
+    // BoM 34.x removes the deprecated *-ktx artifacts and updates the transitive
+    // protobuf-javalite past CVE-2024-7254 (N-2). Kotlin extensions (await, etc.)
+    // are still available via kotlinx-coroutines-play-services (pulled in via
+    // coroutines-android).
+    implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-database")
+    implementation("com.google.firebase:firebase-storage")
 
     // NewPipe Extractor (YouTube search without API key)
     // PIN: NewPipe ships YouTube-extractor patches monthly. Bumping versions can
