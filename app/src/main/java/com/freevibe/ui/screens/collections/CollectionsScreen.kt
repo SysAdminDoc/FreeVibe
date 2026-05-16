@@ -3,6 +3,7 @@ package com.freevibe.ui.screens.collections
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -212,8 +213,14 @@ fun CollectionsScreen(
     val jsonImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::importCollectionFile)
     }
-    val qrImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    // QR code import via Photo Picker (no READ_MEDIA_IMAGES; scoped-storage compliant).
+    val qrImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
         uri?.let(viewModel::importCollectionQr)
+    }
+    val qrImportPickerRequest = remember {
+        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
     }
 
     LaunchedEffect(initialImportToken, initialImportUri) {
@@ -259,7 +266,7 @@ fun CollectionsScreen(
             },
             onOpenQrImage = {
                 showImportSheet = false
-                qrImportLauncher.launch(arrayOf("image/*"))
+                qrImportLauncher.launch(qrImportPickerRequest)
             },
         )
     }

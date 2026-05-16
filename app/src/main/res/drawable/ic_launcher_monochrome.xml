@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Themed app icon layer (Android 13+ Material You themed icons).
+  Solid-color silhouette of the Aura "A" mark, drawn at the 108x108 adaptive-icon
+  canvas with a safe 66dp inner zone. System recolors the path at runtime.
+  Geometry: stylized "A" with crossbar; the apex tracks the glowing-A beam in the
+  brand foreground bitmap so the themed variant reads as the same mark.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="0" android:translateY="0">
+        <!-- Left leg -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M40.5,76 L31.5,76 L48.5,30 L54,30 L51.6,36.5 Z" />
+        <!-- Right leg -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M67.5,76 L76.5,76 L59.5,30 L54,30 L56.4,36.5 Z" />
+        <!-- Crossbar -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M45.2,60 L62.8,60 L65,66 L43,66 Z" />
+        <!-- Apex highlight (the "beam" element) -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M51.6,36.5 L56.4,36.5 L54,30 Z" />
+    </group>
+</vector>
