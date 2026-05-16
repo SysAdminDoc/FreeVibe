@@ -2,6 +2,7 @@ package com.freevibe.ui.screens.wallpapers
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -133,13 +134,18 @@ fun WallpapersScreen(
     var showWallpaperUploadDialog by remember { mutableStateOf(false) }
     var selectedWallpaperUploadUri by remember { mutableStateOf<Uri?>(null) }
     var awaitingWallpaperUploadResult by remember { mutableStateOf(false) }
+    // Photo Picker (Android 13+, backported via Google Play services on older versions). No
+    // READ_MEDIA_IMAGES permission needed; scoped-storage compliant; better UX than GetContent.
     val wallpaperUploadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             selectedWallpaperUploadUri = uri
             showWallpaperUploadDialog = true
         }
+    }
+    val wallpaperUploadPickerRequest = remember {
+        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
     }
     val wallpaperFilterCount = remember(state.selectedTab, state.selectedColor, state.discoverFilter, state.topRange) {
         buildList {
@@ -519,7 +525,7 @@ fun WallpapersScreen(
                                     },
                                     onClick = {
                                         if (state.selectedTab == WallpaperTab.COMMUNITY) {
-                                            wallpaperUploadLauncher.launch("image/*")
+                                            wallpaperUploadLauncher.launch(wallpaperUploadPickerRequest)
                                         } else if (state.selectedColor != null || state.selectedTab != WallpaperTab.DISCOVER) {
                                             viewModel.selectTab(WallpaperTab.DISCOVER)
                                         } else {
@@ -579,7 +585,7 @@ fun WallpapersScreen(
                 .padding(end = 16.dp, bottom = 80.dp),
             showUpload = state.selectedTab == WallpaperTab.COMMUNITY,
             showThemeMatch = state.selectedTab == WallpaperTab.DISCOVER,
-            onUpload = { wallpaperUploadLauncher.launch("image/*") },
+            onUpload = { wallpaperUploadLauncher.launch(wallpaperUploadPickerRequest) },
             onThemeMatch = { viewModel.matchMyTheme() },
             onSurpriseMe = { viewModel.loadRandom() },
         )

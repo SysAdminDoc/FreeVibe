@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Live wallpaper service metadata for ParallaxWallpaperService.
+
+  TODO(N-4 / N-1): Expose WallpaperDescription on compileSdk 36 so the parallax
+  engine can declare home/lock-screen variants and ambient-mode capability
+  through the Android 16 wallpaper picker. See ROADMAP.md N-1 + N-4.
+-->
 <wallpaper
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:label="Aura Parallax"

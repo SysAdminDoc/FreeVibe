@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Live wallpaper service metadata for VideoWallpaperService.
+
+  TODO(N-4 / N-1): When Aura bumps compileSdk to 36, expose the Android 16
+  WallpaperDescription / WallpaperInstance API so a single VideoWallpaperService
+  can present distinct instances (e.g. separate home- vs lock-screen variants,
+  different scale modes, different per-time-of-day clips) instead of one
+  generic wallpaper. See ROADMAP.md N-1 + N-4.
+-->
 <wallpaper
     xmlns:android="http://schemas.android.com/apk/res/android"
+    android:label="@string/video_wallpaper_label"
     android:description="@string/video_wallpaper_label"
     android:thumbnail="@mipmap/ic_launcher" />
