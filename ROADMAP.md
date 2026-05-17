@@ -602,6 +602,42 @@ Kept verbatim — these are the receipts.
 
 These are the dated receipts. The newest entries supersede the oldest where they overlap; do not edit prior entries.
 
+### 2026-05-17 — Rev4-impl-2 autonomous batch (6 more items, code + docs)
+
+Continuation of the rev4-impl batch the same day. Six items landed across the
+Next + Later + Under-Consideration tiers. Static-review-only — same N-1 build-
+environment blocker.
+
+**Items shipped (all `[~]` partial unless noted)**
+
+- **NX-10 — Android 17 EyeDropper API**
+  Raw-string Intent (`"android.intent.action.OPEN_EYE_DROPPER"` + `"android.intent.extra.COLOR"`) keeps the integration compatible with compileSdk 35 — no API 37 class refs. `eyeDropperAvailable = remember { Build.VERSION.SDK_INT >= 37 && PackageManager.resolveActivity != null }` hides the FAB on un-updated builds. New `WallpapersViewModel.searchByPickedColor(Int)` strips alpha and reuses the existing Wallhaven `colors=` search. UI surface: new `FloatingActionRow` with `Icons.Default.Colorize`, label "Pick colour", on the Discover tab below Theme Match.
+
+- **NX-11 — Photo Picker 9:16 portrait customization**
+  New `AuraPickVisualMedia` subclass of `ActivityResultContracts.PickVisualMedia` overrides `createIntent` and calls `PhotoPickerCustomization.apply9x16AspectRatio(intent)`. The helper reflects on `android.provider.MediaStore$PhotoPickerUiCustomizationParams$Builder.setGridAspectRatio(9, 16).build()` + `MediaStore.EXTRA_PHOTO_PICKER_UI_CUSTOMIZATION_PARAMS`, all behind a `Build.VERSION.SDK_INT < 37` guard. Wired at three call sites: wallpaper community upload, collection QR import, parallax-from-photo.
+
+- **NX-3 video variant — finishing what rev4-impl deferred** *(NX-3 now `[x]` closed)*
+  TopAppBar "Smart" action on `VideoCropScreen` extracts the frame at loop start via `MediaMetadataRetriever.getFrameAtTime(OPTION_CLOSEST_SYNC)`, runs the same `SmartCropDetector` wallpaper crop uses, and pans the video so the detected subject lands at the viewport centre. Keeps user-chosen zoom (different from wallpaper variant). Coordinates translate through `fitScale * scale` to match `VideoCropScreen.clampTransform`.
+
+- **NX-13 expansion — editor unsaved-changes guards** *(4 of ~18 screens)*
+  `WallpaperEditorScreen` BackHandler fires when any filter is non-default; opens "Discard edits?" `AlertDialog` with Keep editing / Discard (calls `resetAll()` + `onBack()`). Same pattern for `SoundEditorScreen` against trim fractions + fade durations. `state.isApplying` disables the guard so apply paths land cleanly.
+
+- **U-12 — Contributor docs**
+  New repo-root `CONTRIBUTING.md` (charter, build, branch/PR conventions, code style, commit format, plugin pointer) + `ARCHITECTURE.md` (layered ASCII model, package map, key abstractions like `applyByLocator` / `SelectedContentHolder` / `AutoWallpaperWorker` / `SmartCropDetector`, process-death + live-wallpaper engine discipline, design system rules incl. no-pill-backdrops). `docs/plugins/` + Muzei-compatible reference plugin still queued behind NX-5.
+
+- **CHANGELOG Unreleased** — bumped with rev4-impl-2 highlights.
+
+**Themes touched**
+
+- T-A (dependency hygiene & platform parity) — NX-10 EyeDropper + NX-11 Photo Picker land Android 17 surface; reflection paths sidestep the N-1 toolchain dependency.
+- T-B (lockscreen depth & engine) — NX-3 video variant rounds out Smart Crop across both wallpaper paths.
+- T-G (battery transparency & accessibility) — NX-13 editor unsaved-changes prevents wasted FFmpeg / segmentation work.
+- T-I (developer experience & build verification) — U-12 contributor docs make the codebase legible to outside contributors.
+
+**Push status**
+
+- 6 new commits added to local `main` (NX-10/11, NX-3 video, U-12, NX-13 editors). Combined with rev4-impl batch (8 commits) + rev4 freshness (1 commit) the branch is now ahead of `origin/main` by ~21 commits. `git push origin main` still blocked by executor credential.
+
 ### 2026-05-17 — Rev4-impl autonomous batch (8 NX/L items, code + roadmap)
 
 Autonomous-development pass following the rev4 freshness pass (same day). Eight
