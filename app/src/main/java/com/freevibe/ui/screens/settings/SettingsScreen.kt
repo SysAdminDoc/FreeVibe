@@ -74,6 +74,8 @@ fun SettingsScreen(
     val autoWpRequiresCharging by viewModel.autoWpRequiresCharging.collectAsStateWithLifecycle()
     val autoWpRequiresWiFi by viewModel.autoWpRequiresWiFi.collectAsStateWithLifecycle()
     val autoWpRequiresIdle by viewModel.autoWpRequiresIdle.collectAsStateWithLifecycle()
+    val rotateOnUnlock by viewModel.rotateOnUnlock.collectAsStateWithLifecycle()
+    val rotateOnScreenOff by viewModel.rotateOnScreenOff.collectAsStateWithLifecycle()
     val autoPreview by viewModel.autoPreview.collectAsStateWithLifecycle()
     val wallpaperHistory by viewModel.wallpaperHistory.collectAsStateWithLifecycle()
     val gridColumns by viewModel.gridColumns.collectAsStateWithLifecycle()
@@ -357,6 +359,23 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.setAutoWallpaperRequiresIdle(it) },
                 )
             }
+            // NX-6: trigger-based rotation (per-unlock + screen-off pre-stage).
+            // Always visible — independent of the periodic worker — so users who
+            // disable timer-based rotation can still get unlock-driven changes.
+            SettingsToggle(
+                icon = Icons.Default.LockOpen,
+                title = "Change on every unlock",
+                subtitle = "Rotate when you wake the phone (runs a low-priority notification while active)",
+                checked = rotateOnUnlock,
+                onCheckedChange = { viewModel.setRotateOnUnlock(it) },
+            )
+            SettingsToggle(
+                icon = Icons.Default.PowerSettingsNew,
+                title = "Pre-stage on screen off",
+                subtitle = "Pick the next wallpaper while the screen is off so unlock shows the new one",
+                checked = rotateOnScreenOff,
+                onCheckedChange = { viewModel.setRotateOnScreenOff(it) },
+            )
             // #9: Grid columns
             SettingsItem(
                 icon = Icons.Default.GridView,
