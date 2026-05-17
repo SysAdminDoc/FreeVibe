@@ -155,6 +155,19 @@
                 android:value="wallpaper_rotation_triggers" />
         </service>
 
+        <!-- L-2 Tasker / automation hook: broadcast receiver exposing
+             ROTATE_NOW + SHUFFLE_NOW intents. Exported so Tasker, MacroDroid,
+             adb shell etc. can fire them. No custom permission — same trust
+             surface as the widget's tap-to-shuffle. -->
+        <receiver
+            android:name=".service.TaskerActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.freevibe.action.ROTATE_NOW" />
+                <action android:name="com.freevibe.action.SHUFFLE_NOW" />
+            </intent-filter>
+        </receiver>
+
         <!-- Home Screen Widget -->
         <receiver
             android:name=".widget.FreeVibeWidgetReceiver"

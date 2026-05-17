@@ -291,7 +291,13 @@ Thirteen items. All scored 18–25. Pull from the top of this list when Now clos
 - **Scope:** Phone-side companion only (no separate Wear OS app at first). Add a `WatchFaceCompositor` that reads `current_wallpaper.palette` + clock font + complication set → emits a WFF XML and pushes via Data Layer + Watch Face Push API. Surface as Settings → "Send to my Wear OS watch".
 - **Fit 4 / Impact 3 / Effort 1 / Risk 3 / Deps 1 / Novelty 5 = 17 → LATER.**
 
-### L-2. Tasker plugin (events / states / actions)
+### L-2. Tasker plugin (events / states / actions) — `[~]` action minimum shipped 2026-05-17 rev4-impl
+
+> Minimum-viable Tasker integration: new `TaskerActionReceiver` (manifest-declared, exported) responds to `com.freevibe.action.ROTATE_NOW` + `com.freevibe.action.SHUFFLE_NOW` and re-enters `RotationTriggerService.enqueueRotation()` — same code path NX-6 uses for the unlock/screen-off triggers, so all existing rotation source/target/constraint prefs apply. Tasker users can now wire Aura into any condition (calendar event, geofence, time-of-day, Bluetooth-connected) with a one-line "Send Intent" action.
+>
+> Still pending (full plugin spec): `TaskerPluginActivity` for ACTION_EDIT_SETTING / ACTION_FIRE_SETTING (UI-mediated parameterized actions); event broadcasts (wallpaper-changed, source-X-returned-429); state queries (current source, last applied URL). Hold for explicit user signal — the broadcast surface covers the 80 % case (one-tap automation triggers).
+
+
 
 - **Source(s):** [Tasker plugin spec](https://tasker.joaoapps.com/plugins-intro.html); [Peristyle external intent example `app.peristyle.START_AUTO_WALLPAPER_SERVICE`](https://github.com/Hamza417/Peristyle); [Muzei Tasker integration since 3.0](https://medium.com/muzei/announcing-muzei-live-wallpaper-3-0-d167dd5795a4).
 - **Why later:** Tasker integration is the cheapest "10x your trigger surface" feature. Once NX-6 lands, exposing every rotation trigger as a Tasker action / state is a small follow-up — but cheap to defer.
