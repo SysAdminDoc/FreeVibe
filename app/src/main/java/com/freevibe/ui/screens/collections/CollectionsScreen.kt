@@ -214,8 +214,9 @@ fun CollectionsScreen(
         uri?.let(viewModel::importCollectionFile)
     }
     // QR code import via Photo Picker (no READ_MEDIA_IMAGES; scoped-storage compliant).
+    // NX-11: AuraPickVisualMedia attaches the Android 17 9:16 portrait grid hint.
     val qrImportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
+        com.freevibe.service.AuraPickVisualMedia()
     ) { uri ->
         uri?.let(viewModel::importCollectionQr)
     }

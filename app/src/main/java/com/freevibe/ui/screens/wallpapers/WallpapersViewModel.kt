@@ -827,6 +827,17 @@ class WallpapersViewModel @Inject constructor(
         search(tagName)
     }
 
+    /**
+     * NX-10: seed the wallpaper search with a colour picked via Android 17's
+     * EyeDropper API. The picked colour arrives as an ARGB Int; we strip the
+     * alpha channel and convert the lower 24 bits to the 6-char hex Wallhaven's
+     * `colors=` query expects.
+     */
+    fun searchByPickedColor(colorInt: Int) {
+        val hex = String.format(java.util.Locale.ROOT, "%06x", colorInt and 0xFFFFFF)
+        searchByColor(hex)
+    }
+
     /** Match wallpapers to system Material You colors */
     fun matchMyTheme() {
         viewModelScope.launch {
