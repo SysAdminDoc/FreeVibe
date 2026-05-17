@@ -591,6 +591,54 @@ Kept verbatim — these are the receipts.
 
 These are the dated receipts. The newest entries supersede the oldest where they overlap; do not edit prior entries.
 
+### 2026-05-17 — Rev4-impl autonomous batch (8 NX/L items, code + roadmap)
+
+Autonomous-development pass following the rev4 freshness pass (same day). Eight
+items landed across the Next + Later tiers; build verification still pending
+behind N-1. Push status: same blocker as prior passes (`MavenImaging` executor
+credential lacks write to `SysAdminDoc/Aura`); commits land locally on `main`,
+owner must push.
+
+**Items shipped (each `[~]` partial, all sourced from existing rev4 scope)**
+
+- **NX-12 — CI build verification workflow** *(closes the static-review-only loop)*
+  New `.github/workflows/verify.yml` triggered on `push: main` + `pull_request: main` + `workflow_dispatch`. Runs `assembleDebug` + `testDebugUnitTest` + `lintDebug` on JDK 17 with Gradle cache. Stubs `local.properties` so signing/API-key lookups don't fail in CI (release.yml stays the source of truth for signed builds). Uploads test + lint reports as artifacts on failure with 14-day retention. `concurrency` group cancels superseded runs.
+
+- **NX-3 — Smart Crop with Subject Segmentation** *(wallpaper variant)*
+  `SmartCropCalculator.kt` pure geometry (7 unit tests) + `SmartCropDetector.kt` wrapping the same ML Kit Subject Segmentation engine N-3 wired into `ParallaxWallpaperService`. `WallpaperCropViewModel.applySmartCrop()` is suspend, returning the new transform so the composable can re-sync local `rememberSaveable` gesture state. UI surface: Smart Crop FilterChip with sparkle icon + Detecting… spinner; "Couldn't detect a subject — drag to position manually" snackbar fallback. Video crop variant deferred (FFmpeg geometry different).
+
+- **NX-13 — BackHandler audit** *(2 of ~18 screens)*
+  Highest-stakes in-flight screens only: `AiWallpaperScreen` back-press cancels the in-flight Stability AI job (new `AiWallpaperViewModel.cancelGeneration()` + `generationJob: Job` tracker + `onCleared()` defensive cancel — saves the user's API credit budget on bail-out). `VideoCropScreen` back-press during FFmpeg toasts "Cropping in progress — please wait" and holds the screen. Remaining 16 detail/editor/preview/picker screens deferred behind N-1 Navigation 2.9.
+
+- **NX-2 — Lockscreen widget surface** *(no code, manifest only)*
+  `freevibe_widget_info.xml` widget category bumped `home_screen` → `home_screen|keyguard`. On Android 16 QPR2+ (Dec 2025 stable) the existing `FreeVibeWidget` is now placeable on the lockscreen surface. Older Android silently ignores the keyguard bit. Clock-tuck mask + dedicated daily-pick lockscreen widget still pending pending real-device test feedback.
+
+- **NX-6 — Rotation triggers (per-unlock + screen-off pre-stage)**
+  New `RotationTriggerService` foreground service with `specialUse` foreground-service type. Dynamically registers `Intent.ACTION_USER_PRESENT` + `Intent.ACTION_SCREEN_OFF` receivers (both manifest-blocked on API 26+). Each fire enqueues a one-shot expedited `AutoWallpaperWorker` via `WorkManager.enqueueUniqueWork(KEEP)` so chatty unlock sequences coalesce. Two new DataStore prefs `rotateOnUnlock` / `rotateOnScreenOff` (default false) gate the service lifecycle; `RotationTriggerService.reconcile()` is the idempotent start/stop entry point called from `FreeVibeApp.onCreate` and `SettingsViewModel.setRotateOn{Unlock,ScreenOff}`. Manifest: new service declaration + `FOREGROUND_SERVICE_SPECIAL_USE` permission. Settings UI: "Change on every unlock" + "Pre-stage on screen off" toggles below the existing constraint section. Per-app exclusion + sub-15-min AlarmManager + one-tap-shuffle widget still pending.
+
+- **L-2 — Tasker / automation hook** *(action minimum)*
+  New manifest-declared `TaskerActionReceiver` (exported) responds to `com.freevibe.action.ROTATE_NOW` + `com.freevibe.action.SHUFFLE_NOW`, re-enters `RotationTriggerService.enqueueRotation()`. Tasker / MacroDroid / adb shell can wire Aura into any condition with a one-line "Send Intent" — no plugin SDK needed. Full TaskerPluginActivity (UI-mediated parameterized actions, event broadcasts, state queries) still queued.
+
+- **NX-4 — SelectedContentHolder process-death survival**
+  Singleton now persists the single selected wallpaper + selected sound to a `freevibe_selected_content` SharedPreferences file via Moshi JSON on every `select*` call. Hilt-injects `@ApplicationContext` + `Moshi`; lazy-restores from disk on construction. `wallpaperList` (pager-supporting) intentionally still in memory only — the detail screen already collapses to single-item display when the list is empty. Full nav-graph-scoped `SelectionViewModel` + `SavedStateHandle` refactor still queued behind Navigation 2.9 (N-1).
+
+- **NX-8 — Distribution metadata refresh** *(fastlane + Obtainium)*
+  `fastlane/metadata/android/en-US/` fully refreshed: title (`FreeVibe` → `Aura`), short description, full description (rewritten against 29-feature surface incl. parallax, weather, Smart Crop, rotation triggers, Tasker hook, sound editor, dual wallpapers, contact ringtones, community uploads, creator profiles, shareable collections, battery dashboard). New `changelogs/111.txt` for v6.31.0. New `obtainium.json` at repo root with `v*` tag regex + APK arch filter. Per-ABI splits + F-Droid metadata PR + IzzyOnDroid submission still queued behind N-1 build verification.
+
+**Themes touched**
+
+- T-A (dependency hygiene & platform parity) — no version bumps this pass (N-1 still blocked).
+- T-B (lockscreen depth & engine) — NX-3 Smart Crop and NX-2 widget surface land partial wins.
+- T-C (extension ecosystem) — L-2 Tasker hook closes the broadcast-action surface.
+- T-F (distribution beyond Play Store) — NX-8 fastlane + Obtainium close the metadata surface.
+- T-G (battery transparency & accessibility) — NX-13 back-cancel reduces wasted Stability AI calls.
+- T-H (trust & hardening) — RotationTriggerService runs `RECEIVER_NOT_EXPORTED`, narrow Intent surface; SelectedContentHolder uses `runCatching` around JSON I/O so a corrupt blob doesn't crash startup.
+- T-I (developer experience) — NX-12 verify.yml is the central win; NX-13 BackHandler discipline is the per-screen one.
+
+**Push status**
+
+- 8 commits added to local `main` (rev4 freshness + rev4-impl × 7). `git push origin main` still blocked by executor credential; owner must push.
+
 ### 2026-05-17 — Rev4 freshness pass (no code; roadmap only)
 
 Document-only pass on top of rev3 (committed earlier the same day). Web-research
