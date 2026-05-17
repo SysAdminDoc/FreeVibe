@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.data.model.stableKey
+import com.freevibe.service.SmartCropCalculator
+import com.freevibe.service.SmartCropDetector
 import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,7 @@ data class CropState(
     val offsetX: Float = 0f,
     val offsetY: Float = 0f,
     val isApplying: Boolean = false,
+    val smartCropInProgress: Boolean = false,
     val success: String? = null,
     val error: String? = null,
 )
@@ -34,6 +37,7 @@ data class CropState(
 class WallpaperCropViewModel @Inject constructor(
     private val wallpaperApplier: WallpaperApplier,
     private val okHttpClient: OkHttpClient,
+    private val smartCropDetector: SmartCropDetector,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CropState())
@@ -127,6 +131,56 @@ class WallpaperCropViewModel @Inject constructor(
                 cropped?.recycle()
                 _state.update { it.copy(isApplying = false, error = e.message) }
             }
+        }
+    }
+
+    /**
+     * Smart Crop (ROADMAP NX-3) — runs ML Kit Subject Segmentation against the
+     * currently-loaded bitmap, computes a centre-on-subject transform, and
+     * publishes the result so the composable can sync local gesture state.
+     *
+     * Returns the new transform on success or null when no subject is detected
+     * or segmentation fails. Errors flow through [CropState.error]; UI-visible
+     * "no subject" is surfaced as an error message, not as a thrown exception.
+     */
+    suspend fun applySmartCrop(viewportWidth: Int, viewportHeight: Int): SmartCropCalculator.Transform? {
+        val bmp = _state.value.bitmap ?: return null
+        if (viewportWidth <= 0 || viewportHeight <= 0) return null
+        _state.update { it.copy(smartCropInProgress = true) }
+        return try {
+            val subject = withContext(Dispatchers.Default) {
+                smartCropDetector.detectSubject(bmp)
+            }
+            if (subject == null) {
+                _state.update {
+                    it.copy(
+                        smartCropInProgress = false,
+                        error = "Couldn't detect a subject — drag to position manually",
+                    )
+                }
+                return null
+            }
+            val t = SmartCropCalculator.computeTransform(
+                bitmapWidth = bmp.width,
+                bitmapHeight = bmp.height,
+                subject = subject,
+                viewportWidth = viewportWidth,
+                viewportHeight = viewportHeight,
+            )
+            _state.update {
+                it.copy(
+                    smartCropInProgress = false,
+                    scale = t.scale,
+                    offsetX = t.offsetX,
+                    offsetY = t.offsetY,
+                    success = "Smart crop applied",
+                )
+            }
+            t
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _state.update { it.copy(smartCropInProgress = false, error = e.message) }
+            null
         }
     }
 

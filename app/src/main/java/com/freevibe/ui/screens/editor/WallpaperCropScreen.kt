@@ -32,6 +32,7 @@ import com.freevibe.data.model.Wallpaper
 import com.freevibe.data.model.WallpaperTarget
 import com.freevibe.ui.components.AuraStateAction
 import com.freevibe.ui.components.AuraStateCard
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,7 @@ fun WallpaperCropScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     val cropIdentityKey = remember(wallpaperId, fallbackWallpaper?.source, fallbackWallpaper?.fullUrl) {
         listOf(
@@ -207,13 +209,44 @@ fun WallpaperCropScreen(
                 )
             }
 
-            // Aspect ratio quick presets
+            // Aspect ratio quick presets + Smart Crop (NX-3)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                FilterChip(
+                    selected = false,
+                    enabled = !state.smartCropInProgress && state.bitmap != null && viewportSize != IntSize.Zero,
+                    onClick = {
+                        if (viewportSize == IntSize.Zero) return@FilterChip
+                        scope.launch {
+                            val t = viewModel.applySmartCrop(viewportSize.width, viewportSize.height)
+                            if (t != null) {
+                                scale = t.scale
+                                offsetX = t.offsetX
+                                offsetY = t.offsetY
+                            }
+                        }
+                    },
+                    leadingIcon = {
+                        if (state.smartCropInProgress) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                    },
+                    label = {
+                        Text(
+                            if (state.smartCropInProgress) "Detecting…" else "Smart Crop",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(32.dp),
+                )
                 val presets = listOf("Free" to null, "9:16" to (9f / 16f), "16:9" to (16f / 9f), "1:1" to 1f)
                 presets.forEach { (label, ratio) ->
                     FilterChip(

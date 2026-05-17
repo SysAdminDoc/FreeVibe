@@ -166,7 +166,11 @@ Thirteen items. All scored 18–25. Pull from the top of this list when Now clos
 - **Risk:** Engine-side clock-position estimation is heuristic on non-Pixel devices; ship as Pixel + Samsung allowlist initially.
 - **Fit 5 / Impact 4 / Effort 2 / Risk 4 / Deps 3 / Novelty 5 = 23 → NEXT.**
 
-### NX-3. Smart Crop with Subject Segmentation (Phase 6.5 finally)
+### NX-3. Smart Crop with Subject Segmentation (Phase 6.5 finally) — `[~]` wallpaper variant shipped 2026-05-17 rev4-impl
+
+> Wallpaper crop shipped. New `SmartCropCalculator.kt` (pure geometry, 7 unit tests) + `SmartCropDetector.kt` (ML Kit Subject Segmentation via the same unbundled segmenter that N-3 wired into `ParallaxWallpaperService`, accessed via reflection on the `SubjectSegmentationResult` type so the file is robust against minor ML Kit API drift). `WallpaperCropViewModel.applySmartCrop` is a suspend function returning the new `(scale, offsetX, offsetY)` transform; the composable launches it via `rememberCoroutineScope().launch` and syncs local `rememberSaveable` gesture state on success. UI surface: new `Smart Crop` FilterChip in the aspect-ratio row with a sparkle icon, "Detecting…" label + spinner while in flight, and a "Couldn't detect a subject — drag to position manually" snackbar fallback. `VideoCropScreen` smart-crop variant still pending (FFmpeg-side geometry is different; deferred to a follow-up commit).
+
+
 
 - **Source(s):** Aura Phase 6.5 (never shipped); [ML Kit Subject Segmentation Android](https://developers.google.com/ml-kit/vision/subject-segmentation/android); [WallFlow Plus smart crop](https://github.com/ammargitham/WallFlow); [WallYou advanced cropping](https://github.com/you-apps/WallYou/issues/189); [Paperize vertical scrolling crop](https://github.com/Anthonyy232/Paperize/issues/428).
 - **Why next:** N-3 lands Subject Segmentation; smart crop becomes a 2-day feature. Aura's existing pinch-zoom + aspect presets already give you most of the chrome; the missing piece is auto-positioning the crop rectangle to keep the primary subject in frame when reshaping landscape → portrait.
