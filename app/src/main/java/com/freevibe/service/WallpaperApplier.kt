@@ -115,7 +115,9 @@ class WallpaperApplier @Inject constructor(
                 val body = resp.body ?: throw java.io.IOException("Empty response body")
                 try {
                     body.byteStream().use { input ->
-                        tempFile.outputStream().use { output -> input.copyTo(output) }
+                        tempFile.outputStream().use { output ->
+                            copyCapped(input, output, MAX_WALLPAPER_BYTES)
+                        }
                     }
                     if (!tempFile.renameTo(file)) {
                         // renameTo can fail across filesystems; fall back to copy+delete.
@@ -151,7 +153,9 @@ class WallpaperApplier @Inject constructor(
                 val input = context.contentResolver.openInputStream(uri)
                     ?: throw java.io.IOException("Could not open photo")
                 input.use { inStream ->
-                    tempFile.outputStream().use { output -> inStream.copyTo(output) }
+                    tempFile.outputStream().use { output ->
+                        copyCapped(inStream, output, MAX_WALLPAPER_BYTES)
+                    }
                 }
                 if (!tempFile.renameTo(file)) {
                     tempFile.copyTo(file, overwrite = true)
@@ -251,16 +255,17 @@ class WallpaperApplier @Inject constructor(
             val body = resp.body ?: throw java.io.IOException("Empty response body")
             // Reject oversized payloads up front so a hostile or misbehaving CDN can't make us
             // allocate a huge byte[] just to OOM during decode. 64 MB is larger than any real
-            // 8K JPG/PNG/WEBP wallpaper.
+            // 8K JPG/PNG/WEBP wallpaper. We still stream-cap below in case Content-Length
+            // is missing (chunked transfer) or lies.
             val advertised = body.contentLength()
             if (advertised in 1..Long.MAX_VALUE && advertised > MAX_WALLPAPER_BYTES) {
                 throw java.io.IOException("Wallpaper too large: $advertised > $MAX_WALLPAPER_BYTES bytes")
             }
-            val bytes = body.bytes()
+            // Stream into a bounded buffer rather than calling body.bytes(), which has no
+            // upper bound and will happily allocate gigabytes when Content-Length is unknown
+            // or wrong. Abort the read the moment we exceed the cap.
+            val bytes = readCapped(body.byteStream(), MAX_WALLPAPER_BYTES)
             if (bytes.isEmpty()) throw java.io.IOException("Empty response body")
-            if (bytes.size > MAX_WALLPAPER_BYTES) {
-                throw java.io.IOException("Wallpaper too large: ${bytes.size} > $MAX_WALLPAPER_BYTES bytes")
-            }
 
             // First pass: get image dimensions without allocating pixels
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -279,6 +284,46 @@ class WallpaperApplier @Inject constructor(
             val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         }
+    }
+
+    /**
+     * Copy bytes from [input] to [output], aborting (and throwing) if more than [cap]
+     * bytes have been written. The output stream's bytes-so-far are intentionally
+     * left in place so callers can rely on their own try/finally cleanup.
+     */
+    private fun copyCapped(input: java.io.InputStream, output: java.io.OutputStream, cap: Long) {
+        val chunk = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val read = input.read(chunk)
+            if (read <= 0) break
+            total += read
+            if (total > cap) {
+                throw java.io.IOException("Source exceeds cap of $cap bytes")
+            }
+            output.write(chunk, 0, read)
+        }
+    }
+
+    /**
+     * Read at most [cap] bytes from [input] into a ByteArray, throwing IOException if
+     * the source produces more. Used to defend against unbounded responses where
+     * Content-Length is absent or lies.
+     */
+    private fun readCapped(input: java.io.InputStream, cap: Long): ByteArray {
+        val buffer = java.io.ByteArrayOutputStream(64 * 1024)
+        val chunk = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val read = input.read(chunk)
+            if (read <= 0) break
+            total += read
+            if (total > cap) {
+                throw java.io.IOException("Wallpaper too large: exceeds $cap bytes")
+            }
+            buffer.write(chunk, 0, read)
+        }
+        return buffer.toByteArray()
     }
 
     private companion object {

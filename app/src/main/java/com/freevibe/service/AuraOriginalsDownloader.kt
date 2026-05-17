@@ -53,23 +53,30 @@ class AuraOriginalsDownloader @AssistedInject constructor(
             val manifest = manifestLoader.load() ?: return@withContext Result.success()
             if (manifest.sounds.isEmpty()) return@withContext Result.success()
             val targetDir = File(applicationContext.filesDir, BUNDLE_DIRNAME).apply { mkdirs() }
-            val totalSoftCeiling = manifest.totalBytes.coerceAtLeast(0)
-            if (totalSoftCeiling in 1..MAX_TOTAL_BYTES) {
-                // Honor the manifest's stated budget when present; refuse to start a
-                // pack that pretends to be tiny but lists huge files.
-            } else if (totalSoftCeiling > MAX_TOTAL_BYTES) {
+            val targetCanonical = targetDir.canonicalFile
+            // Reject manifests whose declared total exceeds our hard cap. A zero or
+            // negative `totalBytes` is treated as "unknown" and we still enforce the
+            // running cap per-entry + globally below.
+            val declaredTotal = manifest.totalBytes
+            if (declaredTotal > MAX_TOTAL_BYTES) {
                 if (com.freevibe.BuildConfig.DEBUG) {
                     android.util.Log.w(
                         TAG,
-                        "Manifest claims $totalSoftCeiling bytes which exceeds ${MAX_TOTAL_BYTES}; refusing to download",
+                        "Manifest claims $declaredTotal bytes which exceeds $MAX_TOTAL_BYTES; refusing to download",
                     )
                 }
                 return@withContext Result.failure()
             }
 
             var failedAny = false
+            var runningBytes = 0L
             manifest.sounds.forEach { entry ->
-                if (downloadEntry(entry, targetDir).not()) failedAny = true
+                val outcome = downloadEntry(entry, targetCanonical, runningBytes)
+                if (outcome.success) {
+                    runningBytes += outcome.bytesAdded
+                } else {
+                    failedAny = true
+                }
             }
             if (failedAny) Result.retry() else Result.success()
         } catch (e: CancellationException) {
@@ -82,21 +89,70 @@ class AuraOriginalsDownloader @AssistedInject constructor(
         }
     }
 
-    private fun downloadEntry(entry: AuraOriginalsEntry, targetDir: File): Boolean {
-        val finalFile = File(targetDir, "${entry.id}.${guessExtension(entry.url)}")
-        if (finalFile.exists() && verifyHash(finalFile, entry.sha256)) return true
-        val tmpFile = File(targetDir, "${entry.id}.tmp")
+    private data class EntryOutcome(val success: Boolean, val bytesAdded: Long)
+
+    private fun downloadEntry(
+        entry: AuraOriginalsEntry,
+        targetDir: File,
+        runningBytes: Long,
+    ): EntryOutcome {
+        // Defense-in-depth: the manifest is bundled in the APK and not user-supplied,
+        // but a sanitized id keeps `entry.id` from escaping the bundle directory via
+        // "../foo" or absolute paths, and rejects bad characters that would corrupt
+        // the on-disk layout.
+        val safeId = sanitizeEntryId(entry.id) ?: run {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "Rejecting entry with unsafe id: '${entry.id}'")
+            }
+            return EntryOutcome(success = false, bytesAdded = 0L)
+        }
+        // HTTPS-only — refuse any other scheme so a typo or a tampered manifest can't
+        // produce a cleartext or local-file fetch.
+        if (!isAllowedDownloadUrl(entry.url)) {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "Rejecting non-HTTPS url for ${entry.id}: ${entry.url}")
+            }
+            return EntryOutcome(success = false, bytesAdded = 0L)
+        }
+        if (entry.sha256.isBlank()) {
+            // verifyHash already rejects this, but failing here gives a clearer log
+            // and saves a network round trip.
+            if (com.freevibe.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "Rejecting entry ${entry.id}: missing sha256")
+            }
+            return EntryOutcome(success = false, bytesAdded = 0L)
+        }
+        val finalFile = File(targetDir, "$safeId.${guessExtension(entry.url)}")
+        // Final guard against any sneaky path manipulation that survived sanitization.
+        if (!isInside(targetDir, finalFile)) {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "Refusing to write outside bundle dir for ${entry.id}")
+            }
+            return EntryOutcome(success = false, bytesAdded = 0L)
+        }
+        if (finalFile.exists() && verifyHash(finalFile, entry.sha256)) {
+            return EntryOutcome(success = true, bytesAdded = finalFile.length())
+        }
+        val remainingBudget = (MAX_TOTAL_BYTES - runningBytes).coerceAtLeast(0L)
+        if (remainingBudget <= 0L) {
+            if (com.freevibe.BuildConfig.DEBUG) {
+                android.util.Log.w(TAG, "Bundle budget exhausted; skipping ${entry.id}")
+            }
+            return EntryOutcome(success = false, bytesAdded = 0L)
+        }
+        val perFileBudget = remainingBudget.coerceAtMost(MAX_PER_FILE_BYTES)
+        val tmpFile = File(targetDir, "$safeId.tmp")
         try {
             val request = Request.Builder().url(entry.url).build()
             okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return false
-                val body = response.body ?: return false
+                if (!response.isSuccessful) return EntryOutcome(false, 0L)
+                val body = response.body ?: return EntryOutcome(false, 0L)
                 val length = body.contentLength()
-                if (length > MAX_PER_FILE_BYTES) {
+                if (length > perFileBudget) {
                     if (com.freevibe.BuildConfig.DEBUG) {
-                        android.util.Log.w(TAG, "Entry ${entry.id} too large: $length bytes")
+                        android.util.Log.w(TAG, "Entry ${entry.id} too large: $length bytes (budget=$perFileBudget)")
                     }
-                    return false
+                    return EntryOutcome(false, 0L)
                 }
                 tmpFile.outputStream().use { out ->
                     val buffer = ByteArray(64 * 1024)
@@ -106,9 +162,9 @@ class AuraOriginalsDownloader @AssistedInject constructor(
                         val read = source.read(buffer)
                         if (read <= 0) break
                         written += read
-                        if (written > MAX_PER_FILE_BYTES) {
+                        if (written > perFileBudget) {
                             tmpFile.delete()
-                            return false
+                            return EntryOutcome(false, 0L)
                         }
                         out.write(buffer, 0, read)
                     }
@@ -116,9 +172,11 @@ class AuraOriginalsDownloader @AssistedInject constructor(
             }
             if (!verifyHash(tmpFile, entry.sha256)) {
                 tmpFile.delete()
-                return false
+                return EntryOutcome(false, 0L)
             }
-            return tmpFile.renameTo(finalFile) || tmpFile.copyToWithCleanup(finalFile)
+            val finalLength = tmpFile.length()
+            val renamed = tmpFile.renameTo(finalFile) || tmpFile.copyToWithCleanup(finalFile)
+            return EntryOutcome(success = renamed, bytesAdded = if (renamed) finalLength else 0L)
         } catch (e: CancellationException) {
             tmpFile.delete()
             throw e
@@ -127,7 +185,7 @@ class AuraOriginalsDownloader @AssistedInject constructor(
             if (com.freevibe.BuildConfig.DEBUG) {
                 android.util.Log.w(TAG, "downloadEntry ${entry.id} failed: ${e.message}")
             }
-            return false
+            return EntryOutcome(false, 0L)
         }
     }
 
@@ -168,6 +226,54 @@ class AuraOriginalsDownloader @AssistedInject constructor(
                 ExistingWorkPolicy.KEEP,
                 request,
             )
+        }
+
+        /**
+         * Returns a path-safe filename base for an entry id, or null if the id is
+         * empty / contains characters that would let it escape its parent directory.
+         * Allowed chars: ASCII letters, digits, dash, underscore, dot (but not "..").
+         */
+        internal fun sanitizeEntryId(id: String): String? {
+            if (id.isBlank()) return null
+            // Reject any path separator or null byte outright.
+            if (id.contains('/') || id.contains('\\') || id.contains(' ')) return null
+            // Reject dot-only ids that would resolve to "." or "..".
+            if (id == "." || id == "..") return null
+            // Reject anything that isn't a safe filename character.
+            val safe = id.all { ch ->
+                ch == '-' || ch == '_' || ch == '.' ||
+                    (ch in 'a'..'z') || (ch in 'A'..'Z') || (ch in '0'..'9')
+            }
+            if (!safe) return null
+            // Bound the length so an absurd id can't produce an absurd filename.
+            if (id.length > 64) return null
+            return id
+        }
+
+        /**
+         * HTTPS-only gate for manifest URLs. Anything else (http://, file://, content://,
+         * data:, ftp://) is rejected so a typo or a tampered manifest can't redirect the
+         * download to cleartext or a local path.
+         */
+        internal fun isAllowedDownloadUrl(url: String): Boolean {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty()) return false
+            val schemeEnd = trimmed.indexOf(':')
+            if (schemeEnd <= 0) return false
+            val scheme = trimmed.substring(0, schemeEnd).lowercase(java.util.Locale.ROOT)
+            return scheme == "https"
+        }
+
+        /**
+         * True iff `child` resolves inside (or equal to) `parent` after canonicalization.
+         * Used as the final guard against any path-escape the sanitizer missed.
+         */
+        internal fun isInside(parent: File, child: File): Boolean = try {
+            val parentPath = parent.canonicalPath
+            val childPath = child.canonicalFile.path
+            childPath == parentPath || childPath.startsWith(parentPath + File.separator)
+        } catch (_: Exception) {
+            false
         }
 
         internal fun guessExtension(url: String): String = when {
