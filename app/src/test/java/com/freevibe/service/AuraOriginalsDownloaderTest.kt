@@ -2,6 +2,8 @@ package com.freevibe.service
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -79,5 +81,66 @@ class AuraOriginalsDownloaderTest {
         // that path matching its on-disk write target.
         val synthetic = File("/tmp/files", "aura_originals")
         assertEquals("aura_originals", synthetic.name)
+    }
+
+    @Test
+    fun `sanitizeEntryId accepts safe identifiers`() {
+        assertEquals("chime-01", AuraOriginalsDownloader.sanitizeEntryId("chime-01"))
+        assertEquals("Notification_2", AuraOriginalsDownloader.sanitizeEntryId("Notification_2"))
+        assertEquals("v1.2.3", AuraOriginalsDownloader.sanitizeEntryId("v1.2.3"))
+        assertNotNull(AuraOriginalsDownloader.sanitizeEntryId("A"))
+    }
+
+    @Test
+    fun `sanitizeEntryId rejects path traversal and unsafe chars`() {
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId(""))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("   "))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId(".."))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("."))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("../etc/passwd"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo/bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo\\bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo:bar"))
+        // Semicolon, percent, ampersand, pipe, null byte — none should pass the strict allowlist.
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo;bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo%bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo&bar"))
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo|bar"))
+        // Newline in id must be rejected before it ever hits the filesystem.
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("foo\nbar"))
+        // Over-long ids would produce absurd filenames.
+        assertNull(AuraOriginalsDownloader.sanitizeEntryId("a".repeat(65)))
+    }
+
+    @Test
+    fun `isAllowedDownloadUrl gates HTTPS only`() {
+        assertTrue(AuraOriginalsDownloader.isAllowedDownloadUrl("https://example.com/foo.mp3"))
+        assertTrue(AuraOriginalsDownloader.isAllowedDownloadUrl("HTTPS://example.com/foo.mp3"))
+        assertTrue(AuraOriginalsDownloader.isAllowedDownloadUrl("  https://example.com/foo.mp3  "))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("http://example.com/foo.mp3"))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("file:///etc/passwd"))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("content://media/foo"))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("data:audio/mpeg;base64,AAAA"))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("ftp://example.com/foo.mp3"))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl(""))
+        assertFalse(AuraOriginalsDownloader.isAllowedDownloadUrl("example.com/foo.mp3"))
+    }
+
+    @Test
+    fun `isInside prevents escapes from the bundle dir`() {
+        val parent = Files.createTempDirectory("aura-parent-").toFile()
+        try {
+            val child = File(parent, "foo.mp3")
+            val nested = File(parent, "sub/foo.mp3")
+            val escape = File(parent.parentFile, "outside.mp3")
+            assertTrue(AuraOriginalsDownloader.isInside(parent, child))
+            assertTrue(AuraOriginalsDownloader.isInside(parent, nested))
+            assertFalse(AuraOriginalsDownloader.isInside(parent, escape))
+            // The parent itself counts as "inside" so existing-dir checks don't fail.
+            assertTrue(AuraOriginalsDownloader.isInside(parent, parent))
+        } finally {
+            parent.deleteRecursively()
+        }
     }
 }

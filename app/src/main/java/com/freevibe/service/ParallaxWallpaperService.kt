@@ -267,6 +267,15 @@ class ParallaxWallpaperService : WallpaperService() {
                         }
                         try { segmenter.close() } catch (_: Exception) {}
                         if (destroyed || bitmap.isRecycled) return@addOnSuccessListener
+
+                        // bgBitmap and fgBitmap are allocated outside the lock (they can be
+                        // large) and may OOM mid-flight. We must recycle whichever ones
+                        // already exist before we bail out, or the native allocation leaks
+                        // until the process dies — wallpaper-service processes are very
+                        // long-lived, so the leak is observable.
+                        var bgBitmap: Bitmap? = null
+                        var fgBitmap: Bitmap? = null
+                        var publishedToLayers = false
                         try {
                             // The foreground-confidence mask matches the input bitmap's
                             // dimensions when enableForegroundConfidenceMask() is set,
@@ -284,14 +293,27 @@ class ParallaxWallpaperService : WallpaperService() {
                             val pixels: IntArray
                             val bmpW: Int
                             val bmpH: Int
-                            val bgBitmap: Bitmap?
                             synchronized(bitmapLock) {
                                 if (bitmap.isRecycled) return@addOnSuccessListener
                                 bmpW = bitmap.width
                                 bmpH = bitmap.height
                                 pixels = IntArray(bmpW * bmpH)
                                 bitmap.getPixels(pixels, 0, bmpW, 0, 0, bmpW, bmpH)
-                                bgBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                // bitmap.copy() can return null on low-memory devices; fall back
+                                // to a fresh ARGB_8888 allocation populated from the pixel array
+                                // we just extracted so we always end up with a usable background.
+                                bgBitmap = try { bitmap.copy(Bitmap.Config.ARGB_8888, false) } catch (_: OutOfMemoryError) { null }
+                            }
+                            if (bgBitmap == null) {
+                                // Reconstruct from the IntArray we have on hand rather than
+                                // dropping out — keeps the parallax layered effect even when
+                                // the OS short-circuits a direct bitmap.copy.
+                                bgBitmap = try {
+                                    Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
+                                        .also { it.setPixels(pixels, 0, bmpW, 0, 0, bmpW, bmpH) }
+                                } catch (_: OutOfMemoryError) {
+                                    null
+                                }
                             }
 
                             floatBuffer.rewind()
@@ -309,24 +331,30 @@ class ParallaxWallpaperService : WallpaperService() {
                                 }
                             }
 
-                            val fgBitmap = Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
-                            fgBitmap.setPixels(fgPixels, 0, bmpW, 0, 0, bmpW, bmpH)
+                            fgBitmap = try {
+                                Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
+                            } catch (e: OutOfMemoryError) {
+                                if (BuildConfig.DEBUG) android.util.Log.w("ParallaxWP", "fgBitmap OOM: ${e.message}")
+                                return@addOnSuccessListener
+                            }
+                            fgBitmap!!.setPixels(fgPixels, 0, bmpW, 0, 0, bmpW, bmpH)
 
                             synchronized(bitmapLock) {
-                                if (generation != segmentGeneration) {
-                                    fgBitmap.recycle()
-                                    bgBitmap?.recycle()
-                                    return@addOnSuccessListener
-                                }
+                                if (generation != segmentGeneration) return@addOnSuccessListener
                                 val oldFg = foregroundLayer
                                 val oldBg = backgroundLayer
                                 foregroundLayer = fgBitmap
                                 backgroundLayer = bgBitmap
                                 oldFg?.recycle()
                                 oldBg?.recycle()
-                                // Fallback no longer needed once we have fg+bg layers
-                                fallbackBitmap?.recycle()
-                                fallbackBitmap = null
+                                // Only retire the fallback if we actually have both layers; otherwise
+                                // keep it so draw() has SOMETHING to render. bgBitmap may legitimately
+                                // be null if reconstruction also failed.
+                                if (foregroundLayer != null && backgroundLayer != null) {
+                                    fallbackBitmap?.recycle()
+                                    fallbackBitmap = null
+                                }
+                                publishedToLayers = true
                             }
 
                             if (BuildConfig.DEBUG) {
@@ -334,6 +362,13 @@ class ParallaxWallpaperService : WallpaperService() {
                             }
                         } catch (e: Exception) {
                             if (BuildConfig.DEBUG) android.util.Log.e("ParallaxWP", "Segment result error: ${e.message}")
+                        } finally {
+                            if (!publishedToLayers) {
+                                // Anything we allocated has to be recycled here — otherwise the
+                                // native allocations stay parked until the wallpaper engine dies.
+                                try { fgBitmap?.recycle() } catch (_: Throwable) {}
+                                try { bgBitmap?.recycle() } catch (_: Throwable) {}
+                            }
                         }
                     }
                     .addOnFailureListener { e ->

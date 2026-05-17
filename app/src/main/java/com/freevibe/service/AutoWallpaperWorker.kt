@@ -145,23 +145,42 @@ class AutoWallpaperWorker @AssistedInject constructor(
         /**
          * Schedule with minute-based intervals (minimum 15 min, WorkManager floor).
          *
-         * Reads constraint prefs synchronously from a worker-local snapshot via
-         * runBlocking on a non-suspend caller path. Constraints flow through to
-         * WorkManager which gates execution: a worker fires only when ALL
-         * constraints satisfy. Off-by-default for charging / Wi-Fi / idle so
-         * existing users keep current behavior on upgrade; opt-in via Settings.
+         * Suspends to read constraint prefs from DataStore so we don't block the
+         * Main thread (the old non-suspend impl did three sequential runBlocking
+         * calls inside a UI-thread coroutine — observable ANR risk on cold starts
+         * where DataStore had to hit disk).
+         *
+         * Constraints flow through to WorkManager which gates execution: a worker
+         * fires only when ALL constraints satisfy. Off-by-default for charging /
+         * Wi-Fi / idle so existing users keep current behavior on upgrade; opt-in
+         * via Settings.
          */
-        fun schedule(context: Context, intervalMinutes: Long = 360) {
+        suspend fun schedule(context: Context, intervalMinutes: Long = 360) {
             val prefs = PreferencesManager(context)
-            val requiresCharging = kotlinx.coroutines.runBlocking {
-                prefs.autoWallpaperRequiresCharging.first()
-            }
-            val requiresWiFiOnly = kotlinx.coroutines.runBlocking {
-                prefs.autoWallpaperRequiresWiFiOnly.first()
-            }
-            val requiresIdle = kotlinx.coroutines.runBlocking {
-                prefs.autoWallpaperRequiresIdle.first()
-            }
+            val requiresCharging = prefs.autoWallpaperRequiresCharging.first()
+            val requiresWiFiOnly = prefs.autoWallpaperRequiresWiFiOnly.first()
+            val requiresIdle = prefs.autoWallpaperRequiresIdle.first()
+            scheduleWithConstraints(
+                context = context,
+                intervalMinutes = intervalMinutes,
+                requiresCharging = requiresCharging,
+                requiresWiFiOnly = requiresWiFiOnly,
+                requiresIdle = requiresIdle,
+            )
+        }
+
+        /**
+         * Non-suspend variant for the very rare callers that genuinely cannot
+         * suspend (e.g. broadcast receivers or non-Hilt entry points). Caller
+         * must already have the resolved constraint flags; we never block here.
+         */
+        fun scheduleWithConstraints(
+            context: Context,
+            intervalMinutes: Long = 360,
+            requiresCharging: Boolean,
+            requiresWiFiOnly: Boolean,
+            requiresIdle: Boolean,
+        ) {
             val constraints = buildAutoWallpaperConstraints(
                 requiresCharging = requiresCharging,
                 requiresWiFiOnly = requiresWiFiOnly,
@@ -183,7 +202,7 @@ class AutoWallpaperWorker @AssistedInject constructor(
         }
 
         /** Legacy schedule for backward compatibility */
-        fun scheduleHours(context: Context, intervalHours: Long = 12) {
+        suspend fun scheduleHours(context: Context, intervalHours: Long = 12) {
             schedule(context, intervalHours * 60)
         }
 

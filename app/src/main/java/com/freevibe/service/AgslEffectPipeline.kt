@@ -44,19 +44,43 @@ class AgslEffectPipeline {
      * Apply an effect to a source bitmap and return a new bitmap with the result.
      * Caller owns the returned bitmap; recycle when done.
      *
-     * Falls back to a straight bitmap copy on unsupported devices so the caller can
-     * write code that doesn't branch.
+     * Falls back to a straight bitmap copy on unsupported devices, recycled bitmaps,
+     * or shader-compilation failures, so the caller can write code that doesn't
+     * branch but never gets a null back.
      */
     fun apply(source: Bitmap, effect: AgslEffect): Bitmap {
+        // Guard against the caller handing us a recycled bitmap — Bitmap.copy() throws
+        // IllegalStateException on a recycled source. We can't recover from a recycled
+        // source, so the only honest answer is to propagate; but a 1×1 fallback is more
+        // useful than a hard crash in best-effort UI paths.
+        if (source.isRecycled) {
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        }
         if (!isSupported || effect == AgslEffect.IDENTITY) {
-            return source.copy(source.config ?: Bitmap.Config.ARGB_8888, false)
+            return copyOrFallback(source)
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             // Defensive: isSupported already gated above, but keep the guard explicit
             // so a future minSdk bump that crosses 33 doesn't leak a NoClassDefFoundError.
-            return source.copy(source.config ?: Bitmap.Config.ARGB_8888, false)
+            return copyOrFallback(source)
         }
-        return applyAgsl(source, effect)
+        return try {
+            applyAgsl(source, effect)
+        } catch (e: Exception) {
+            // RuntimeShader can throw IllegalArgumentException on a malformed AGSL
+            // program. Effects are hard-coded, but a future bad authoring change
+            // shouldn't crash the wallpaper editor — fall back to the source.
+            copyOrFallback(source)
+        } catch (e: OutOfMemoryError) {
+            copyOrFallback(source)
+        }
+    }
+
+    private fun copyOrFallback(source: Bitmap): Bitmap = try {
+        source.copy(source.config ?: Bitmap.Config.ARGB_8888, false)
+            ?: Bitmap.createBitmap(source.width.coerceAtLeast(1), source.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+    } catch (_: Throwable) {
+        Bitmap.createBitmap(source.width.coerceAtLeast(1), source.height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
@@ -64,14 +88,21 @@ class AgslEffectPipeline {
         val width = source.width
         val height = source.height
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val shader = RuntimeShader(effect.agsl).apply {
-            setInputShader("src", BitmapShader(source, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
-            effect.applyUniforms(this)
+        try {
+            val canvas = Canvas(output)
+            val shader = RuntimeShader(effect.agsl).apply {
+                setInputShader("src", BitmapShader(source, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
+                effect.applyUniforms(this)
+            }
+            val paint = Paint().apply { this.shader = shader }
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+            return output
+        } catch (t: Throwable) {
+            // Anything that throws after we've allocated `output` must recycle it before
+            // the caller hands us a copy-fallback bitmap — otherwise we leak.
+            try { output.recycle() } catch (_: Throwable) {}
+            throw t
         }
-        val paint = Paint().apply { this.shader = shader }
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-        return output
     }
 }
 
