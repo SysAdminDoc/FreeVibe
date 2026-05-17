@@ -3,8 +3,8 @@
 > Open-source Android personalization: wallpapers, video wallpapers, ringtones, sounds.
 > Stay the OSS alternative to Zedge: no ads, no surprise charges, no dark patterns.
 
-**Version:** 2026-05-16-rev2 (added Implementation Pass for autonomous N-2..N-5 batch).
-**Code version at write:** v6.31.0 / versionCode 111 (build pending verification).
+**Version:** 2026-05-17-rev4 (freshness pass: Android 17 stable approaches June 2026 — added NX-10 EyeDropper API, NX-11 Photo Picker 9:16, NX-12 CI verification, NX-13 predictive-back wiring, L-10 adaptive layouts; logged yt-dlp CVE-2026-26331 risk row; competitor validation from One UI 8.5 stable rollout).
+**Code version at write:** v6.31.0 / versionCode 111 (per `app/build.gradle.kts`; build verification still pending in N-1 toolchain pass).
 **Charter:** personalization, AMOLED-first, free-by-default, multi-source content aggregation, community-fed catalog, polite live wallpapers (battery-aware, pause-on-invisible).
 
 ---
@@ -22,13 +22,16 @@ If you're adding a feature and the source isn't in the Appendix, do not add it. 
 
 ---
 
-## State of the Repo (snapshot, 2026-05-16)
+## State of the Repo (snapshot, 2026-05-17)
 
-- Kotlin 2.1.0 / Compose / Material 3, Hilt 2.53.1, Room 2.6.1 (v14), Retrofit 2.11.0, OkHttp 4.12.0, Media3 1.5.1, Coil 2.7.0, WorkManager 2.10.0, Glance 1.1.1, NewPipe Extractor 0.24.8, youtubedl-android 0.18.1, ML Kit `segmentation-selfie:16.0.0-beta6`, Firebase BoM 33.7.0.
-- 121 Kotlin files, ~35k LOC, 46 unit-test files, 0 known CVEs in scanner, 0 production TODO comments (one design-note TODO in `VoteRepository.kt:75` for admin auth).
-- Shipped via 21 Implementation Passes since 2026-04-25 (see Implementation Log).
-- Distribution: GitHub Releases only; signed via `freevibe.jks`. CI workflow `.github/workflows/release.yml` triggered on `v*` tag.
+- Kotlin 2.1.0 / Compose / Material 3, Hilt 2.53.1, Room 2.6.1 (v14), Retrofit 2.11.0, OkHttp 4.12.0, Media3 1.5.1, Coil 2.7.0, WorkManager 2.10.0, Glance 1.1.1, NewPipe Extractor 0.24.8, youtubedl-android 0.18.1, **ML Kit `segmentation-subject:16.0.0-beta1`** (N-3 migrated 2026-05-16), **Firebase BoM 34.13.0** (N-2 shipped 2026-05-16), `play-services-base:18.5.0` (ModuleInstallClient for unbundled segmenter).
+- 124 Kotlin files in `app/src/main/java/com/freevibe/`, 49 unit-test files (+1 audit-pass tests), 0 known CVEs in scanner, 1 design-note TODO resolved (`VoteRepository.kt` admin auth → Custom Claims).
+- Shipped via 22 Implementation Passes since 2026-04-25 (latest: 2026-05-17 hardening audit). See Implementation Log.
+- Distribution: GitHub Releases only; signed via `freevibe.jks`. CI workflow `.github/workflows/release.yml` triggered on `v*` tag. Per-ABI splits + F-Droid metadata still pending (NX-8).
 - Package id `com.freevibe`, brand "Aura"; do not change without a migration plan (re-installs lose data; existing community uploads keyed by device id).
+- Build env on the executing VM: **no JDK/Android SDK installed** — every Implementation Pass since 2026-04-25 has been static-review-only. `./gradlew :app:assembleDebug` runtime verification (N-1 gating) requires a workstation with the Android Studio JBR + SDK 35.
+- CI surface (rev4 note): `.github/workflows/release.yml` only triggers on `v*` tag push or `workflow_dispatch`. There is **no automated PR / push build verification, no unit-test run, no lint** — the manual gating gap that NX-12 closes.
+- Platform horizon (rev4 note): Android 17 reached Platform Stability in Beta 3 (March 2026), Beta 4 shipped 2026-04-16, stable expected June 2026 — sets API 37 baseline with EyeDropper, PhotoPicker 9:16 customization, Contacts Picker, ACCESS_LOCAL_NETWORK, Bubbles. One UI 8.5 stable rolling out May 2026 with Smart Subject Placement + AI Weather Effects — competitor validation of Aura's existing Phase 6.3 weather trajectory + NX-2 lockscreen-depth direction. ([Android 17 release notes](https://developer.android.com/about/versions/17/release-notes); [9to5Google Beta 2 EyeDropper](https://9to5google.com/2026/02/26/android-17-beta-2-contacts-and-display-color-access/); [SamMobile One UI 8.5 features](https://www.sammobile.com/news/one-ui-8-5-update-top-features/).)
 
 ### What is shipped (Phase 1-7 status)
 
@@ -145,7 +148,7 @@ environment that can run `./gradlew :app:assembleDebug`.
 
 ## Next — queued, scored, ready
 
-Eight items. All scored 18–23. Pull from the top of this list when Now closes.
+Thirteen items. All scored 18–25. Pull from the top of this list when Now closes. Four new items added in rev4 (NX-10..NX-13) sit at the back of the queue but score well; promote ahead of older items only when their dependencies (N-1 toolchain, primarily) are unblocked.
 
 ### NX-1. GL/AGSL live wallpaper engine migration (T-9 reframed)
 
@@ -211,6 +214,50 @@ Eight items. All scored 18–23. Pull from the top of this list when Now closes.
 - **Risk:** F-Droid forbids non-free dependencies. Firebase Storage may push you to the IzzyOnDroid track only (which permits proprietary deps). NewPipe Extractor + youtubedl-android are GPL and OK.
 - **Fit 5 / Impact 4 / Effort 3 / Risk 4 / Deps 3 / Novelty 2 = 21 → NEXT.**
 
+### NX-9. Media3 1.10 Material3 playback composables + dynamic scheduling
+
+- **Source(s):** [Media3 1.10 release blog](https://android-developers.googleblog.com/2026/03/media3-110-is-out.html); [Media3 1.10 dev blog post](https://developer.android.com/blog/posts/media3-1-10-is-out); [Media3 release page](https://developer.android.com/jetpack/androidx/releases/media3); [Compose 2026 ExoPlayer guide](https://medium.com/@ramadan123sayed/media-player-in-jetpack-compose-the-complete-2026-guide-exoplayer-media3-1-10-0a25af46ce7d); existing `SoundDetailScreen.kt` hand-rolled waveform + progress; existing `WallpaperPreviewScreen` video preview.
+- **Why next:** Aura's sound preview UI rolls its own waveform + progress + speed control across `SoundDetailScreen`, `SoundEditorScreen`, and the YouTube tab. Media3 1.10 (March 2026) adds Material3-styled composables — `PlayerComposable` (combines `ContentFrame` + controls), `ProgressSlider`, `PlaybackSpeedControl` — that replace ~300 LOC of custom UI with library code styled to match the rest of the app. Bonus: `ExoPlayer.Builder.experimentalSetDynamicSchedulingEnabled()` ships in 1.10 as an experimental power-saver for the in-app video preview surface — direct fit for Aura's battery-discipline charter.
+- **Scope:** Bump Media3 1.5.1 → 1.10.0 (sequenced inside N-1's lockstep toolchain pass; the new composables compile against Compose BOM 2026.05 only). Migrate `WallpaperPreviewScreen` video preview to `PlayerComposable` + `ContentFrame` + Aura's existing `GlassCard` chrome. Replace the hand-rolled scrubber in `SoundDetailScreen` with `ProgressSlider`. Add `PlaybackSpeedControl` to `SoundEditorScreen` (currently no in-editor speed control). Opt into `experimentalSetDynamicSchedulingEnabled()` behind a Settings → Advanced → Dynamic scheduling toggle for the video preview surface.
+- **Risk:** Library composables don't yet expose Aura's rectangular 4-12dp radius/letter-spacing design system from v6.16.0 polish — may need a thin theming wrapper. Experimental dynamic-scheduling API can be removed in any minor release; flag for monitoring.
+- **Fit 4 / Impact 3 / Effort 3 / Risk 4 / Deps 3 (N-1) / Novelty 2 = 19 → NEXT.**
+
+### NX-10. Android 17 EyeDropper API — pixel-pick → wallpaper colour search
+
+- **Source(s):** [Android 17 Beta 2 EyeDropper announce — 9to5Google](https://9to5google.com/2026/02/26/android-17-beta-2-contacts-and-display-color-access/); [Android Engineers Substack walkthrough](https://androidengineers.substack.com/p/introducing-the-android-17-eye-dropper); [ProAndroidDev EyeDropper API deep-dive (Mar 2026)](https://proandroiddev.com/exploring-the-eyedropper-api-android-17-9d7be86aaa16); [Android 17 release notes](https://developer.android.com/about/versions/17/release-notes); [Android Authority first look](https://www.androidauthority.com/android-17-eyedropper-color-picker-3610073/); existing `WallpapersViewModel.matchMyTheme` (Material You accent → Wallhaven `colors=` query).
+- **Why next:** Aura's flagship "Match my theme" feature seeds Wallhaven colour search from the system Material You accent. EyeDropper (`Intent.ACTION_OPEN_EYE_DROPPER`, `Intent.EXTRA_COLOR`) ships in Android 17 (Beta 2, locked in Beta 3) and lets the user pick **any** on-screen pixel without screen-recording permission or accessibility-service abuse. Direct fit: "pick a colour from anywhere → seed wallpaper search → match my desk lamp / album art / favourite jacket". No OSS wallpaper app uses it yet — leapfrog opportunity tracked at zero implementation cost.
+- **Scope:** Wallpaper search bar + AI generation prompt + community-upload tag editor each get an EyeDropper FAB. Implement behind `Build.VERSION.SDK_INT >= 37` gate (no fallback needed — Android 16 and below keep the existing Material You + Wallhaven palette flow). Launch via `ActivityResultContracts.StartActivityForResult` since the API returns `Intent.EXTRA_COLOR` as an `Int`. Convert to nearest `WallhavenPurity`-safe colour query and to a Wallhaven `colors=` hex.
+- **Risk:** Android 17+ only — install base hits ~10 % by EOY 2026, mainstream by Q2 2027. Settings → Advanced toggle to surface the feature on supported devices avoids dead UI on older versions.
+- **Fit 4 / Impact 3 / Effort 4 / Risk 4 / Deps 3 (N-1 raises targetSdk) / Novelty 4 = 22 → NEXT.**
+
+### NX-11. Android 17 Photo Picker 9:16 portrait customization (N-4 follow-up)
+
+- **Source(s):** [Android Developers Blog — Android 17 Beta 3 PhotoPickerUiCustomizationParams](https://android-developers.googleblog.com/2026/03/the-third-beta-of-android-17.html); [Android 17 release notes (Photo Picker section)](https://developer.android.com/about/versions/17/release-notes); [Photo Picker docs](https://developer.android.com/training/data-storage/shared/photo-picker); existing `PickVisualMedia.ImageOnly` call sites in `WallpapersScreen` community upload + `CollectionsScreen` QR import (landed in N-4 / commit `b0ae1fe`).
+- **Why next:** N-4 migrated image imports to the system Photo Picker. Android 17 adds `PhotoPickerUiCustomizationParams` to switch the picker's grid from 1:1 squares to 9:16 portrait thumbnails — the canonical wallpaper-app aspect ratio. Every wallpaper Aura ships at is portrait; every gallery picker today crops thumbnails wrong. This is the smallest, highest-fit follow-up to N-4 on the platform.
+- **Scope:** Wrap existing `PickVisualMedia` launchers in a version-gated builder. On Android 17+, attach `PhotoPickerUiCustomizationParams.Builder().setGridAspectRatio(9, 16).build()`. No code-change for older versions. One commit, ~30 LOC.
+- **Risk:** API only available on API 37+. Test against the embedded photo picker on Pixel 6+ once N-1 unlocks compileSdk 37.
+- **Fit 5 / Impact 3 / Effort 5 / Risk 5 / Deps 3 (N-1) / Novelty 2 = 23 → NEXT.**
+
+### NX-12. CI build verification on every push / PR (workflow gap) — `[~]` shipped 2026-05-17 rev4-impl
+
+> Shipped `.github/workflows/verify.yml` — triggers on `push: main` + `pull_request: main` + `workflow_dispatch`. Runs `assembleDebug` + `testDebugUnitTest` + `lintDebug` on JDK 17 with Gradle cache. Stubs `local.properties` so signing/API-key lookups don't fail in CI (release.yml stays the source of truth for signed builds). Uploads test + lint reports as artifacts on failure with 14-day retention. `concurrency` group cancels superseded runs so CI doesn't queue up on rapid pushes. Branch protection requiring `verify` must still be enabled on `main` by the repo owner.
+
+
+
+- **Source(s):** existing [`.github/workflows/release.yml`](.github/workflows/release.yml) — `on: push: tags: ['v*']` + `workflow_dispatch` only; no PR / branch protection trigger; no unit-test or lint step; [GitHub Actions Android template](https://github.com/actions/starter-workflows/blob/main/ci/android.yml); [Gradle build cache action `gradle/actions/setup-gradle`](https://github.com/gradle/actions); [F-Droid Reproducible Builds requirements](https://f-droid.org/en/docs/Reproducible_Builds/) (NX-8 depends on a clean build environment); existing 49 unit-test files awaiting CI runs.
+- **Why next:** Every Implementation Pass since 2026-04-25 has been **static-review-only** because the executing environment has no JDK/SDK. The N-1 toolchain triad (AGP 9 / Gradle 9 / Kotlin 2.3) cannot be honestly tested without a build-verified CI lane — bumping versions blind is a known regression vector for KSP2, Hilt, and Compose Strong Skipping. The current `release.yml` only fires on tag, so PRs and `main` pushes go un-verified. This is the dev-experience gap blocking N-1, NX-1, and most of T-A.
+- **Scope:** New `.github/workflows/verify.yml` triggered on `push: branches: [main]` and `pull_request: branches: [main]`. Jobs: setup JDK 17 → cache Gradle → `./gradlew assembleDebug testDebugUnitTest lintDebug`. Upload `app/build/reports/{tests,lint-results-debug.html}` as artifacts on failure. Optionally: `./gradlew :app:assembleRelease` behind a manually-fired `release-dry-run` job that uses a CI-only signing key (no leak risk; release.yml stays the source of truth). Enable branch protection on `main` requiring `verify` to pass. F-Droid reproducible-build verification is a stretch follow-up — defer to NX-8.
+- **Risk:** Workflow drift if `verify.yml` and `release.yml` diverge — mitigate by extracting the build steps into a shared composite action or a reusable workflow. Secrets-leak risk on PRs from forks — keep all signing keys out of `verify.yml`; restrict release jobs to `pull_request_target` only if absolutely needed (default: no).
+- **Fit 5 / Impact 4 / Effort 4 / Risk 5 / Deps 4 / Novelty 1 = 23 → NEXT.**
+
+### NX-13. Predictive-back wiring through Compose NavHost transitions
+
+- **Source(s):** [Predictive back in Compose docs](https://developer.android.com/develop/ui/compose/system/predictive-back); [Navigation 2.9 predictive-back integration](https://medium.com/@androidlab/androidx-navigation-2-9-6-complete-feature-breakdown-4b09ccd637dd); [Android 14 predictive back behaviour change](https://developer.android.com/about/versions/14/behavior-changes-14#predictive-back-gesture); existing `AndroidManifest.xml:50` (`android:enableOnBackInvokedCallback="true"`); existing `BackHandler` use confined to `CollectionsScreen.kt` + `FavoritesScreen.kt` (only 2 of ~22 detail/editor screens).
+- **Why next:** Aura's manifest opts in to predictive back. Without per-screen `BackHandler` discipline, Compose detail / editor / preview / picker screens fall back to default activity finish — the user gets no smooth peek-the-previous-screen animation that Android 14+ defaults to. With Navigation 2.9's predictive-back integration landing in N-1, every detail screen (WallpaperDetailScreen, SoundDetailScreen, AiWallpaperScreen, CollectionsScreen, WallpaperEditorScreen, VideoCropScreen, SoundEditorScreen, ContactPickerScreen) should declare a `BackHandler` for in-flight state cleanup (cancel coroutines, save scroll position) and animate `progress` smoothly through `PredictiveBackHandler`.
+- **Scope:** Audit all 22 screens. Add `BackHandler` to 18 missing ones with the right cleanup (cancel any in-flight FFmpeg / yt-dlp / segmenter job, save selection state). Switch NavHost to Navigation Compose 2.9's predictive-back-aware transitions in the same commit that bumps Navigation in N-1. Add a `PredictiveBackHandler` to one or two high-value flows (WallpaperEditor crop preview pull-to-dismiss; SoundEditor unsaved-changes confirm).
+- **Risk:** Misplaced `BackHandler` can swallow back navigation entirely — keep each guard narrow (`enabled = state.isInflight || state.hasUnsavedChanges`). Predictive-back animations require Navigation 2.9+ for the NavHost integration; gating ties to N-1.
+- **Fit 4 / Impact 3 / Effort 4 / Risk 4 / Deps 4 (N-1) / Novelty 1 = 20 → NEXT.**
+
 ---
 
 ## Later — scoped, deferred
@@ -271,6 +318,14 @@ Eight items. All scored 18–23. Pull from the top of this list when Now closes.
 - **Why later:** A natural extension of Shareable Collections. Adds wallpaper + recommended ringtone + tone pack + widget config to a single `.aura` zip with deep-link. Defer until N-5 (Aura Originals) and NX-5 (plugin ABI) are in.
 - **Fit 4 / Impact 3 / Effort 3 / Risk 4 / Deps 3 / Novelty 3 = 20 — hold.**
 
+### L-10. Compose Adaptive Layouts — foldables, tablets, Compose-for-TV
+
+- **Source(s):** [Build adaptive apps with Compose](https://developer.android.com/develop/ui/compose/build-adaptive-apps); [Adaptive layouts overview](https://developer.android.com/develop/ui/compose/layouts/adaptive); [Compose Multiplatform 1.7.1 adaptive layouts release](https://medium.com/@thebackbit/master-adaptive-layouts-in-compose-multiplatform-build-truly-responsive-uis-89184bf8b6de); [Touchlab adaptive layouts in CMP](https://touchlab.co/adaptive-layouts-cmp); [WallFlow tablet support release notes](https://github.com/ammargitham/WallFlow); [Google Play Tablet/Foldable quality bar](https://developer.android.com/guide/topics/large-screens/get-started-with-large-screens); existing UI has **zero** WindowSizeClass / NavigationSuiteScaffold / ListDetailPaneScaffold usage (verified by repo grep 2026-05-17).
+- **Why later:** Aura today is phone-first. The wallpaper grid stretches awkwardly on tablets and unfolded foldables; the bottom-nav rail should swap to a navigation rail / drawer above 600 dp width. WallFlow's tablet UI is a direct competitor differentiator; KMP-aware adaptive APIs land for free with L-4 (Compose Multiplatform foundation). Play Store ranks large-screen-optimized apps higher on tablets/foldables — discoverability matters for OSS distribution beyond F-Droid (NX-8).
+- **Scope:** Add `material3-adaptive` + `material3-adaptive-navigation-suite` dependencies inside N-1's lock-step bump. Replace `FreeVibeRoot.kt` bottom nav with `NavigationSuiteScaffold`. Promote wallpaper detail to `ListDetailPaneScaffold` on Expanded widths. Audit wallpaper grid column count by WindowSizeClass (currently fixed, should be 2-3-4-6 by class). Add WindowManager fold-state listener for half-opened (book) posture. Compose-for-TV stub: declare a TV banner intent-filter so an Android TV install can show wallpapers on screensaver / TV screensaver via the Daydream service (no extra UI surface needed initially).
+- **Risk:** Refactor touches NavHost + every top-level screen — diff will be wide. Lower-end devices may regress on first-paint time if `NavigationSuiteScaffold` adds a recomposition layer; measure with Macrobenchmark.
+- **Fit 3 / Impact 3 / Effort 2 / Risk 4 / Deps 3 (N-1 + L-4) / Novelty 2 = 17 → LATER.**
+
 ---
 
 ## Under Consideration — needs scoping or charter call
@@ -326,9 +381,19 @@ Eight items. All scored 18–23. Pull from the top of this list when Now closes.
 - **Score:** Fit 5 / Impact 3 / Effort 4 / Risk 5 / Deps 3 (NX-5) / Novelty 1 = 21. Held until NX-5 settles to avoid stale plugin docs.
 
 ### U-13. Testing infrastructure expansion (Paparazzi screenshot tests + more instrumented coverage)
-- **Source(s):** Existing 46 unit-test files; no Compose screenshot tests; one `androidTest/` smoke suite. [Paparazzi](https://github.com/cashapp/paparazzi) is the de-facto Compose screenshot library; [Roborazzi](https://github.com/takahirom/roborazzi) is a modern alternative.
-- **Open question:** Screenshot test the AMOLED theming + RTL mirroring (ties to U-11). Add instrumented tests for `WallpaperApplier.applyByLocator` across `http://`, `file://`, `content://` URIs (the v6.15.0 bug-class). Pair with the toolchain triad (N-1) since Compose Compiler 2.x changes which composables are screenshot-stable.
+- **Source(s):** Existing 49 unit-test files (post 2026-05-17 audit pass); no Compose screenshot tests; one `androidTest/` smoke suite. [Paparazzi](https://github.com/cashapp/paparazzi) is the de-facto Compose screenshot library; [Roborazzi](https://github.com/takahirom/roborazzi) is a modern alternative; [Compose API defaults accessibility doc](https://developer.android.com/develop/ui/compose/accessibility/api-defaults).
+- **Open question:** Screenshot test the AMOLED theming + RTL mirroring (ties to U-11). Add instrumented tests for `WallpaperApplier.applyByLocator` across `http://`, `file://`, `content://` URIs (the v6.15.0 bug-class) and for the streaming caps added in the 2026-05-17 audit (`readCapped` / `copyCapped` cap-exceeded path). Pair with the toolchain triad (N-1) since Compose Compiler 2.x changes which composables are screenshot-stable.
 - **Score:** Fit 4 / Impact 3 / Effort 3 / Risk 4 / Deps 3 (N-1) / Novelty 1 = 18. Held until N-1 settles.
+
+### U-14. Android XR spatial wallpaper (Galaxy XR / smart-glasses)
+- **Source(s):** [Android XR spatial environments docs](https://developer.android.com/design/ui/xr/guides/environments); [Galaxy XR launch](https://www.android.com/xr/); [Android Show 2026 XR coverage](https://www.analyticsinsight.net/news/google-android-show-2026-to-detail-mixed-reality-ecosystem-with-android-xr) (May 12, 2026 reveal); [Virtual Reality News 3-tier glasses strategy](https://virtual.reality.news/news/googles-android-xr-glasses-strategy-could-beat-apple/); existing `WallpaperApplier.applyByLocator` scheme-dispatch ready to accept a GLB-by-locator handler.
+- **Open question:** Charter call — Aura is phone/lock/home-screen first; "spatial environment" is a different surface. The XR docs explicitly recommend ~80 MB GLB assets, which dwarfs every existing Aura content type (largest wallpaper today: 64 MB cap, largest sound: 20 MB). Counter-argument: Aura's strong palette + color-extraction surface + tag taxonomy is the kind of pre-baked metadata an XR environment selector needs. Also fits T-D Multi-surface presence theme. Hold until Galaxy XR install base and Aura's KMP foundation (L-4) both move; revisit when Android XR ships its first OSS environment-publishing samples.
+- **Score:** Fit 2 / Impact 3 / Effort 1 / Risk 1 / Deps 1 (L-4 KMP) / Novelty 5 = 13 → Under Consideration. Re-litigate post-Android-XR-stable.
+
+### U-15. Real-time per-unlock wallpaper rotation (Pixel-10 parity, ahead of charter call)
+- **Source(s):** [Pixel 10 Auto-change AI wallpaper](https://www.onoff.gr/blog/en/android/ai-wallpaper-android-create-ai-wallpapers/) — generates a fresh AI image every unlock, ~5-10 s on-device; [NX-6 scope](#nx-6-scheduler-triggers--per-app-exclusion-screen-off-pre-stage-sub-15-min-intervals-per-unlock) (per-unlock rotation via `USER_PRESENT` broadcast already in scope); [DroidViews smart wallpaper](https://www.droidviews.com/automatic-wallpaper-change-contextually-with-smart-wallpaper/).
+- **Open question:** NX-6 already plans per-unlock rotation from existing sources. The Pixel 10 differentiator is *generating* per unlock, not rotating. Aura's Stability AI path (Phase 3.1) takes ~10-30 s per gen + costs a credit per call — not unlock-frequency viable. **Charter friction:** unlock-frequency generation against a paid API burns the user's bring-your-own-key quota in hours, not days. Either (a) cache K pre-generated images and rotate, (b) wait for U-2 on-device Stable Diffusion to mature, or (c) stay out of unlock-frequency generation entirely. Hold.
+- **Score:** Fit 3 / Impact 3 / Effort 1 / Risk 1 / Deps 2 (NX-6 + U-2) / Novelty 4 = 14 → Under Consideration.
 
 ---
 
@@ -364,12 +429,12 @@ Eight items. All scored 18–23. Pull from the top of this list when Now closes.
 Themes group Now/Next items so they ship coherently rather than as one-off features.
 
 ### T-A. Dependency hygiene & platform parity
-Spans: **N-1, N-2, N-3, N-4**.
-Outcome: Aura runs on the current platform with current libraries. Compose Strong Skipping wins, Material 3 Expressive, Photo Picker, WallpaperDescription, Subject Segmentation all land together.
+Spans: **N-1, N-2, N-3, N-4, NX-10, NX-11, yt-dlp CVE-2026-26331 risk row**.
+Outcome: Aura runs on the current platform with current libraries. Compose Strong Skipping wins, Material 3 Expressive, Photo Picker (rev4: + 9:16 customization on Android 17), WallpaperDescription, Subject Segmentation, EyeDropper colour pick (rev4: Android 17+), Subject Segmentation all land together. NewPipeExtractor bumps to 0.26.1+; bundled yt-dlp re-verified post-CVE-2026-26331.
 
 ### T-B. Lockscreen depth & live-wallpaper engine
-Spans: **N-3, NX-1, NX-2, NX-3**.
-Outcome: Aura matches Pixel Live Effects (Shape / Weather / Cinematic) and One UI Wonderland feature parity without depending on Pixel-only or Samsung-only system features.
+Spans: **N-3, NX-1, NX-2, NX-3, NX-9**.
+Outcome: Aura matches Pixel Live Effects (Shape / Weather / Cinematic) and One UI Wonderland feature parity without depending on Pixel-only or Samsung-only system features. Media3 1.10 Material3 playback composables (NX-9) replace hand-rolled preview chrome so the engine surface stays small.
 
 ### T-C. Extension ecosystem
 Spans: **NX-5, L-2**.
@@ -388,8 +453,16 @@ Spans: **NX-8, monochrome icon in N-4, per-ABI splits**.
 Outcome: F-Droid / IzzyOnDroid / Obtainium / GitHub Releases. APK size cut. Reproducible builds where Firebase doesn't block them.
 
 ### T-G. Battery transparency & accessibility
-Spans: existing 5.5 (battery dashboard), NX-1 (engine pause-on-invisible discipline), accessibility audits in U-8 / U-9.
-Outcome: Aura's live wallpapers prove their power impact (Facer "Power Impact" rating equivalent). Users with TalkBack / large-font / reduced-motion needs get parity.
+Spans: existing 5.5 (battery dashboard), NX-1 (engine pause-on-invisible discipline), NX-9 (Media3 1.10 `experimentalSetDynamicSchedulingEnabled` for preview surface), accessibility audits in U-8 / U-9 / U-11.
+Outcome: Aura's live wallpapers prove their power impact (Facer "Power Impact" rating equivalent). Users with TalkBack / large-font / reduced-motion needs get parity. [DreamPixel battery analysis](https://dreampixelstudio.app/blog/use-live-wallpapers-on-android-without-draining-battery) — lightweight live wallpapers cost <2 % battery/day, heavy 3D/video can cost 5–8 %; Aura's existing auto-15-FPS-below-15 %-battery cap + pause-on-invisible are the relevant primitives.
+
+### T-H. Trust & hardening
+Spans: existing 2026-05-17 audit pass (downloader sanitization, streaming caps, parallax bitmap-leak fix, AGSL crash-safety), N-2 (Custom Claims server-side enforcement), U-13 (screenshot + integration test expansion), the Risk Register rows for CVE-2026-0073-class platform CVEs + yt-dlp CVE-2026-26331 (new in rev4).
+Outcome: Every external input (manifest URL, HTTP body, content URI, user-pick) goes through a streaming cap; every internal allocation has a leak-free recycle path; every privilege check has a server-side enforcement layer. The 2026-05-17 pass closed the worst-case OOM-OOM-leak chain in `WallpaperApplier.downloadBitmap` (the call site of every wallpaper apply); same primitives reused in three sibling write paths.
+
+### T-I. Developer experience & build verification (new in rev4)
+Spans: **NX-12 (CI verify workflow), NX-13 (predictive-back wiring), U-12 (CONTRIBUTING.md), U-13 (screenshot + integration test expansion)**.
+Outcome: Every push and PR is build-verified, unit-tested, and lint-clean before it can land. N-1 toolchain bumps can be honestly validated. Compose detail screens animate predictive-back smoothly on Android 14+. The "no SDK in CI" gap that has gated every Implementation Pass since 2026-04-25 closes; static-review-only stops being the default mode.
 
 ---
 
@@ -399,14 +472,16 @@ Live operational risks ranked by likelihood × blast radius. Update at every rel
 
 | Risk | Likelihood | Blast | Mitigation in roadmap |
 |------|-----------|-------|-----------------------|
-| NewPipe Extractor stops working on Play-Protect-certified Android (March 2026 maintainer warning, [piunikaweb](https://piunikaweb.com/2026/03/09/newpipe-certified-android-devices-warning/)) | Medium | High (YouTube sound tab dies) | Abstract `YouTubeRepository.search()` + `resolveStreamUrl()` behind a `SoundExtractor` interface in N-1; ship NewPipeExtractor as the default impl, `NewPipeExtractorKmpAdapter` ([yushosei/NewPipeExtractor-KMP](https://github.com/yushosei/NewPipeExtractor-KMP)) as fallback, and youtubedl-android as last-resort path. Pin `NewPipeExtractor` version comment already in place since v6.12.0; bump in lock-step with monthly upstream patches. |
+| NewPipe Extractor stops working on Play-Protect-certified Android (March 2026 maintainer warning, [piunikaweb](https://piunikaweb.com/2026/03/09/newpipe-certified-android-devices-warning/); SABR enforcement [#12126](https://github.com/TeamNewPipe/NewPipe/issues/12126); latest stable extractor **0.26.1** with SABR-only player response fix per the [post-0.28.1 hotfix notes](https://newpipe.net/blog/pinned/announcement/newpipe-0.28.1-released/) — Aura is on 0.24.8) | Medium | High (YouTube sound tab dies) | Abstract `YouTubeRepository.search()` + `resolveStreamUrl()` behind a `SoundExtractor` interface in N-1; ship NewPipeExtractor as the default impl, `NewPipeExtractorKmpAdapter` ([yushosei/NewPipeExtractor-KMP](https://github.com/yushosei/NewPipeExtractor-KMP)) as fallback, and youtubedl-android as last-resort path. Pin `NewPipeExtractor` version comment already in place since v6.12.0; bump to **0.26.1+** in lock-step with monthly upstream patches once N-1 unblocks build verification. |
+| yt-dlp CVE-2026-26331 — arbitrary command injection via `--netrc-cmd` (all versions ≥ 2023.06.21 < 2026.02.21; [GitLab advisory](https://advisories.gitlab.com/pkg/pypi/yt-dlp/CVE-2026-26331/)). Aura ships yt-dlp transitively via `youtubedl-android:0.18.1`. | Low (Aura code never sets `--netrc-cmd` or `netrc_cmd`) | Medium (any contributor adding netrc support without auditing would hit this) | Verify bundled yt-dlp version meets ≥ 2026.02.21; add a guarded grep / unit-test asserting `--netrc-cmd` is not passed through `YouTubeRepository.resolveStreamUrl()`; bump `youtubedl-android` in the N-1 toolchain pass if a release ≥ 0.19.x has shipped with the fixed yt-dlp bundle. Document the rule in the YouTube repository's KDoc. |
+| CISA-KEV-class platform CVEs (Aura cannot patch; users may run unpatched OEMs). Recent: CVE-2026-0073 (May 2026, adbd zero-click RCE, [AOSP bulletin](https://source.android.com/docs/security/bulletin/2026/2026-05-01)). | Low | Low (device-level, not Aura's bug) | Existing optional warning-banner placeholder; no roadmap response needed beyond keeping the dependency hygiene cadence (T-A). |
 | Firebase BoM 33.7.0 transitive protobuf vulnerable to CVE-2024-7254 | High | Medium | **N-2** bumps to BoM 34.x |
 | Aura's `VoteRepository` admin auth is client-side spoofable | Medium | Medium (community moderation bypass) | **N-2** Custom Claims |
 | ML Kit `segmentation-selfie:16.0.0-beta6` still in beta two years on | Medium | Medium (parallax breaks if pulled) | **N-3** migrates to Subject Segmentation GA |
 | Stability AI free tier / pricing changes; per-user API key is the only path | Low | Medium (AI tab degrades to "bring your own key") | Document; consider Imagen via Firebase AI Logic in U-2 follow-up |
 | AGP 9 / Kotlin 2.3 / KSP1 breaks Hilt/Compose generation | Medium | High | **N-1** coordinated upgrade with feature freeze |
 | AV1 hardware decode <10 % install base; SW fallback burns battery | Medium | Medium | **NX-1** gates AV1 on Performance Class ≥ 33 |
-| CISA-KEV Android framework CVE-2025-48572/-48633 on unpatched OEMs | Low | Low (device-level, not Aura's bug) | Optional one-time warning banner; defer |
+| CISA-KEV Android framework CVE-2025-48572/-48633 on unpatched OEMs | Low | Low (device-level, not Aura's bug) | Folded into the platform-CVE row above; same mitigation. |
 | F-Droid inclusion blocked by Firebase Storage / yt-dlp Python | Medium | Medium (F-Droid track only) | **NX-8** targets IzzyOnDroid first |
 | Wallhaven / Pexels / Pixabay ToS changes break aggregation | Low | High | NX-5 plugin ABI distributes sourcing risk to community plugins |
 | Foreground-app reader for per-app rotation exclusion needs `PACKAGE_USAGE_STATS` | Medium | Medium (intrusive permission prompt) | **NX-6** ships opt-in banner explaining the trade-off |
@@ -475,6 +550,143 @@ Kept verbatim — these are the receipts.
 ## Implementation Log (preserved release-pass entries)
 
 These are the dated receipts. The newest entries supersede the oldest where they overlap; do not edit prior entries.
+
+### 2026-05-17 — Rev4 freshness pass (no code; roadmap only)
+
+Document-only pass on top of rev3 (committed earlier the same day). Web-research
+batch (~8 distinct query classes, ~25 net-new URLs) cross-checked against
+existing rev3 coverage; four genuinely new items + one CVE row + competitor
+validation surfaced. No code change; no working-tree modification beyond
+`ROADMAP.md`.
+
+**Added Next-tier items**
+- **NX-10** Android 17 EyeDropper API — `Intent.ACTION_OPEN_EYE_DROPPER` →
+  wallpaper colour search seed. Fit 4 / Impact 3 / Effort 4 / Risk 4 / Deps 3 / Novelty 4 = 22.
+- **NX-11** Photo Picker 9:16 portrait via `PhotoPickerUiCustomizationParams`
+  on Android 17+ (N-4 follow-up). Fit 5 / Impact 3 / Effort 5 / Risk 5 / Deps 3 / Novelty 2 = 23.
+- **NX-12** CI build verification workflow — close the static-review-only loop.
+  Fit 5 / Impact 4 / Effort 4 / Risk 5 / Deps 4 / Novelty 1 = 23.
+- **NX-13** Predictive-back wired through NavHost transitions + 18-screen
+  `BackHandler` audit. Fit 4 / Impact 3 / Effort 4 / Risk 4 / Deps 4 / Novelty 1 = 20.
+
+**Added Later-tier item**
+- **L-10** Compose Adaptive Layouts (foldables / tablets / Compose-for-TV) —
+  zero existing WindowSizeClass code verified by repo grep. Fit 3 / Impact 3 / Effort 2 / Risk 4 / Deps 3 / Novelty 2 = 17.
+
+**Risk Register additions**
+- yt-dlp CVE-2026-26331 — `--netrc-cmd` arbitrary command injection, fixed in
+  yt-dlp 2026.02.21. Aura ships via `youtubedl-android:0.18.1`; Aura code does
+  not pass `--netrc-cmd`, so blast is low, but verify-and-guard is in scope of N-1.
+- NewPipeExtractor target version bumped from "0.25.0+" to "0.26.1+" (current
+  stable after the 0.28.1 hotfix lineage).
+
+**Competitor validation (not new items)**
+- One UI 8.5 stable rolling out May 2026 with **Smart Subject Placement**
+  (auto-arrange clock/widgets around photo subjects) + **AI Weather Effects**
+  (weather animations behind subject layers via segmentation). Directly
+  validates Aura's NX-2 (lockscreen depth + clock-tuck) and Phase 6.3 (weather
+  overlay) directions. No new roadmap item — existing trajectory is correct.
+- Paperize landed an experimental "live wallpaper" alpha mode — validates
+  NX-1's GL/AGSL engine migration as a competitive must-have, not a nice-to-have.
+
+**Themes touched**
+- T-A (dependency hygiene) — NX-10, NX-11, yt-dlp CVE row appended.
+- T-H (trust + hardening) — yt-dlp CVE row appended.
+- T-I (new) — Developer experience & build verification. Spans NX-12, NX-13, U-12, U-13.
+
+**Push status**
+- Roadmap-only edit; commit + push when convenient. No code paths touched.
+
+### 2026-05-17 — Hardening audit pass (security + bitmap leaks + streaming caps)
+
+Static-review-only pass against the 2026-05-16 autonomous batch. Found seven real
+issues across the four newly-landed features; all fixed in the working tree
+(`git status`: 6 files modified, ready for commit by an operator with push
+access). Did not run `./gradlew testDebugUnitTest`: same SDK-absent
+constraint as the 2026-05-16 pass. Visual diff + import check verified each
+change compiles against the existing call graph.
+
+**Security — `AuraOriginalsDownloader` (N-5)**
+- New `sanitizeEntryId(id)` — strict allowlist (ASCII alnum + `-_.`, max 64 chars,
+  no path separators, no dot-only). Defends against a tampered manifest's
+  `entry.id` escaping `filesDir/aura_originals/` via `../etc/passwd`.
+- New `isAllowedDownloadUrl(url)` — HTTPS-only scheme gate. Rejects `http`,
+  `file`, `content`, `data`, `ftp`. Defense-in-depth against a typo or
+  tampered manifest redirecting to cleartext or local-file fetch.
+- New `isInside(parent, child)` — canonical-path containment check.
+  Belt-and-braces guard layered after the sanitizer in case future relaxation
+  re-introduces an escape vector.
+- Running-total budget — prior code only checked `manifest.totalBytes` against
+  `MAX_TOTAL_BYTES`; the in-loop running sum was never tracked, so a manifest
+  with N entries each just under the per-file cap could exceed 80 MB total.
+  Now: each entry's effective budget is `min(remainingBudget, MAX_PER_FILE_BYTES)`;
+  successful downloads add to `runningBytes`; entries that would exceed the
+  remaining budget are rejected with a clear DEBUG log.
+- Tests: +5 in `AuraOriginalsDownloaderTest` — `sanitizeEntryId` accepts
+  (happy path), `sanitizeEntryId` rejects 11 traversal/unsafe cases,
+  `isAllowedDownloadUrl` covers 10 scheme cases, `isInside` covers nested +
+  parent + escape attempts. Test count: 46 → 49 in the worker file.
+
+**Bitmap leaks — `ParallaxWallpaperService` (N-3 segmenter migration)**
+- The 2026-05-16 N-3 patch migrated the segmenter success callback to use
+  `result.foregroundConfidenceMask`. The new code allocated `bgBitmap`
+  (`bitmap.copy()`) inside the synchronized block, then `fgBitmap`
+  (`Bitmap.createBitmap`) outside it. If `fgBitmap` allocation OOM'd or the
+  pixel-loop threw, `bgBitmap` was orphaned as a native allocation. Wallpaper
+  service processes are very long-lived; the leak was observable across
+  apply→apply cycles.
+- Fix: `bgBitmap` + `fgBitmap` declared as `var`s at callback scope, wrapped
+  in `try { … } catch … finally`. A `publishedToLayers` flag set inside the
+  publish-to-fields synchronized block tells the finally block whether to
+  recycle (only recycle when not published).
+- Secondary fix: `bitmap.copy()` can return null on low-memory devices.
+  Previously the code assigned the null to `backgroundLayer`, then
+  unconditionally retired `fallbackBitmap`, leaving `draw()` with neither
+  layers nor a fallback to render (solid-black wallpaper). Now: if copy()
+  returns null, reconstruct `bgBitmap` from the already-extracted pixel array;
+  if reconstruction also fails, do not retire the fallback so draw() has
+  something to render.
+
+**Streaming size caps — `WallpaperApplier` (defense-in-depth across all apply paths)**
+- `downloadBitmap` previously called `body.bytes()` after only a Content-Length
+  pre-check. `OkHttp.ResponseBody.bytes()` has no upper bound; if Content-Length
+  is unknown (chunked transfer) or lies, the entire response was buffered into
+  memory before the cap was re-checked. The pre-check was unreachable in
+  exactly the case it was needed.
+- Fix: new `readCapped(InputStream, cap)` streams 64 KB at a time, aborts the
+  read the moment cumulative bytes exceed `MAX_WALLPAPER_BYTES` (64 MB).
+  Replaces the `body.bytes()` call site.
+- Same class of issue in `prepareParallaxWallpaper` and `prepareParallaxFromUri`
+  (no cap on copy-to-disk of either an HTTP body or a user-picked content URI).
+  Fix: new `copyCapped(InputStream, OutputStream, cap)` reuses the same
+  pattern. Caller's existing temp-then-rename + try/finally cleanup is
+  preserved; the cap throws IOException which the existing catch already
+  handles with `tempFile.delete()`.
+
+**Crash-safety — `AgslEffectPipeline` (N-3 scaffold)**
+- `RuntimeShader` throws `IllegalArgumentException` on malformed AGSL source.
+  Effects are hard-coded today, so this is preventive for future contributors
+  adding new effects (the most likely real-world cause of a crash report on
+  this surface).
+- Fix: `apply()` wraps `applyAgsl()` in try/catch for both `Exception` (bad
+  shader) and `OutOfMemoryError`, falling back to `copyOrFallback()`. Recycled-source
+  guard added (previously would propagate `IllegalStateException` from
+  `Bitmap.copy()` on a recycled source). `applyAgsl()` recycles its own
+  pre-allocated `output` bitmap before re-throwing on any exception inside
+  shader compilation or canvas draw — otherwise the caller's fallback path
+  leaked that bitmap.
+
+**Suspend conversion verification — `AutoWallpaperWorker.schedule`**
+- Pre-existing uncommitted in-progress change (`runBlocking { prefs.… }` → suspend
+  function) was sitting in the working tree on entry. All 7 callers in
+  `SettingsViewModel.kt:144,153,167,171,175,241,249` are inside
+  `viewModelScope.launch { … }`; the new suspend signature is therefore
+  call-site-compatible. Conversion is correct.
+
+**Push status**
+- All 6 file edits land locally; `git push origin main` will still bounce the
+  same way as the 2026-05-16 batch did (executor credential `MavenImaging`
+  lacks write to `SysAdminDoc/Aura`). Owner must push.
 
 ### 2026-05-16 — Autonomous N-2..N-5 batch (build verification pending)
 
@@ -661,11 +873,11 @@ to validate the upgrades. Static review only; runtime verification next session.
 
 Stars/dates as of research pass 2026-05-16.
 
-- **Paperize** ([github.com/Anthonyy232/Paperize](https://github.com/Anthonyy232/Paperize)) — 1.1k★ — GPL-3.0 — fully-offline dynamic changer; Compose; v4.0.0-alpha live wallpaper mode. Issues cited: [#444](https://github.com/Anthonyy232/Paperize/issues/444), [#447](https://github.com/Anthonyy232/Paperize/issues/447), [#482](https://github.com/Anthonyy232/Paperize/issues/482), [#516](https://github.com/Anthonyy232/Paperize/issues/516), [#531](https://github.com/Anthonyy232/Paperize/issues/531), [#532](https://github.com/Anthonyy232/Paperize/issues/532), [#428](https://github.com/Anthonyy232/Paperize/issues/428), [#126](https://github.com/Anthonyy232/Paperize/issues/126), [#192](https://github.com/Anthonyy232/Paperize/issues/192); discussion [#313](https://github.com/Anthonyy232/Paperize/discussions/313).
+- **Paperize** ([github.com/Anthonyy232/Paperize](https://github.com/Anthonyy232/Paperize)) — 1.1k★ — GPL-3.0 — fully-offline dynamic changer; Compose; v4.0.0-alpha live wallpaper mode. Issues cited: [#444](https://github.com/Anthonyy232/Paperize/issues/444), [#447](https://github.com/Anthonyy232/Paperize/issues/447), [#482](https://github.com/Anthonyy232/Paperize/issues/482), [#516](https://github.com/Anthonyy232/Paperize/issues/516), [#531](https://github.com/Anthonyy232/Paperize/issues/531), [#532](https://github.com/Anthonyy232/Paperize/issues/532), [#428](https://github.com/Anthonyy232/Paperize/issues/428), [#126](https://github.com/Anthonyy232/Paperize/issues/126), [#192](https://github.com/Anthonyy232/Paperize/issues/192); discussion [#313](https://github.com/Anthonyy232/Paperize/discussions/313). 2026 follow-ups: [#446](https://github.com/Anthonyy232/Paperize/issues/446), [#450](https://github.com/Anthonyy232/Paperize/issues/450) (Jan-Feb 2026 enhancement asks), [#496](https://github.com/Anthonyy232/Paperize/issues/496), [#497](https://github.com/Anthonyy232/Paperize/issues/497), [#498](https://github.com/Anthonyy232/Paperize/issues/498) (Feb-Mar 2026 bug + feature).
 - **WallFlow** ([github.com/ammargitham/WallFlow](https://github.com/ammargitham/WallFlow)) — 452★ — GPL-3.0 — Wallhaven + Reddit; foldable inner + outer; smart crop (Plus variant); Paging 3; KMP Windows planned. Issues: [#62](https://github.com/ammargitham/WallFlow/issues/62), [#63](https://github.com/ammargitham/WallFlow/issues/63), [#64](https://github.com/ammargitham/WallFlow/issues/64), [#68](https://github.com/ammargitham/WallFlow/issues/68), [#70](https://github.com/ammargitham/WallFlow/issues/70), [#73](https://github.com/ammargitham/WallFlow/issues/73), [#82](https://github.com/ammargitham/WallFlow/issues/82), [#91](https://github.com/ammargitham/WallFlow/issues/91), [#99](https://github.com/ammargitham/WallFlow/issues/99), [#102](https://github.com/ammargitham/WallFlow/issues/102).
 - **WallCraft** ([github.com/Rahul-999-alpha/WallCraft](https://github.com/Rahul-999-alpha/WallCraft)) — 1★ — MIT — Pollinations.ai no-key AI generation, AMOLED, AdMob (anti-pattern for Aura).
 - **Muzei** ([github.com/muzei/muzei](https://github.com/muzei/muzei)) — 4.9k★ — Apache-2.0 — refreshing-art live wallpaper; canonical plugin/source API. Issues: [#794](https://github.com/muzei/muzei/issues/794), [#800](https://github.com/muzei/muzei/issues/800), [#793](https://github.com/muzei/muzei/issues/793), [#792](https://github.com/muzei/muzei/issues/792), [#797](https://github.com/muzei/muzei/issues/797), [#869](https://github.com/muzei/muzei/issues/869), [#838](https://github.com/muzei/muzei/issues/838), [#836](https://github.com/muzei/muzei/issues/836), [#811](https://github.com/muzei/muzei/issues/811), [#128](https://github.com/muzei/muzei/issues/128), [#110](https://github.com/muzei/muzei/issues/110), [#109](https://github.com/muzei/muzei/issues/109).
-- **Peristyle** ([github.com/Hamza417/Peristyle](https://github.com/Hamza417/Peristyle)) — 620★ — Apache-2.0 — glassmorphic Compose wallpaper mgr; tags + auto-changer; intent `app.peristyle.START_AUTO_WALLPAPER_SERVICE`.
+- **Peristyle** ([github.com/Hamza417/Peristyle](https://github.com/Hamza417/Peristyle)) — 620★ — Apache-2.0 — glassmorphic Compose wallpaper mgr; tags + auto-changer; intent `app.peristyle.START_AUTO_WALLPAPER_SERVICE`. Feature request: [#98 different wallpaper set for night](https://github.com/Hamza417/Peristyle/issues/98) (analog to Aura's existing dark/light auto-switch).
 - **UndeadWallpaper** ([github.com/maocide/UndeadWallpaper](https://github.com/maocide/UndeadWallpaper)) — 99★ — GPL-3.0 — OpenGL + ExoPlayer video wallpaper. Issues: [#5](https://github.com/maocide/UndeadWallpaper/issues/5), [#13](https://github.com/maocide/UndeadWallpaper/issues/13), [#24](https://github.com/maocide/UndeadWallpaper/issues/24), [#46](https://github.com/maocide/UndeadWallpaper/issues/46), [#47](https://github.com/maocide/UndeadWallpaper/issues/47), [#48](https://github.com/maocide/UndeadWallpaper/issues/48).
 - **AlynxLiveWallpaper** ([github.com/AlynxZhou/alynx-live-wallpaper](https://github.com/AlynxZhou/alynx-live-wallpaper)) — 106★ — Apache-2.0 — reference ExoPlayer + OpenGL ES live wallpaper. Issues: [#14](https://github.com/AlynxZhou/alynx-live-wallpaper/issues/14), [#15](https://github.com/AlynxZhou/alynx-live-wallpaper/issues/15), [#16](https://github.com/AlynxZhou/alynx-live-wallpaper/issues/16).
 - **GLWallpaperService** ([github.com/GLWallpaperService/GLWallpaperService](https://github.com/GLWallpaperService/GLWallpaperService)) — 153★ — Apache-2.0 — unmaintained, foundational GLEngine base class.
@@ -685,6 +897,7 @@ Stars/dates as of research pass 2026-05-16.
 - **BingWallpaper** ([github.com/liaoheng/BingWallpaper](https://github.com/liaoheng/BingWallpaper)) — 153★ — GPL-3 — daily Bing image with 2-week browse.
 - **local-dream** ([github.com/xororz/local-dream](https://github.com/xororz/local-dream)) — 2.4k★ — on-device SDXL via Snapdragon NPU. Issues: [#183](https://github.com/xororz/local-dream/issues/183), [#189](https://github.com/xororz/local-dream/issues/189), [#191](https://github.com/xororz/local-dream/issues/191), [#195](https://github.com/xororz/local-dream/issues/195), [#198](https://github.com/xororz/local-dream/issues/198), [#203](https://github.com/xororz/local-dream/issues/203), [#206](https://github.com/xororz/local-dream/issues/206), [#209](https://github.com/xororz/local-dream/issues/209), [#210](https://github.com/xororz/local-dream/issues/210).
 - **AiWallpaperChanger** ([github.com/RikudouSage/AiWallpaperChanger](https://github.com/RikudouSage/AiWallpaperChanger)) — 9★ — MIT — AI Horde-based.
+- **Waller** — OSS Android app that *generates* wallpapers (gradients, patterns, noise) instead of downloading them ([MakeUseOf review](https://www.makeuseof.com/open-source-wallpaper-app-phone/)). Adjacent to Aura's AI Wallpaper Generation; cited as a charter-aligned generation-without-API alternative.
 - **NewPipe** ([github.com/TeamNewPipe/NewPipe](https://github.com/TeamNewPipe/NewPipe)) — 38.2k★ — GPL-3 — privacy YouTube/PeerTube/Bandcamp/SoundCloud client. SABR coordination [#12248](https://github.com/TeamNewPipe/NewPipe/issues/12248).
 - **NewPipeExtractor** ([github.com/TeamNewPipe/NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor)) — extractor library Aura pins.
 - **NewPipeExtractor-KMP** ([github.com/yushosei/NewPipeExtractor-KMP](https://github.com/yushosei/NewPipeExtractor-KMP)) — Compose Multiplatform fork.
@@ -734,8 +947,10 @@ Stars/dates as of research pass 2026-05-16.
 - Glance (Motorola) — [Play Store](https://play.google.com/store/apps/details?id=com.glance.lockscreenM), [9to5Google coverage](https://9to5google.com/2024/04/26/glance-android-lockscreen-motorola-turn-off/).
 - Always On AMOLED — [Play Store](https://play.google.com/store/apps/details?id=com.tomer.alwayson), [TechWiser roundup](https://techwiser.com/best-always-on-display-apps-on-android/).
 - Samsung Good Lock — [Android Central guide](https://www.androidcentral.com/samsung-good-lock), [SamMobile Wonderland](https://www.sammobile.com/news/new-good-lock-module-wonderland-create-custom-live-wallpapers/), [Sammy Fans](https://www.sammyfans.com/2025/10/24/samsung-customization-with-good-lock/), [Samsung Newsroom](https://news.samsung.com/global/exploring-good-lock-%E2%91%A2-3-features-recommended-by-samsung-developers-and-newsroom-editors).
-- One UI 8.5 — [Android Authority](https://www.androidauthority.com/samsung-one-ui-8-5-lock-screen-weather-effect-3630836/), [Digital Trends](https://www.digitaltrends.com/phones/samsungs-one-ui-8-5-will-turn-your-lock-screen-into-a-mini-music-show/).
-- Pixel Live Effects (Android 16 QPR1) — [9to5Google](https://9to5google.com/2025/05/20/google-pixel-wallpaper-effects-android-16-qpr1/), [PiunikaWeb user reception](https://piunikaweb.com/2025/09/05/pixels-new-live-effects-wallpaper-feature-falls-flat-with-users/).
+- One UI 8.5 — [Android Authority](https://www.androidauthority.com/samsung-one-ui-8-5-lock-screen-weather-effect-3630836/), [Digital Trends](https://www.digitaltrends.com/phones/samsungs-one-ui-8-5-will-turn-your-lock-screen-into-a-mini-music-show/), [SamMobile top ten features stable May 2026](https://www.sammobile.com/news/one-ui-8-5-update-top-features/), [Sammy Fans Wonderland motion-wallpaper May 2026 update](https://www.sammyfans.com/2026/05/07/samsung-wonderland-motion-wallpapers-may-2026-update/), [SammyGuru AI weather effects deep dive](https://sammyguru.com/one-ui-8-5-will-bring-ai-powered-live-weather-effects-to-your-lock-screen/), [SamMobile adaptive lock-screen clock all objects](https://www.sammobile.com/news/one-ui-8-5-adaptive-lock-screen-clock-works-all-objects/), [Sammy Fans Galaxy-to-Share refresh](https://www.sammyfans.com/2026/05/16/samsung-galaxy-to-share-one-ui-8-5-update/), [Sammy Fans AI wallpaper expansion tool](https://www.sammyfans.com/2026/03/14/one-ui-8-5-expand-wallpapers-with-new-ai-tool/), [Sammy Fans interactive wallpapers Jan 2026 beta](https://www.sammyfans.com/2026/01/05/samsungs-one-ui-8-5-beta-introduces-animated-and-interactive-wallpapers/).
+- Pixel Live Effects (Android 16 QPR1) — [9to5Google](https://9to5google.com/2025/05/20/google-pixel-wallpaper-effects-android-16-qpr1/), [PiunikaWeb user reception](https://piunikaweb.com/2025/09/05/pixels-new-live-effects-wallpaper-feature-falls-flat-with-users/), [Beebom Live Effects how-to](https://gadgets.beebom.com/guides/how-to-use-lock-screen-live-effects-on-pixel-phones), [PhoneArena weather wallpaper](https://www.phonearena.com/news/android-16-allows-you-to-check-local-weather-using-wallpaper_id170727), [Sammy Fans AI photo wallpaper](https://www.sammyfans.com/2025/06/03/android-16s-new-ai-photo-wallpaper-feature-will-melt-your-heart/), [Material 3 Expressive personalization Pixel Drop](https://store.google.com/intl/en/ideas/articles/september-pixel-drop-personalization/).
+- Pixel 10 Auto-change AI Wallpaper (per-unlock generation) — [OnOff.gr AI wallpaper guide](https://www.onoff.gr/blog/en/android/ai-wallpaper-android-create-ai-wallpapers/), [Pixel custom wallpaper support page](https://support.google.com/pixelphone/answer/16517561?hl=en), [Tom's Guide Pixel 10 AI icons critique](https://www.tomsguide.com/phones/google-pixel-phones/i-just-tried-new-ai-generated-app-icons-for-pixel-phones-and-theres-a-huge-problem).
+- Android 16 QPR2 lockscreen widgets stable (December 2025) — [Pocket-lint a-decade-back coverage](https://www.pocket-lint.com/google-added-back-android-lock-screen-widgets/), [Android Police droid-life Dec 2025 release](https://www.droid-life.com/2025/08/20/android-16-qpr2-adds-lock-screen-widgets-to-phones-again/), [Indianewsnetwork stable rollout](https://www.indianewsnetwork.com/en/google-releases-android-16-qpr2-update-pixel-devices-20251204), [How-To Geek how they work](https://www.howtogeek.com/android-lock-screen-widgets-how-they-work/).
 - Nothing Glyph SDK — [Glyph Developer Kit](https://github.com/Nothing-Developer-Programme/Glyph-Developer-Kit), [Glyph Matrix Developer Kit](https://github.com/Nothing-Developer-Programme/GlyphMatrix-Developer-Kit), [Nothing OS 4.1 features](https://gadgets.beebom.com/guides/nothing-os-4-1-features), [Android Central Nothing OS 4](https://www.androidcentral.com/phones/nothing-phones/nothing-os-4-arrives-for-the-phone-3-with-exclusive-features-refined-glyph-interface-and-more).
 - Wallpaper Engine (Android companion) — [wallpaperengine.io/android](https://www.wallpaperengine.io/android/en), [Steam WE 2.0 announcement](https://store.steampowered.com/news/app/431960/view/3101285480922069754).
 - Spotify dynamic backdrop pattern — [Medium analysis](https://medium.com/@shanmugashree3/how-spotify-creates-those-stunning-backdrops-that-match-every-song-playlist-00fe13eab033), [Envato design](https://elements.envato.com/learn/spotify-wrapped-design-aesthetic), [Eggradients on Spotify colors](https://www.eggradients.com/blog/spotify-colors).
@@ -750,7 +965,8 @@ Stars/dates as of research pass 2026-05-16.
 - Android 14 docs — [Photo Picker behavior change](https://developer.android.com/about/versions/14/changes/partial-photo-video-access).
 - Android 15 — [behavior changes all](https://developer.android.com/about/versions/15/behavior-changes-all), [summary](https://developer.android.com/about/versions/15/summary).
 - Android 16 (Baklava) — [features](https://developer.android.com/about/versions/16/features), [WallpaperDescription](https://developer.android.com/reference/android/app/wallpaper/WallpaperDescription), [WallpaperInstance](https://developer.android.com/reference/android/app/wallpaper/WallpaperInstance), [QPR1 Live Effects coverage](https://9to5google.com/2025/06/10/android-16-qpr1-beta-2-adds-live-effects-section-to-wallpaper-picker/), [QPR2 lock-screen widgets](https://www.androidauthority.com/lock-screen-widgets-on-phones-android-16-qpr2-3589668/), [Desktop Mode](https://android-developers.googleblog.com/2026/03/android-devices-extend-seamlessly-to.html).
-- Android 17 — [release notes](https://developer.android.com/about/versions/17/release-notes), [overview](https://developer.android.com/about/versions/17), [Beta 1](https://android-developers.googleblog.com/2026/02/the-first-beta-of-android-17.html), [Beta 4](https://android-developers.googleblog.com/2026/04/the-fourth-beta-of-android-17.html).
+- Android 17 — [release notes](https://developer.android.com/about/versions/17/release-notes), [overview](https://developer.android.com/about/versions/17), [Beta 1](https://android-developers.googleblog.com/2026/02/the-first-beta-of-android-17.html), [Beta 2 announce EyeDropper + Contacts Picker](https://9to5google.com/2026/02/26/android-17-beta-2-contacts-and-display-color-access/), [Beta 3 PhotoPickerUiCustomizationParams + Platform Stability](https://android-developers.googleblog.com/2026/03/the-third-beta-of-android-17.html), [Beta 4](https://android-developers.googleblog.com/2026/04/the-fourth-beta-of-android-17.html), [Beta 4 feature roundup 9to5Google](https://9to5google.com/2026/04/16/android-17-beta-4-everything-new/), [Android 17 Beta hands-on BigGo](https://finance.biggo.com/news/202605081152_Android_17_Beta_Key_Features), [Beebom 20 features](https://gadgets.beebom.com/guides/best-android-17-features), [EyeDropper deep-dive ProAndroidDev](https://proandroiddev.com/exploring-the-eyedropper-api-android-17-9d7be86aaa16), [Android Engineers EyeDropper walkthrough](https://androidengineers.substack.com/p/introducing-the-android-17-eye-dropper), [Android Authority EyeDropper first look](https://www.androidauthority.com/android-17-eyedropper-color-picker-3610073/) — Platform Stability reached Beta 3; stable June 2026.
+- Android XR — [spatial environments design docs](https://developer.android.com/design/ui/xr/guides/environments), [Android XR overview](https://www.android.com/xr/), [Android Show 2026 preview](https://www.analyticsinsight.net/news/google-android-show-2026-to-detail-mixed-reality-ecosystem-with-android-xr), [Galaxy XR launch coverage](https://virtual.reality.news/news/google-android-xr-revealed-ai-glasses-coming-2026/), [3-tier glasses strategy 2026-2027](https://virtual.reality.news/news/googles-android-xr-glasses-strategy-could-beat-apple/).
 - Performance Class — [docs](https://developer.android.com/topic/performance/performance-class).
 - Ultra HDR — [display docs](https://developer.android.com/media/grow/ultra-hdr/display).
 - AGSL — [official guide](https://developer.android.com/develop/ui/views/graphics/agsl/using-agsl), [Compose patterns Medium](https://medium.com/androiddevelopers/agsl-made-in-the-shade-r-7d06d14fe02a).
@@ -758,22 +974,22 @@ Stars/dates as of research pass 2026-05-16.
 - ML Kit — [Subject Segmentation Android](https://developers.google.com/ml-kit/vision/subject-segmentation/android), [Selfie Segmentation Android](https://developers.google.com/ml-kit/vision/selfie-segmentation/android), [GenAI APIs](https://developers.google.com/ml-kit/genai).
 - Gemini Nano / Firebase AI Logic — [docs](https://developer.android.com/ai/gemini-nano), [Hybrid Inference blog](https://android-developers.googleblog.com/2026/04/Hybrid-inference-and-new-AI-models-are-coming-to-Android.html).
 - Material You / Monet — [dynamic colors](https://developer.android.com/develop/ui/views/theming/dynamic-colors), [Material 3 Expressive Android Authority](https://www.androidauthority.com/google-material-3-expressive-features-changes-availability-supported-devices-3556392/), [Sid Patil's Monet internals](https://siddroid.com/post/android/chasing-monet-inside-the-android-framework/), [AOSP material display source](https://source.android.com/docs/core/display/material).
-- Photo Picker — [Android 14 docs](https://developer.android.com/about/versions/14/changes/partial-photo-video-access).
-- Predictive back — [docs](https://developer.android.com/develop/ui/compose/system/predictive-back).
-- Compose Adaptive Layouts — [1.2 beta blog](https://android-developers.googleblog.com/2025/09/unfold-new-possibilities-with-compose-adaptive-layouts-1-2-beta.html).
+- Photo Picker — [Android 14 docs](https://developer.android.com/about/versions/14/changes/partial-photo-video-access), [Android 17 `PhotoPickerUiCustomizationParams` 9:16 aspect ratio Beta 3](https://android-developers.googleblog.com/2026/03/the-third-beta-of-android-17.html), [Photo Picker training guide](https://developer.android.com/training/data-storage/shared/photo-picker).
+- Predictive back — [Compose docs](https://developer.android.com/develop/ui/compose/system/predictive-back), [Android 14 behaviour change](https://developer.android.com/about/versions/14/behavior-changes-14#predictive-back-gesture), [Navigation 2.9 predictive-back integration breakdown](https://medium.com/@androidlab/androidx-navigation-2-9-6-complete-feature-breakdown-4b09ccd637dd).
+- Compose Adaptive Layouts — [1.2 beta blog](https://android-developers.googleblog.com/2025/09/unfold-new-possibilities-with-compose-adaptive-layouts-1-2-beta.html), [Build adaptive apps guide](https://developer.android.com/develop/ui/compose/build-adaptive-apps), [adaptive layouts overview](https://developer.android.com/develop/ui/compose/layouts/adaptive), [support different display sizes](https://developer.android.com/develop/ui/compose/layouts/adaptive/support-different-display-sizes), [Touchlab adaptive layouts in CMP](https://touchlab.co/adaptive-layouts-cmp), [Kotlin Multiplatform adaptive layouts](https://kotlinlang.org/docs/multiplatform/compose-adaptive-layouts.html), [The Black Bit master adaptive layouts walkthrough Feb 2026](https://medium.com/@thebackbit/master-adaptive-layouts-in-compose-multiplatform-build-truly-responsive-uis-89184bf8b6de), [Google Play large-screen quality bar](https://developer.android.com/guide/topics/large-screens/get-started-with-large-screens).
 - Compose Strong Skipping — [docs](https://developer.android.com/develop/ui/compose/performance/stability/strongskipping).
 - R8 keep rules — [blog](https://android-developers.googleblog.com/2025/11/configure-and-troubleshoot-r8-keep-rules.html).
 - AGP — [9.0](https://developer.android.com/build/releases/agp-9-0-0-release-notes), [9.1](https://developer.android.com/build/releases/agp-9-1-0-release-notes), [9.2](https://developer.android.com/build/releases/agp-9-2-0-release-notes).
 - Gradle — [9 whats-new](https://gradle.org/whats-new/gradle-9/), [release notes](https://docs.gradle.org/current/release-notes.html).
 - Kotlin — [2.3.20](https://kotlinlang.org/docs/whatsnew2320.html), [2.3](https://kotlinlang.org/docs/whatsnew23.html), [2.2.0 announce](https://blog.jetbrains.com/kotlin/2025/06/kotlin-2-2-0-released/).
 - KotlinConf 2025 — [JetBrains recap](https://blog.jetbrains.com/kotlin/2025/05/kotlinconf-2025-language-features-ai-powered-development-and-kotlin-multiplatform/).
-- Compose updates — [Apr 2026 blog](https://android-developers.googleblog.com/2026/04/jetpack-compose-april-2026-updates.html), [Material 3 release page](https://developer.android.com/jetpack/androidx/releases/compose-material3), [Dec 2025 whats-new](https://android-developers.googleblog.com/2025/12/whats-new-in-jetpack-compose-december.html).
+- Compose updates — [Apr 2026 blog](https://android-developers.googleblog.com/2026/04/jetpack-compose-april-2026-updates.html), [Material 3 release page](https://developer.android.com/jetpack/androidx/releases/compose-material3), [Dec 2025 whats-new](https://android-developers.googleblog.com/2025/12/whats-new-in-jetpack-compose-december.html), [jetc.dev #298 May 2026](https://jetc.dev/issues/298.html) (2026.05.00 BOM ↦ Compose 1.11.1 stable / 1.12.0-alpha02), [Material 3 Expressive deep dive Android Authority](https://www.androidauthority.com/google-material-3-expressive-features-changes-availability-supported-devices-3556392/).
 - Dagger / Hilt — [2.59 release](https://github.com/google/dagger/releases/tag/dagger-2.59).
 - Room — [release page](https://developer.android.com/jetpack/androidx/releases/room), [Room 3.0 announce](https://android-developers.googleblog.com/2026/03/room-30-modernizing-room.html).
 - Retrofit 3 — [discussion #4379](https://github.com/square/retrofit/discussions/4379).
 - OkHttp — [CHANGELOG](https://github.com/square/okhttp/blob/master/CHANGELOG.md), [Snyk security](https://security.snyk.io/package/maven/com.squareup.okhttp3%3Aokhttp).
-- Coil 3 — [upgrade guide](https://coil-kt.github.io/coil/upgrading_to_coil3/), [CHANGELOG](https://github.com/coil-kt/coil/blob/main/CHANGELOG.md).
-- Media3 — [release page](https://developer.android.com/jetpack/androidx/releases/media3), [1.6.0 blog](https://android-developers.googleblog.com/2025/03/media3-1-6-0-is-now-available.html), [1.8.0 whats-new](https://medium.com/google-exoplayer/media3-1-8-0-whats-new-b857435651b9), [1.9.0 whats-new](https://android-developers.googleblog.com/2025/12/media3-190-whats-new.html).
+- Coil 3 — [upgrade guide](https://coil-kt.github.io/coil/upgrading_to_coil3/), [CHANGELOG](https://github.com/coil-kt/coil/blob/main/CHANGELOG.md), [Coil 3.0 announce by Colin White](https://colinwhite.me/post/coil_3_release), [Maven Central coil3](https://central.sonatype.com/artifact/io.coil-kt.coil3/coil-compose) (3.4.0 stable Feb 24 2026).
+- Media3 — [release page](https://developer.android.com/jetpack/androidx/releases/media3), [1.6.0 blog](https://android-developers.googleblog.com/2025/03/media3-1-6-0-is-now-available.html), [1.8.0 whats-new](https://medium.com/google-exoplayer/media3-1-8-0-whats-new-b857435651b9), [1.9.0 whats-new](https://android-developers.googleblog.com/2025/12/media3-190-whats-new.html), [1.10.0 release blog](https://android-developers.googleblog.com/2026/03/media3-110-is-out.html), [1.10.0 dev blog mirror](https://developer.android.com/blog/posts/media3-1-10-is-out), [Compose-2026 ExoPlayer 1.10 guide](https://medium.com/@ramadan123sayed/media-player-in-jetpack-compose-the-complete-2026-guide-exoplayer-media3-1-10-0a25af46ce7d).
 - Navigation Compose — [release page](https://developer.android.com/jetpack/androidx/releases/navigation), [2.9 breakdown Medium](https://medium.com/@androidlab/androidx-navigation-2-9-6-complete-feature-breakdown-4b09ccd637dd).
 - Lifecycle — [release page](https://developer.android.com/jetpack/androidx/releases/lifecycle).
 - Coroutines — [releases](https://github.com/Kotlin/kotlinx.coroutines/releases).
@@ -785,8 +1001,8 @@ Stars/dates as of research pass 2026-05-16.
 - youtubedl-android — [releases](https://github.com/yausername/youtubedl-android/releases).
 - Moshi — [CHANGELOG](https://github.com/square/moshi/blob/master/CHANGELOG.md).
 - ZXing — [releases](https://github.com/zxing/zxing/releases).
-- Security bulletins — [AOSP December 2025](https://source.android.com/docs/security/bulletin/2025-12-01), [SOCPrime CVE-2025-48572/-48633](https://socprime.com/blog/cve-2025-48633-and-cve-2025-48572-vulnerabilities/).
-- NewPipe continuity risk — [PiunikaWeb March 2026](https://piunikaweb.com/2026/03/09/newpipe-certified-android-devices-warning/).
+- Security bulletins — [AOSP December 2025](https://source.android.com/docs/security/bulletin/2025-12-01), [SOCPrime CVE-2025-48572/-48633](https://socprime.com/blog/cve-2025-48633-and-cve-2025-48572-vulnerabilities/), [AOSP April 2026](https://source.android.com/docs/security/bulletin/2026/2026-04-01), [AOSP May 2026 (CVE-2026-0073 adbd zero-click RCE)](https://source.android.com/docs/security/bulletin/2026/2026-05-01), [Cybersecurity News CVE-2026-0073 coverage](https://cybersecuritynews.com/android-zero-click-vulnerability/), [CIS March 2026 multi-CVE Android advisory (CVE-2026-21385 active exploit)](https://www.cisecurity.org/advisory/multiple-vulnerabilities-in-google-android-os-could-allow-for-remote-code-execution_2026-017), [yt-dlp CVE-2026-26331 `--netrc-cmd` command injection](https://advisories.gitlab.com/pkg/pypi/yt-dlp/CVE-2026-26331/).
+- NewPipe continuity risk — [PiunikaWeb March 2026](https://piunikaweb.com/2026/03/09/newpipe-certified-android-devices-warning/), [SABR-only player response Issue #12126](https://github.com/TeamNewPipe/NewPipe/issues/12126), [NewPipe 0.28.1 release Jan 2026](https://newpipe.net/blog/pinned/announcement/newpipe-0.28.1-released/).
 - AV1 install base — [Meta engineering analysis](https://engineering.fb.com/2025/09/24/video-engineering/video-streaming-with-av1-video-codec-mobile-devices-meta-white-paper/).
 - JPEG XL state — [XDA coverage](https://www.xda-developers.com/jpeg-xl-best-image-format-that-nobodys-using/).
 - Color management — [AOSP color-mgmt](https://source.android.com/docs/core/display/color-mgmt).
@@ -822,5 +1038,11 @@ Stars/dates as of research pass 2026-05-16.
 - Health Connect — [docs](https://developer.android.com/health-and-fitness/guides/health-connect).
 - Channels API — [Compose notifications](https://developer.android.com/develop/ui/compose/notifications/channels).
 - Talkback caller-ID — [Google Accessibility](https://support.google.com/accessibility/android/answer/6006564).
+- Localization tooling for OSS Android (informs U-11) — [Weblate self-hosted vs. Crowdin AI-localization comparison](https://www.g2.com/products/weblate/competitors/alternatives), [F-Droid forum thread on localized descriptions](https://forum.f-droid.org/t/localized-app-descriptions-via-translation-service-weblate-crowdin-stringlate/1610), [Crowdin Android SDK over-the-air](https://store.crowdin.com/android), [Weblate open-alternative profile](https://openalternative.co/weblate).
+- Compose accessibility primitives (informs U-13 + U-9) — [Semantics & TalkBack Bryan Herbst](https://bryanherbst.com/2020/11/03/compose-semantics-talkback/), [Compose accessibility codelab](https://developer.android.com/codelabs/jetpack-compose-accessibility), [Compose API defaults](https://developer.android.com/develop/ui/compose/accessibility/api-defaults), [4 common TalkBack issues in Compose](https://medium.com/@yanfalcao10/4-common-talkback-issues-in-android-compose-c6e3c3d92d19), [Deque accessibility-first analysis](https://www.deque.com/blog/how-jetpack-compose-is-helping-put-accessibility-first-for-android/).
+- Live wallpaper battery research (informs T-G) — [DreamPixel battery analysis](https://dreampixelstudio.app/blog/use-live-wallpapers-on-android-without-draining-battery), [Computerworld battery drain study](https://www.computerworld.com/article/1416878/do-live-wallpapers-cause-noticeable-battery-drain-on-android.html).
+- Baseline Profiles 2026 (informs L-8) — [Baseline Profiles overview](https://developer.android.com/topic/performance/baselineprofiles/overview), [Compose baseline-profile guide](https://developer.android.com/develop/ui/compose/performance/baseline-profiles), [2026 startup time analysis](https://medium.com/@ramadan123sayed/baseline-profiles-in-android-explained-from-scratch-what-art-compilation-is-why-your-first-app-898484bf6746), [Cloud Profiles vs Baseline 2026](https://dev.to/devin-rosario/optimizing-app-start-up-time-baseline-profiles-vs-cloud-profiles-in-2026-m05).
+- WallpaperDescription / WallpaperInstance reference (informs N-4 completion) — [MS Learn WallpaperDescription class API 36](https://learn.microsoft.com/en-us/dotnet/api/android.app.wallpaper.wallpaperdescription?view=net-android-36.0), [WallpaperService.Engine OnApplyWallpaper](https://learn.microsoft.com/en-us/dotnet/api/android.service.wallpaper.wallpaperservice.engine.onapplywallpaper?view=net-android-36.0), [Salvatore's live-wallpaper how-to](https://sal.dev/android/android-live-wallpaper/).
+- Compose Multiplatform 2026 (informs L-4) — [Compatibility & versioning matrix](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html), [Kotlin 2.2.20 what's new](https://kotlinlang.org/docs/whatsnew2220.html), [Production-ready in 2026 BestHub](https://www.besthub.dev/articles/why-kotlin-multiplatform-compose-multiplatform-are-production-ready-in-2026-24d731545514), [KMP ultimate guide 2026 commonmain.dev](https://commonmain.dev/kotlin-multiplatform/).
 - Sunrise alarm references — [yuriykulikov/AlarmClock GitHub](https://github.com/yuriykulikov/AlarmClock).
 - Custom ringtones Android UX — [9to5Google March 2024 contacts](https://9to5google.com/2024/03/20/google-contacts-custom-ringtones-android/).
