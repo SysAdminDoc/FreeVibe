@@ -1,21 +1,32 @@
-FreeVibe is a free, open-source Android app for personalizing your device with wallpapers, ringtones, notification sounds, and alarm tones from multiple free content sources.
+Aura is a free, open-source Android app for personalizing your device with wallpapers, video wallpapers, ringtones, notification sounds, and alarm tones from multiple free content sources.
 
 Features:
-- Browse millions of HD/4K wallpapers from Wallhaven, Pixabay, Reddit, and NASA APOD
-- Search and apply 430K+ sound clips from Freesound as ringtones, notifications, or alarms
-- Generate unique wallpapers from text prompts using Stability AI
-- Built-in wallpaper editor with brightness, contrast, saturation, and blur adjustments
-- Sound editor with waveform visualization and trim handles
-- Crop and position wallpapers with pinch-zoom before applying
+- Browse millions of HD/4K wallpapers from Wallhaven, Pexels, Pixabay, Reddit, and Bing Daily
+- YouTube-first ringtone, notification, and alarm discovery powered by NewPipe + yt-dlp
+- Video live wallpapers from Pexels, YouTube, Reddit, and Pixabay, plus local clips and GIFs
+- Loop and crop editor for video wallpapers with frame thumbnails and trim handles
+- Parallax / depth wallpapers using on-device ML Kit Subject Segmentation
+- Weather effects overlay (rain, snow, fog, sunny) driven by Open-Meteo
+- Time-of-day adaptive wallpaper tinting with sunrise / sunset awareness
+- Dark / light mode automatic wallpaper switching with separate slots
+- Smart Crop centres the wallpaper on the detected subject before applying
+- Generate unique wallpapers from text prompts using Stability AI (bring-your-own-key)
+- AMOLED-friendly editor with brightness, contrast, saturation, blur, filter presets
+- Sound editor with waveform trim, fade, normalize, and format conversion
+- Crop and position wallpapers with pinch-zoom and 9:16 / 16:9 / 1:1 presets
 - Set different wallpapers for home and lock screen simultaneously
 - Assign custom ringtones to individual contacts
-- Home screen widget for quick wallpaper rotation
-- Auto-change wallpaper on a configurable schedule
-- Video live wallpaper support
-- OLED-friendly deep dark theme with zero burn-in
-- All preferences and API keys stored locally with DataStore
-- No ads, no tracking, no account required
+- Home-screen and lock-screen widget for quick wallpaper rotation
+- Auto-change wallpaper on a schedule, on screen-off, or on every unlock
+- Tasker / MacroDroid integration via com.freevibe.action.ROTATE_NOW broadcast
+- Community uploads with voting (anonymous, no account needed)
+- Creator profiles, followed creators, top-creator leaderboard
+- Shareable wallpaper collections via Aura links, QR codes, and JSON
+- Battery dashboard for live wallpapers with FPS readout and automatic low-battery cap
+- Touch-reactive ripples and sparkle bursts on live wallpapers (opt-in)
+- All preferences stored locally with DataStore
+- No ads, no tracking, no account required, no subscription
 
-FreeVibe uses free APIs from Wallhaven, Pixabay, Freesound, Reddit, and NASA. Some features require free API keys which can be configured during setup or in Settings. Content licenses vary by source.
+Aura uses free APIs from Wallhaven, Pexels, Pixabay, Freesound, and Reddit, plus NewPipe + yt-dlp for YouTube access. Some sources accept optional free API keys that can be configured in Settings for higher rate limits or NSFW content. Content licenses vary by source.
 
-Built with Kotlin, Jetpack Compose, Material 3, Hilt, Room, Retrofit, Coil, and ExoPlayer.
+Built with Kotlin, Jetpack Compose, Material 3, Hilt, Room, Retrofit, Coil, ExoPlayer, and ML Kit.

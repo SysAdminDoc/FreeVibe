@@ -1,0 +1,29 @@
+{
+  "name": "Aura",
+  "description": "Open-source Android personalization — wallpapers, video wallpapers, ringtones, AI art. MIT licensed, no ads, no tracking.",
+  "url": "https://github.com/SysAdminDoc/Aura",
+  "id": "com.freevibe",
+  "additionalSettings": {
+    "fallbackToOlderReleases": true,
+    "trackOnly": false,
+    "versionExtractionRegEx": "v(\\d+\\.\\d+\\.\\d+)",
+    "matchGroupToUse": 1,
+    "verifyLatestTag": false,
+    "dontSortReleasesList": false,
+    "useLatestAssetDateAsReleaseDate": false,
+    "releaseTitleAsVersion": false,
+    "trimReleaseTitleText": "",
+    "releaseDateAsVersion": false,
+    "changeLogPageFromAPI": false,
+    "includePrereleases": false,
+    "filterReleaseTitlesByRegEx": "",
+    "filterReleaseNotesByRegEx": "",
+    "verifyLatestTagAndReleaseAreSame": false,
+    "apkFilterRegEx": ".*\\.apk$",
+    "invertAPKFilter": false,
+    "autoApkFilterByArch": true,
+    "appName": "Aura",
+    "autoSelectHighestPriorityReleases": true
+  },
+  "overrideSource": null
+}

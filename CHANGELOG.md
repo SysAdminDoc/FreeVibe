@@ -3,6 +3,14 @@
 All notable changes to Aura will be documented in this file.
 
 ## Unreleased
+- **Smart Crop (NX-3)**: new "Smart Crop" chip on the wallpaper crop screen runs ML Kit Subject Segmentation against the loaded bitmap, then centres the detected subject in the 9:16 viewport at ~75 % coverage with a fill-viewport floor. Falls back to "Couldn't detect a subject — drag to position manually" when segmentation returns no foreground subject. Seven unit tests cover the pure-geometry helper.
+- **Rotation triggers (NX-6)**: opt-in per-unlock and screen-off pre-stage rotation via a new `RotationTriggerService` foreground service. Two Settings toggles ("Change on every unlock" + "Pre-stage on screen off") gate the service lifecycle; users see a low-priority notification only when at least one trigger is on. Each fire enqueues a one-shot expedited `AutoWallpaperWorker` that respects the existing rotation source / target / constraint prefs.
+- **Tasker hook (L-2)**: new `com.freevibe.action.ROTATE_NOW` + `com.freevibe.action.SHUFFLE_NOW` exported broadcast actions. Tasker / MacroDroid / adb-shell scripts can wire Aura into calendar events, geofences, Bluetooth-connected, etc. with a one-line Send Intent.
+- **Lockscreen widget (NX-2)**: widget category bumped from `home_screen` to `home_screen|keyguard` so Android 16 QPR2+ users can place the existing widget on the lockscreen surface without code changes. Older Android versions silently ignore the keyguard bit.
+- **Back-press cancellation (NX-13)**: pressing back during a Stability AI generation now cancels the in-flight job and saves the user's API credit budget. Video crop guards against accidental back-out mid-FFmpeg with a "Cropping in progress" toast.
+- **Process-death selection survival (NX-4)**: `SelectedContentHolder` now persists the single selected wallpaper + selected sound to a SharedPreferences JSON snapshot on every selection, so detail screens are no longer blank after process death. Pager list is intentionally still in-memory only.
+- **CI verification (NX-12)**: new `.github/workflows/verify.yml` runs `assembleDebug` + `testDebugUnitTest` + `lintDebug` on every push to main and every PR. Uploads test + lint reports as artifacts on failure.
+- **Fastlane refresh (NX-8 partial)**: fastlane metadata bumped from stale FreeVibe naming to Aura with current feature set; `changelogs/111.txt` lands v6.31.0 release notes; new `obtainium.json` at repo root lets Obtainium users track Aura via the GitHub Releases feed.
 
 ## v6.31.0
 - **Shareable collections**: wallpaper collections now publish Firebase-backed Aura links, include those links in the system share sheet, and can display scannable QR codes.

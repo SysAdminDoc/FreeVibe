@@ -1,0 +1,12 @@
+v6.31.0
+- Shareable wallpaper collections: publish Firebase-backed Aura links, share via the system share sheet, or display a scannable QR code.
+- Import collections from pasted Aura links, shared JSON files, or QR images. aura://collection/import/{token} deep links route into the import flow.
+- Imported media stays URL-backed until opened or applied.
+
+Recent highlights:
+- Creator profiles with follow, top-creator leaderboard, and followed-creator uploads.
+- Community wallpaper + sound uploads with voting and moderation.
+- Video battery dashboard, touch-reactive effects, and frame thumbnails on the loop trim editor.
+- Smart Crop centres the wallpaper on the detected subject before applying.
+- Rotate on every unlock or pre-stage on screen-off via the new RotationTriggerService (opt-in).
+- Tasker / MacroDroid hook: com.freevibe.action.ROTATE_NOW broadcast.
