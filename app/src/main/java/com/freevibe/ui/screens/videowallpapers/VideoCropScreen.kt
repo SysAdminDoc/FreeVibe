@@ -153,6 +153,15 @@ fun VideoCropScreen(
     var isCropping by remember { mutableStateOf(false) }
     var dimensionsReady by remember { mutableStateOf(false) }
 
+    // NX-13: while an FFmpeg crop is in flight, intercept back so the user
+    // doesn't accidentally lose the trim selection mid-export. We don't try
+    // to kill the running ffmpeg subprocess (it dies on its own when the
+    // outer process exits or the file write completes); we just toast and
+    // hold the screen so the result has somewhere to land.
+    androidx.activity.compose.BackHandler(enabled = isCropping) {
+        Toast.makeText(context, "Cropping in progress — please wait", Toast.LENGTH_SHORT).show()
+    }
+
     // Detect actual video dimensions via ExoPlayer format or MediaMetadataRetriever fallback
     LaunchedEffect(Unit) {
         // Try ExoPlayer format first (polls for up to 5s)

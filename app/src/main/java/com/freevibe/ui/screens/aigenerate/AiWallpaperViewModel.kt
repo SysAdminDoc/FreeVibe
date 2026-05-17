@@ -12,6 +12,7 @@ import com.freevibe.data.repository.FavoritesRepository
 import com.freevibe.data.local.PreferencesManager
 import com.freevibe.service.WallpaperApplier
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +43,12 @@ class AiWallpaperViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(AiWallpaperUiState())
     val state: StateFlow<AiWallpaperUiState> = _state.asStateFlow()
+
+    // Tracks the in-flight generation coroutine so back-navigation can cancel it
+    // (NX-13). Cancelling a generation that has already hit Stability AI's
+    // billing endpoint won't refund the credit, but it stops the spinner from
+    // re-surfacing on resume and frees the OkHttp connection promptly.
+    private var generationJob: Job? = null
 
     // API key is read from DataStore so changes in Settings propagate live.
     val stabilityAiKey: StateFlow<String> = prefs.stabilityAiKey
@@ -77,7 +84,8 @@ class AiWallpaperViewModel @Inject constructor(
             _state.update { it.copy(error = "Enter your Stability AI key to generate images.") }
             return
         }
-        viewModelScope.launch {
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, error = null, result = null, isSaved = false) }
             repo.generate(
                 prompt = current.prompt,
@@ -89,6 +97,26 @@ class AiWallpaperViewModel @Inject constructor(
                 _state.update { it.copy(isGenerating = false, error = e.message ?: "Generation failed") }
             }
         }
+    }
+
+    /**
+     * Cancels any in-flight generation (NX-13). Invoked by the screen's
+     * [androidx.activity.compose.BackHandler] when the user presses back
+     * while a generation is still streaming.
+     */
+    fun cancelGeneration() {
+        val job = generationJob ?: return
+        if (job.isActive) {
+            job.cancel()
+            _state.update { it.copy(isGenerating = false, error = "Generation cancelled") }
+        }
+        generationJob = null
+    }
+
+    override fun onCleared() {
+        generationJob?.cancel()
+        generationJob = null
+        super.onCleared()
     }
 
     fun applyWallpaper(target: WallpaperTarget = WallpaperTarget.BOTH) {
