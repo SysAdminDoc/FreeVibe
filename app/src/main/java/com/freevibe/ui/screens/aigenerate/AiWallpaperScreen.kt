@@ -86,6 +86,14 @@ fun AiWallpaperScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val apiKey by viewModel.stabilityAiKey.collectAsStateWithLifecycle()
 
+    // NX-13: intercept back while a generation is in flight so the user can
+    // cancel a request that's burning their Stability AI credit. Without this
+    // the in-flight Job kept running after the screen disappeared.
+    androidx.activity.compose.BackHandler(enabled = state.isGenerating) {
+        viewModel.cancelGeneration()
+        onBack()
+    }
+
     var localApiKey by remember(apiKey) { mutableStateOf(apiKey) }
     var showApiKeyField by remember { mutableStateOf(false) }
     var apiKeyVisible by remember { mutableStateOf(false) }

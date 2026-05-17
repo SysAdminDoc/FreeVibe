@@ -254,7 +254,15 @@ Thirteen items. All scored 18–25. Pull from the top of this list when Now clos
 - **Risk:** Workflow drift if `verify.yml` and `release.yml` diverge — mitigate by extracting the build steps into a shared composite action or a reusable workflow. Secrets-leak risk on PRs from forks — keep all signing keys out of `verify.yml`; restrict release jobs to `pull_request_target` only if absolutely needed (default: no).
 - **Fit 5 / Impact 4 / Effort 4 / Risk 5 / Deps 4 / Novelty 1 = 23 → NEXT.**
 
-### NX-13. Predictive-back wiring through Compose NavHost transitions
+### NX-13. Predictive-back wiring through Compose NavHost transitions — `[~]` partial, 2 of ~18 screens 2026-05-17 rev4-impl
+
+> First-cut BackHandler discipline on the two highest-stakes in-flight screens:
+> - **`AiWallpaperScreen`** — back during generation cancels the in-flight Stability AI job (new `AiWallpaperViewModel.cancelGeneration()` + `generationJob: Job` tracker + `onCleared()` defensive cancel). Saves the user's API credit budget when they back out of a slow generation.
+> - **`VideoCropScreen`** — back while the FFmpeg subprocess is running toasts "Cropping in progress — please wait" and holds the screen so the cropped file has somewhere to land. Doesn't kill ffmpeg (its lifecycle is process-not-coroutine).
+>
+> Remaining 16 detail/editor/preview/picker screens (WallpaperEditorScreen, SoundEditorScreen, WallpaperDetailScreen, SoundDetailScreen, WallpaperPreviewScreen, VideoWallpaperPreviewScreen, ContactPickerScreen, and the rest) still rely on default activity finish. Full NavHost predictive-back-aware transitions ride on Navigation 2.9 which is N-1-gated. Hold the remainder until N-1 lands.
+
+
 
 - **Source(s):** [Predictive back in Compose docs](https://developer.android.com/develop/ui/compose/system/predictive-back); [Navigation 2.9 predictive-back integration](https://medium.com/@androidlab/androidx-navigation-2-9-6-complete-feature-breakdown-4b09ccd637dd); [Android 14 predictive back behaviour change](https://developer.android.com/about/versions/14/behavior-changes-14#predictive-back-gesture); existing `AndroidManifest.xml:50` (`android:enableOnBackInvokedCallback="true"`); existing `BackHandler` use confined to `CollectionsScreen.kt` + `FavoritesScreen.kt` (only 2 of ~22 detail/editor screens).
 - **Why next:** Aura's manifest opts in to predictive back. Without per-screen `BackHandler` discipline, Compose detail / editor / preview / picker screens fall back to default activity finish — the user gets no smooth peek-the-previous-screen animation that Android 14+ defaults to. With Navigation 2.9's predictive-back integration landing in N-1, every detail screen (WallpaperDetailScreen, SoundDetailScreen, AiWallpaperScreen, CollectionsScreen, WallpaperEditorScreen, VideoCropScreen, SoundEditorScreen, ContactPickerScreen) should declare a `BackHandler` for in-flight state cleanup (cancel coroutines, save scroll position) and animate `progress` smoothly through `PredictiveBackHandler`.
