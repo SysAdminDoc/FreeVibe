@@ -96,6 +96,35 @@ fun SoundEditorScreen(
         }
     }
 
+    // NX-13: unsaved-changes guard. Audio edits (trim, fade, normalize) survive
+    // FFmpeg invocation cost. Backing out unintentionally costs the user a
+    // careful trim pass and a 2-5 s FFmpeg roundtrip.
+    val hasUnsavedChanges = state.trimStartFraction != 0f ||
+        state.trimEndFraction != 1f ||
+        state.fadeInMs != 0L ||
+        state.fadeOutMs != 0L
+    var showSoundDiscardConfirm by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = hasUnsavedChanges && !state.isApplying) {
+        showSoundDiscardConfirm = true
+    }
+    if (showSoundDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSoundDiscardConfirm = false },
+            title = { Text("Discard edits?") },
+            text = { Text("Your trim, fade, and normalize settings will be lost. Apply them first or discard?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSoundDiscardConfirm = false
+                    onBack()
+                }) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSoundDiscardConfirm = false }) { Text("Keep editing") }
+            },
+            shape = RoundedCornerShape(10.dp),
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {

@@ -86,6 +86,40 @@ fun WallpaperEditorScreen(
         FilterControl("Grain", Icons.Default.Grain, state.grain, 0f..1f) { viewModel.updateGrain(it) },
     )
 
+    // NX-13: unsaved-changes guard. Editor filters are non-trivial work; backing
+    // out unintentionally costs the user a careful tuning pass. Default-state
+    // detection runs against the same defaults declared in [EditorState].
+    val hasUnsavedChanges = state.brightness != 0f ||
+        state.contrast != 1f ||
+        state.saturation != 1f ||
+        state.warmth != 0f ||
+        state.blurRadius != 0f ||
+        state.amoledCrush != 0f ||
+        state.vignette != 0f ||
+        state.grain != 0f
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = hasUnsavedChanges && !state.isApplying) {
+        showDiscardConfirm = true
+    }
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("Discard edits?") },
+            text = { Text("Your filter changes will be lost. Apply them first or discard?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardConfirm = false
+                    viewModel.resetAll()
+                    onBack()
+                }) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) { Text("Keep editing") }
+            },
+            shape = RoundedCornerShape(10.dp),
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
