@@ -182,7 +182,13 @@ Thirteen items. All scored 18–25. Pull from the top of this list when Now clos
 - **Risk:** Slow on low-end devices; gate on Performance Class.
 - **Fit 5 / Impact 4 / Effort 4 / Risk 5 / Deps 2 (depends on N-3) / Novelty 3 = 23 → NEXT.**
 
-### NX-4. SelectedContentHolder removal (Phase 7.2)
+### NX-4. SelectedContentHolder removal (Phase 7.2) — `[~]` process-death survival shipped 2026-05-17 rev4-impl
+
+> Singleton now persists the **single selected wallpaper + selected sound** to a `freevibe_selected_content` SharedPreferences file via Moshi JSON on every `select*` call. On Hilt construction the holder lazy-restores from disk so after process death the detail screen's primary item is intact. `wallpaperList` (the pager-supporting list) intentionally still in memory only — process-death restoration of a 50-item URL list would jam the cold start with prefetch; the detail screen already handles the "list lost" case by collapsing to single-item display.
+>
+> Full sweep — nav-graph-scoped `SelectionViewModel` backed by `SavedStateHandle` + `ViewModelScenario` process-death tests + delete `SelectedContentHolder.kt` — still queued. It's the wider refactor that touches every detail/pager screen and rides Navigation 2.9 type-safe routes (N-1-gated). This NX-4 rev4-impl closes the worst-case "wallpaper detail blank on resume" bug class without that refactor.
+
+
 
 - **Source(s):** Aura Phase 7.2; [Navigation Compose 2.9 type-safe routes](https://developer.android.com/jetpack/androidx/releases/navigation); [Lifecycle 2.10 `ViewModelScenario` for process-death testing](https://developer.android.com/jetpack/androidx/releases/lifecycle); existing `SelectedContentHolder.kt` (in-memory singleton).
 - **Why next:** The singleton bridges screens but doesn't survive process death — a well-documented gotcha in CLAUDE.md. Navigation 2.9 type-safe routes can pass enums and value classes; combined with `SavedStateHandle`, you can replace the holder with a per-nav-graph ViewModel and serialize selection state. Removes a class of "wallpaper detail blank on resume" bugs.
