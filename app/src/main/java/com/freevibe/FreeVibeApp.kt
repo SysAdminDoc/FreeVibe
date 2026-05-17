@@ -17,6 +17,7 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
@@ -83,6 +84,31 @@ class FreeVibeApp : Application(), Configuration.Provider, ImageLoaderFactory {
         startSystemThemeListener()
         initYtDlp()
         enqueueAuraOriginalsDownload()
+        reconcileRotationTriggers()
+    }
+
+    /**
+     * NX-6: on cold start, read the rotate-on-unlock + rotate-on-screen-off prefs
+     * and reconcile the foreground [RotationTriggerService]. The service stays
+     * idle (no notification, no work) until at least one trigger is opted in.
+     * Settings UI calls [RotationTriggerService.reconcile] directly on toggle.
+     */
+    private fun reconcileRotationTriggers() {
+        appScope.launch {
+            try {
+                val prefs = com.freevibe.data.local.PreferencesManager(this@FreeVibeApp)
+                val unlock = prefs.rotateOnUnlock.first()
+                val screenOff = prefs.rotateOnScreenOff.first()
+                if (unlock || screenOff) {
+                    com.freevibe.service.RotationTriggerService.reconcile(
+                        this@FreeVibeApp, unlock = unlock, screenOff = screenOff,
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (BuildConfig.DEBUG) Log.w("FreeVibeApp", "Rotation trigger reconcile failed: ${e.message}")
+            }
+        }
     }
 
     /**

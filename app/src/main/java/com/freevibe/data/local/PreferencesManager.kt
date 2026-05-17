@@ -74,6 +74,10 @@ class PreferencesManager @Inject constructor(
     val autoWallpaperRequiresWiFiOnly: Flow<Boolean> = get(Keys.AUTO_WP_REQUIRES_WIFI, false)
     /** Hold rotation until the device is idle (no active foreground use). */
     val autoWallpaperRequiresIdle: Flow<Boolean> = get(Keys.AUTO_WP_REQUIRES_IDLE, false)
+    /** NX-6: rotate once on every device unlock (USER_PRESENT). Opt-in, foreground-service-backed. */
+    val rotateOnUnlock: Flow<Boolean> = get(Keys.ROTATE_ON_UNLOCK, false)
+    /** NX-6: pre-stage a new wallpaper on screen-off so unlock shows the new one. */
+    val rotateOnScreenOff: Flow<Boolean> = get(Keys.ROTATE_ON_SCREEN_OFF, false)
 
     suspend fun setAutoWallpaperEnabled(enabled: Boolean) = set(Keys.AUTO_WP_ENABLED, enabled)
     suspend fun setAutoWallpaperInterval(hours: Long) = set(Keys.AUTO_WP_INTERVAL, hours)
@@ -82,6 +86,8 @@ class PreferencesManager @Inject constructor(
     suspend fun setAutoWallpaperRequiresCharging(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_CHARGING, v)
     suspend fun setAutoWallpaperRequiresWiFiOnly(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_WIFI, v)
     suspend fun setAutoWallpaperRequiresIdle(v: Boolean) = set(Keys.AUTO_WP_REQUIRES_IDLE, v)
+    suspend fun setRotateOnUnlock(v: Boolean) = set(Keys.ROTATE_ON_UNLOCK, v)
+    suspend fun setRotateOnScreenOff(v: Boolean) = set(Keys.ROTATE_ON_SCREEN_OFF, v)
 
     // ── Sound settings ────────────────────────────────────────────
 
@@ -232,6 +238,8 @@ class PreferencesManager @Inject constructor(
         val AUTO_WP_REQUIRES_CHARGING = booleanPreferencesKey("auto_wp_requires_charging")
         val AUTO_WP_REQUIRES_WIFI = booleanPreferencesKey("auto_wp_requires_wifi")
         val AUTO_WP_REQUIRES_IDLE = booleanPreferencesKey("auto_wp_requires_idle")
+        val ROTATE_ON_UNLOCK = booleanPreferencesKey("rotate_on_unlock")
+        val ROTATE_ON_SCREEN_OFF = booleanPreferencesKey("rotate_on_screen_off")
         val PREF_RESOLUTION = stringPreferencesKey("pref_resolution")
         val REDDIT_SUBS = stringPreferencesKey("reddit_subreddits")
         val REDDIT_VIDEO_SUBS = stringPreferencesKey("reddit_video_subreddits")

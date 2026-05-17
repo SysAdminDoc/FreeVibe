@@ -85,6 +85,9 @@ class SettingsViewModel @Inject constructor(
     val autoWpRequiresCharging = prefs.autoWallpaperRequiresCharging.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpRequiresWiFi = prefs.autoWallpaperRequiresWiFiOnly.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val autoWpRequiresIdle = prefs.autoWallpaperRequiresIdle.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    // NX-6: per-unlock / screen-off trigger opt-ins. Drive RotationTriggerService lifecycle.
+    val rotateOnUnlock = prefs.rotateOnUnlock.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val rotateOnScreenOff = prefs.rotateOnScreenOff.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     // Enhanced scheduler
     val schedulerEnabled = prefs.schedulerEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val schedulerInterval = prefs.schedulerIntervalMinutes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 360L)
@@ -170,6 +173,27 @@ class SettingsViewModel @Inject constructor(
         prefs.setAutoWallpaperRequiresWiFiOnly(v)
         if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)
     }
+    // NX-6: toggle per-unlock / screen-off triggers and reconcile the foreground
+    // [RotationTriggerService]. Service is stopped automatically when both flags
+    // settle to false. The user sees a "Wallpaper triggers active" notification
+    // while at least one trigger is on.
+    fun setRotateOnUnlock(v: Boolean) = viewModelScope.launch {
+        prefs.setRotateOnUnlock(v)
+        com.freevibe.service.RotationTriggerService.reconcile(
+            context,
+            unlock = v,
+            screenOff = rotateOnScreenOff.value,
+        )
+    }
+    fun setRotateOnScreenOff(v: Boolean) = viewModelScope.launch {
+        prefs.setRotateOnScreenOff(v)
+        com.freevibe.service.RotationTriggerService.reconcile(
+            context,
+            unlock = rotateOnUnlock.value,
+            screenOff = v,
+        )
+    }
+
     fun setAutoWallpaperRequiresIdle(v: Boolean) = viewModelScope.launch {
         prefs.setAutoWallpaperRequiresIdle(v)
         if (autoWpEnabled.value) AutoWallpaperWorker.schedule(context, autoWpInterval.value * 60)

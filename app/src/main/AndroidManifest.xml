@@ -23,6 +23,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- NX-6: RotationTriggerService runs as a long-lived foreground service to
+         dynamically register USER_PRESENT and SCREEN_OFF receivers (those broadcasts
+         can't be observed via manifest registration on Android 8+). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Location (weather effects) -->
@@ -136,6 +140,19 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
+        </service>
+
+        <!-- NX-6: Rotation trigger service — listens for USER_PRESENT / SCREEN_OFF
+             and enqueues one-shot AutoWallpaperWorker rotations. specialUse type
+             with the property below documents why we sit foreground long-term.
+             Off by default; only started when the user opts in via Settings. -->
+        <service
+            android:name=".service.RotationTriggerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="wallpaper_rotation_triggers" />
         </service>
 
         <!-- Home Screen Widget -->
