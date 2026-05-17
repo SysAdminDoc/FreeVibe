@@ -136,8 +136,10 @@ fun WallpapersScreen(
     var awaitingWallpaperUploadResult by remember { mutableStateOf(false) }
     // Photo Picker (Android 13+, backported via Google Play services on older versions). No
     // READ_MEDIA_IMAGES permission needed; scoped-storage compliant; better UX than GetContent.
+    // NX-11: AuraPickVisualMedia attaches the Android 17 9:16 portrait grid customisation
+    // when running on API 37+. On older devices it's a transparent passthrough.
     val wallpaperUploadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
+        com.freevibe.service.AuraPickVisualMedia()
     ) { uri ->
         if (uri != null) {
             selectedWallpaperUploadUri = uri
@@ -146,6 +148,37 @@ fun WallpapersScreen(
     }
     val wallpaperUploadPickerRequest = remember {
         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+    }
+
+    // NX-10: EyeDropper API (Android 17+). The EyeDropper app launches a system
+    // pixel-picker overlay; on confirm, it returns an Int colour via
+    // Intent.EXTRA_COLOR. We strip alpha and feed the lower 24 bits to the
+    // wallpaper-by-colour search. Raw action / extra strings keep this
+    // compatible with compileSdk 35 — no API 37 class refs at compile time.
+    val eyeDropperLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data ?: return@rememberLauncherForActivityResult
+            // Try the documented Int extra first, then the colour-int alias some
+            // OEM EyeDropper builds emit. Falls through silently when neither
+            // is present (e.g. user cancelled before confirming).
+            val color = data.getIntExtra("android.intent.extra.COLOR", Int.MIN_VALUE)
+            if (color != Int.MIN_VALUE) {
+                viewModel.searchByPickedColor(color)
+            }
+        }
+    }
+    val eyeDropperAvailable = remember(context) {
+        if (android.os.Build.VERSION.SDK_INT < 37) {
+            false
+        } else {
+            // EyeDropper is delivered as a system app on Android 17 devices.
+            // Probe with PackageManager so the FAB doesn't surface on un-updated
+            // GSI builds where the system app hasn't been installed yet.
+            val probe = android.content.Intent("android.intent.action.OPEN_EYE_DROPPER")
+            probe.resolveActivity(context.packageManager) != null
+        }
     }
     val wallpaperFilterCount = remember(state.selectedTab, state.selectedColor, state.discoverFilter, state.topRange) {
         buildList {
@@ -585,8 +618,13 @@ fun WallpapersScreen(
                 .padding(end = 16.dp, bottom = 80.dp),
             showUpload = state.selectedTab == WallpaperTab.COMMUNITY,
             showThemeMatch = state.selectedTab == WallpaperTab.DISCOVER,
+            showEyeDropper = eyeDropperAvailable && state.selectedTab == WallpaperTab.DISCOVER,
             onUpload = { wallpaperUploadLauncher.launch(wallpaperUploadPickerRequest) },
             onThemeMatch = { viewModel.matchMyTheme() },
+            onEyeDropper = {
+                val intent = android.content.Intent("android.intent.action.OPEN_EYE_DROPPER")
+                runCatching { eyeDropperLauncher.launch(intent) }
+            },
             onSurpriseMe = { viewModel.loadRandom() },
         )
     }
@@ -1473,8 +1511,10 @@ private fun FloatingActionTray(
     modifier: Modifier = Modifier,
     showUpload: Boolean,
     showThemeMatch: Boolean,
+    showEyeDropper: Boolean,
     onUpload: () -> Unit,
     onThemeMatch: () -> Unit,
+    onEyeDropper: () -> Unit,
     onSurpriseMe: () -> Unit,
 ) {
     Column(
@@ -1496,6 +1536,15 @@ private fun FloatingActionTray(
                 label = "Theme match",
                 tint = MaterialTheme.colorScheme.tertiary,
                 onClick = onThemeMatch,
+            )
+        }
+        if (showEyeDropper) {
+            // NX-10: Android 17+ EyeDropper API entry point.
+            FloatingActionRow(
+                icon = Icons.Default.Colorize,
+                label = "Pick colour",
+                tint = MaterialTheme.colorScheme.tertiary,
+                onClick = onEyeDropper,
             )
         }
         FloatingActionRow(

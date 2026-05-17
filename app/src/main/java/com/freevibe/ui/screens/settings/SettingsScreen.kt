@@ -162,9 +162,10 @@ fun SettingsScreen(
     ) { uri: Uri? ->
         uri?.let { viewModel.prepareVideoWallpaperFromUri(it) }
     }
-    // Gallery picker for parallax-from-user-photo (v6.1.0)
+    // Gallery picker for parallax-from-user-photo (v6.1.0).
+    // NX-11: AuraPickVisualMedia attaches the Android 17 9:16 portrait grid hint.
     val parallaxGalleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
+        com.freevibe.service.AuraPickVisualMedia()
     ) { uri: Uri? ->
         uri?.let { viewModel.applyParallaxFromGallery(it) }
     }
