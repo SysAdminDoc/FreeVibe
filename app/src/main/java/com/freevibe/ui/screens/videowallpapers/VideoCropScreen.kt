@@ -152,6 +152,14 @@ fun VideoCropScreen(
     var timelineFrames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
     var isCropping by remember { mutableStateOf(false) }
     var dimensionsReady by remember { mutableStateOf(false) }
+    // NX-3 (video variant): smart-crop progress flag — runs subject segmentation
+    // against a frame at the loop start, then pans the video so the detected
+    // subject lands at the viewport centre. Doesn't adjust zoom (user retains
+    // manual scale control).
+    var smartCropInFlight by remember { mutableStateOf(false) }
+    // SmartCropDetector has @Inject constructor() with no deps, so it's safe to
+    // instantiate directly here without a ViewModel/Hilt EntryPoint.
+    val smartCropDetector = remember { com.freevibe.service.SmartCropDetector() }
 
     // NX-13: while an FFmpeg crop is in flight, intercept back so the user
     // doesn't accidentally lose the trim selection mid-export. We don't try
@@ -286,6 +294,77 @@ fun VideoCropScreen(
                     }
                 },
                 actions = {
+                    // NX-3 video Smart Crop — extracts a frame at loop start, runs subject
+                    // segmentation, pans the video so the detected subject lands at the
+                    // viewport centre. Doesn't change zoom; user keeps manual scale control.
+                    TextButton(
+                        enabled = !smartCropInFlight && dimensionsReady,
+                        onClick = {
+                            scope.launch {
+                                smartCropInFlight = true
+                                try {
+                                    val frame = withContext(Dispatchers.IO) {
+                                        val retriever = android.media.MediaMetadataRetriever()
+                                        try {
+                                            if (videoUrl.startsWith("http")) retriever.setDataSource(videoUrl, emptyMap())
+                                            else retriever.setDataSource(videoUrl)
+                                            // getFrameAtTime takes microseconds. loopRange.startMs is ms.
+                                            retriever.getFrameAtTime(
+                                                loopRange.startMs * 1000L,
+                                                android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                                            )
+                                        } finally {
+                                            runCatching { retriever.release() }
+                                        }
+                                    }
+                                    if (frame == null) {
+                                        Toast.makeText(context, "Couldn't read a frame", Toast.LENGTH_SHORT).show()
+                                        return@launch
+                                    }
+                                    val subject = smartCropDetector.detectSubject(frame)
+                                    runCatching { frame.recycle() }
+                                    if (subject == null) {
+                                        Toast.makeText(
+                                            context,
+                                            "Couldn't find a subject — drag to position",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        return@launch
+                                    }
+                                    if (viewSize.width <= 0 || viewSize.height <= 0 || videoWidth <= 0 || videoHeight <= 0) {
+                                        return@launch
+                                    }
+                                    val cx = (subject.left + subject.right) / 2f
+                                    val cy = (subject.top + subject.bottom) / 2f
+                                    // effectiveScale = fitScale * scale (see clampTransform).
+                                    val fitScaleX = viewSize.width.toFloat() / videoWidth
+                                    val fitScaleY = viewSize.height.toFloat() / videoHeight
+                                    val fitScale = minOf(fitScaleX, fitScaleY)
+                                    val effective = fitScale * scale
+                                    val targetPanX = effective * (videoWidth / 2f - cx)
+                                    val targetPanY = effective * (videoHeight / 2f - cy)
+                                    val (s, ox, oy) = clampTransform(scale, targetPanX, targetPanY)
+                                    scale = s; offsetX = ox; offsetY = oy
+                                    Toast.makeText(context, "Smart crop applied", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    if (com.freevibe.BuildConfig.DEBUG) Log.e("VideoCrop", "Smart crop failed: ${e.message}")
+                                } finally {
+                                    smartCropInFlight = false
+                                }
+                            }
+                        },
+                    ) {
+                        if (smartCropInFlight) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Detecting…", color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Smart", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     TextButton(onClick = {
                         val (s, ox, oy) = clampTransform(minScale, 0f, 0f)
                         scale = s; offsetX = ox; offsetY = oy
